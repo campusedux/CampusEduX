@@ -1,54 +1,43 @@
 import type { Metadata } from "next";
-import { Fraunces, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 import Footer from "@/components/Footer";
 import JsonLd from "@/components/JsonLd";
+import { BRAND } from "@/lib/brand";
 
-// Self-hosted by next/font (no render-blocking external stylesheet, and no
-// third-party font request to allow in the CSP). The CSS variables match the
-// names tailwind.config.ts already maps `font-serif` / `font-sans` to.
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-serif",
-  display: "swap",
-});
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-sans",
-  display: "swap",
-});
+// The mobile app loads no custom font — it renders in the platform system
+// font. The website matches that with a system sans stack defined in
+// tailwind.config.ts / globals.css, so there is no external font request and
+// nothing to add to the CSP.
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://campusedux.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? BRAND.website;
 
 const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: "CampusEduX",
-  alternateName: "ProjectHub",
+  name: BRAND.name,
   url: siteUrl,
 };
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "CampusEduX — Projects, Jobs, Placement Prep & Resume, in one app",
-    template: "%s | CampusEduX",
+    default: `${BRAND.name} — Projects, Jobs, Placement Prep & Resume, in one app`,
+    template: `%s | ${BRAND.name}`,
   },
   description:
-    "CampusEduX (ProjectHub) is a student platform for the project marketplace, jobs & internships, placement preparation, resume building and custom project development.",
+    "CampusEduX is a student platform for the project marketplace, jobs & internships, placement preparation, resume building and custom project development.",
+  applicationName: BRAND.name,
   openGraph: {
     type: "website",
-    siteName: "CampusEduX",
+    siteName: BRAND.name,
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${ibmPlexSans.variable}`}>
-      <body className="font-sans antialiased">
+    <html lang="en">
+      <body className="bg-white font-sans text-ink antialiased">
         <JsonLd data={organizationJsonLd} />
         <NavBar />
         <main>{children}</main>
