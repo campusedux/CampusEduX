@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import NavBar from "@/components/NavBar";
+import { Header } from "@/components/nav/Header";
+import { BottomNav } from "@/components/nav/BottomNav";
 import Footer from "@/components/Footer";
 import JsonLd from "@/components/JsonLd";
 import { BRAND } from "@/lib/brand";
@@ -39,9 +40,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="bg-white font-sans text-ink antialiased">
         <JsonLd data={organizationJsonLd} />
-        <NavBar />
-        <main>{children}</main>
+        <Header />
+        <main className="min-h-[60vh]">{children}</main>
         <Footer />
+        {/* Clears the fixed mobile bottom nav. */}
+        <div className="h-16 md:hidden" aria-hidden />
+        <BottomNav />
       </body>
     </html>
   );
