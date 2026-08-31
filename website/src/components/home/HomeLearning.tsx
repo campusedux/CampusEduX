@@ -33,7 +33,7 @@ export function HomeLearning() {
         .eq("is_published", true)
         .order("created_at", { ascending: false })
         .limit(4);
-      if (active && data) setNotes(data);
+      if (active && data) setNotes(data as Note[]);
     })();
     return () => {
       active = false;
@@ -44,12 +44,12 @@ export function HomeLearning() {
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <SectionHeader title="Learning" viewAllHref="/placement" viewAllLabel="Placement prep" />
+      <SectionHeader title="Learning" viewAllHref="/placement/notes" viewAllLabel="All notes" />
       <div className="grid gap-3 sm:grid-cols-2">
         {notes.map((n) => (
           <Link
             key={n.id}
-            href="/placement"
+            href={`/placement/notes/${n.id}`}
             className="flex items-center gap-3 rounded-2xl border border-line bg-white p-3 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg"
           >
             <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
