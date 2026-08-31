@@ -12,7 +12,7 @@ export type JobCardData = {
   location: string | null;
   job_type: string | null;
   salary_range: string | null;
-  skills: string[] | null;
+  skills?: string[] | null;
   posted_at: string | null;
 };
 
