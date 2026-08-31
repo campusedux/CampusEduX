@@ -15,12 +15,12 @@ export default function StepBar({ current }: { current: 0 | 1 | 2 | 3 }) {
           {i <= current ? (
             <Link
               href={s.href}
-              className={i === current ? "font-semibold text-navy" : "text-slate underline hover:text-navy"}
+              className={i === current ? "font-semibold text-ink" : "text-ink-muted underline hover:text-ink"}
             >
               {i + 1}. {s.label}
             </Link>
           ) : (
-            <span className="text-slate/60">
+            <span className="text-ink-muted/60">
               {i + 1}. {s.label}
             </span>
           )}

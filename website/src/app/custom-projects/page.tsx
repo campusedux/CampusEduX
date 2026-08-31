@@ -56,29 +56,29 @@ export default async function CustomProjectsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">Custom Projects</h1>
-      <p className="mt-3 max-w-2xl text-slate">
-        Need something that doesn&apos;t exist in the marketplace yet? Describe what you need, pay a small token to start, and the CampusEduX team builds and delivers it — tracked the same way as everything else in your account.
+    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+      <h1 className="text-3xl font-bold text-ink">Custom Projects</h1>
+      <p className="mt-3 max-w-2xl text-ink-muted">
+        Need something the marketplace doesn&apos;t have yet? Describe what you need, pay a small token to start, and the
+        CampusEduX team builds and delivers it — tracked the same way as everything else in your account.
       </p>
 
       <div className="mt-5 flex flex-wrap gap-3">
-        <Link href="/custom-projects/start" className="rounded-sm bg-navy px-5 py-2.5 text-sm text-paper hover:bg-navy/90">
+        <Link href="/custom-projects/start" className="btn-primary">
           Start a request
         </Link>
-        <Link
-          href="/custom-projects/my-projects"
-          className="rounded-sm border border-navy px-5 py-2.5 text-sm text-navy hover:bg-navy hover:text-paper"
-        >
+        <Link href="/custom-projects/my-projects" className="btn-ghost">
           My requests
         </Link>
       </div>
 
-      <h2 className="mt-10 font-serif text-xl text-navy">How it works</h2>
-      <ol className="mt-4 space-y-2">
+      <h2 className="mt-12 text-xl font-bold text-ink">How it works</h2>
+      <ol className="mt-4 space-y-3">
         {STEPS.map((s, i) => (
-          <li key={s} className="flex gap-3 text-slate">
-            <span className="font-serif text-navy">{String(i + 1).padStart(2, "0")}</span>
+          <li key={s} className="flex gap-3 text-ink-muted">
+            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-bold text-primary">
+              {i + 1}
+            </span>
             <span>{s}</span>
           </li>
         ))}
@@ -86,13 +86,13 @@ export default async function CustomProjectsPage() {
 
       {typeStarting.length > 0 && (
         <>
-          <h2 className="mt-10 font-serif text-xl text-navy">Starting price by project type</h2>
+          <h2 className="mt-12 text-xl font-bold text-ink">Starting price by project type</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {typeStarting.map((t) => (
-              <div key={t.type} className="border border-navy/10 bg-white p-4">
-                <div className="font-serif text-navy">{TYPE_LABEL[t.type] ?? t.type}</div>
-                <div className="mt-1 text-sm text-slate">from {formatINR(t.from)}</div>
-                <div className="mt-1 text-xs text-slate">{formatINR(t.token)} token to begin</div>
+              <div key={t.type} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+                <div className="font-semibold text-ink">{TYPE_LABEL[t.type] ?? t.type}</div>
+                <div className="mt-1 text-sm text-ink-muted">from {formatINR(t.from)}</div>
+                <div className="mt-1 text-xs text-ink-faint">{formatINR(t.token)} token to begin</div>
               </div>
             ))}
           </div>
@@ -101,12 +101,12 @@ export default async function CustomProjectsPage() {
 
       {platforms.length > 0 && (
         <>
-          <h2 className="mt-10 font-serif text-xl text-navy">Platform options</h2>
+          <h2 className="mt-12 text-xl font-bold text-ink">Platform options</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {platforms.map((p: any) => (
-              <div key={p.platform} className="border border-navy/10 bg-white p-4 text-center">
-                <div className="text-sm text-slate">{p.label}</div>
-                <div className="mt-1 font-serif text-navy">{Number(p.charge) > 0 ? `+${formatINR(p.charge)}` : "Included"}</div>
+            {platforms.map((p: { platform: string; label: string; charge: number }) => (
+              <div key={p.platform} className="rounded-2xl border border-line bg-white p-4 text-center shadow-card">
+                <div className="text-sm text-ink-muted">{p.label}</div>
+                <div className="mt-1 font-semibold text-ink">{Number(p.charge) > 0 ? `+${formatINR(p.charge)}` : "Included"}</div>
               </div>
             ))}
           </div>
@@ -115,18 +115,22 @@ export default async function CustomProjectsPage() {
 
       {features.length > 0 && (
         <>
-          <h2 className="mt-10 font-serif text-xl text-navy">Add-on features</h2>
+          <h2 className="mt-12 text-xl font-bold text-ink">Add-on features</h2>
           <div className="mt-4 flex flex-wrap gap-2">
-            {features.map((f: any) => (
-              <span key={f.id} className="rounded-sm border border-navy/10 bg-paper px-3 py-1.5 text-xs text-navy">
-                {f.name}{Number(f.price) > 0 ? ` — +${formatINR(f.price)}` : ""}
+            {features.map((f: { id: string; name: string; price: number }) => (
+              <span key={f.id} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs text-ink">
+                {f.name}
+                {Number(f.price) > 0 ? ` — +${formatINR(f.price)}` : ""}
               </span>
             ))}
           </div>
         </>
       )}
 
-      <p className="mt-10 text-xs text-slate">Final pricing is calculated and shown inside the app before payment — never assume the amount here is final without confirming it there.</p>
+      <p className="mt-12 text-xs text-ink-faint">
+        Final pricing is calculated and shown before payment — never assume the amount here is final without confirming
+        it in the estimate step.
+      </p>
     </div>
   );
 }

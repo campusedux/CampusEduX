@@ -98,35 +98,35 @@ export default async function Page({ params }: Params) {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <Link href="/custom-projects/my-projects" className="text-sm text-navy underline">
+      <Link href="/custom-projects/my-projects" className="text-sm text-ink underline">
         ← All custom projects
       </Link>
 
       <div className="mt-4 flex items-start justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl text-navy">{request.title}</h1>
-          <div className="text-xs text-slate">
+          <h1 className="text-3xl text-ink">{request.title}</h1>
+          <div className="text-xs text-ink-muted">
             {request.request_code} · {request.project_type}/{request.project_level} ·{" "}
             {PLATFORM_LABELS[request.platform as Platform] ?? request.platform} · created {timeAgo(request.created_at)}
           </div>
         </div>
-        <span className="whitespace-nowrap rounded-sm border border-navy/20 px-2 py-1 text-xs text-navy">
+        <span className="whitespace-nowrap rounded-lg border border-line px-2 py-1 text-xs text-ink">
           {STATUS_LABELS[request.status as CustomProjectStatus] ?? request.status}
         </span>
       </div>
 
-      <div className="mt-3 h-1.5 w-full rounded-sm bg-navy/10">
-        <div className="h-1.5 rounded-sm bg-emerald" style={{ width: `${pct}%` }} />
+      <div className="mt-3 h-1.5 w-full rounded-lg bg-primary/10">
+        <div className="h-1.5 rounded-lg bg-success" style={{ width: `${pct}%` }} />
       </div>
 
       {/* pricing snapshot */}
-      <div className="mt-6 border border-navy/10 bg-white p-5 text-sm">
-        <dl className="space-y-1 text-slate">
-          <div className="flex justify-between"><dt>Base price</dt><dd className="text-navy">{formatINR(request.base_price)}</dd></div>
-          <div className="flex justify-between"><dt>Platform charge</dt><dd className="text-navy">{Number(request.platform_charge) > 0 ? formatINR(request.platform_charge) : "Included"}</dd></div>
-          <div className="flex justify-between"><dt>Features</dt><dd className="text-navy">{formatINR(request.feature_total)}</dd></div>
-          <div className="flex justify-between border-t border-navy/10 pt-1 font-semibold text-navy"><dt>Estimated total</dt><dd>{formatINR(request.estimated_total)}</dd></div>
-          <div className="flex justify-between text-navy"><dt className="font-semibold">Token paid</dt><dd className="font-semibold">{formatINR(request.token_amount)}</dd></div>
+      <div className="mt-6 border border-line bg-white p-5 text-sm">
+        <dl className="space-y-1 text-ink-muted">
+          <div className="flex justify-between"><dt>Base price</dt><dd className="text-ink">{formatINR(request.base_price)}</dd></div>
+          <div className="flex justify-between"><dt>Platform charge</dt><dd className="text-ink">{Number(request.platform_charge) > 0 ? formatINR(request.platform_charge) : "Included"}</dd></div>
+          <div className="flex justify-between"><dt>Features</dt><dd className="text-ink">{formatINR(request.feature_total)}</dd></div>
+          <div className="flex justify-between border-t border-line pt-1 font-semibold text-ink"><dt>Estimated total</dt><dd>{formatINR(request.estimated_total)}</dd></div>
+          <div className="flex justify-between text-ink"><dt className="font-semibold">Token paid</dt><dd className="font-semibold">{formatINR(request.token_amount)}</dd></div>
         </dl>
       </div>
 
@@ -142,16 +142,16 @@ export default async function Page({ params }: Params) {
           .filter(([, v]) => v)
           .map(([label, v]) => (
             <div key={label as string}>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate">{label}</div>
-              <p className="mt-0.5 whitespace-pre-line text-navy">{v as string}</p>
+              <div className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</div>
+              <p className="mt-0.5 whitespace-pre-line text-ink">{v as string}</p>
             </div>
           ))}
       </div>
 
       {customRequirements.length > 0 && (
         <div className="mt-6">
-          <h2 className="font-serif text-lg text-navy">Custom requirements</h2>
-          <ul className="mt-2 list-disc pl-5 text-sm text-slate">
+          <h2 className="text-lg text-ink">Custom requirements</h2>
+          <ul className="mt-2 list-disc pl-5 text-sm text-ink-muted">
             {customRequirements.map((r, i) => (
               <li key={i}>{r.text}</li>
             ))}
@@ -161,12 +161,12 @@ export default async function Page({ params }: Params) {
 
       {(features ?? []).length > 0 && (
         <div className="mt-6">
-          <h2 className="font-serif text-lg text-navy">Selected features</h2>
-          <ul className="mt-2 space-y-1 text-sm text-slate">
+          <h2 className="text-lg text-ink">Selected features</h2>
+          <ul className="mt-2 space-y-1 text-sm text-ink-muted">
             {(features ?? []).map((f) => (
               <li key={f.feature_id} className="flex justify-between">
                 <span>{f.feature_name}</span>
-                <span className="text-navy">{Number(f.feature_price) > 0 ? formatINR(f.feature_price) : "Included"}</span>
+                <span className="text-ink">{Number(f.feature_price) > 0 ? formatINR(f.feature_price) : "Included"}</span>
               </li>
             ))}
           </ul>
@@ -175,19 +175,19 @@ export default async function Page({ params }: Params) {
 
       {fileLinks.length > 0 && (
         <div className="mt-6">
-          <h2 className="font-serif text-lg text-navy">Reference files</h2>
+          <h2 className="text-lg text-ink">Reference files</h2>
           <ul className="mt-2 space-y-1 text-sm">
             {fileLinks.map((f) => (
               <li key={f.id} className="flex justify-between">
-                <span className="text-slate">
+                <span className="text-ink-muted">
                   {f.file_name || f.label} <span className="text-xs">({f.size_mb} MB)</span>
                 </span>
                 {f.url ? (
-                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-navy underline">
+                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-ink underline">
                     Download
                   </a>
                 ) : (
-                  <span className="text-xs text-slate">unavailable</span>
+                  <span className="text-xs text-ink-muted">unavailable</span>
                 )}
               </li>
             ))}
@@ -198,8 +198,8 @@ export default async function Page({ params }: Params) {
       {/* timeline */}
       {(history ?? []).length > 0 && (
         <div className="mt-6">
-          <h2 className="font-serif text-lg text-navy">Status history</h2>
-          <ul className="mt-2 space-y-1 text-sm text-slate">
+          <h2 className="text-lg text-ink">Status history</h2>
+          <ul className="mt-2 space-y-1 text-sm text-ink-muted">
             {(history ?? []).map((h, i) => (
               <li key={i}>
                 {timeAgo(h.created_at)} —{" "}
@@ -213,13 +213,13 @@ export default async function Page({ params }: Params) {
 
       {/* delivery — only visible once status = delivered (RLS) */}
       {delivery && (
-        <div className="mt-6 border border-emerald/40 bg-white p-5">
-          <h2 className="font-serif text-lg text-navy">Delivery</h2>
-          {delivery.delivered_at && <p className="text-xs text-slate">Delivered {timeAgo(delivery.delivered_at)}</p>}
-          {delivery.notes && <p className="mt-2 whitespace-pre-line text-sm text-navy">{delivery.notes}</p>}
+        <div className="mt-6 border border-success/40 bg-white p-5">
+          <h2 className="text-lg text-ink">Delivery</h2>
+          {delivery.delivered_at && <p className="text-xs text-ink-muted">Delivered {timeAgo(delivery.delivered_at)}</p>}
+          {delivery.notes && <p className="mt-2 whitespace-pre-line text-sm text-ink">{delivery.notes}</p>}
           {delivery.demo_url && (
             <p className="mt-2 text-sm">
-              <a href={delivery.demo_url} target="_blank" rel="noopener noreferrer" className="text-navy underline">
+              <a href={delivery.demo_url} target="_blank" rel="noopener noreferrer" className="text-ink underline">
                 Live demo
               </a>
             </p>
@@ -228,15 +228,15 @@ export default async function Page({ params }: Params) {
             <ul className="mt-3 space-y-1 text-sm">
               {deliveryAssets.map((a) => (
                 <li key={a.id} className="flex justify-between">
-                  <span className="text-slate">
+                  <span className="text-ink-muted">
                     {a.label || a.file_name} <span className="text-xs">({a.kind})</span>
                   </span>
                   {a.url ? (
-                    <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-navy underline">
+                    <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-ink underline">
                       Download
                     </a>
                   ) : (
-                    <span className="text-xs text-slate">unavailable</span>
+                    <span className="text-xs text-ink-muted">unavailable</span>
                   )}
                 </li>
               ))}
@@ -247,7 +247,7 @@ export default async function Page({ params }: Params) {
 
       {/* messages */}
       <div className="mt-8">
-        <h2 className="font-serif text-lg text-navy">Messages</h2>
+        <h2 className="text-lg text-ink">Messages</h2>
         <MessageThread
           requestId={request.id}
           initialMessages={(messages ?? []).map((m) => ({

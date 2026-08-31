@@ -46,13 +46,13 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
     .filter((f) => selectedSet.has(f.id))
     .reduce((s, f) => s + (Number(f.price) || 0), 0);
 
-  if (!loaded) return <p className="text-sm text-slate">Loading your draft…</p>;
+  if (!loaded) return <p className="text-sm text-ink-muted">Loading your draft…</p>;
 
   if (!draft.projectType || !draft.projectLevel) {
     return (
       <div className="empty-state">
         Choose a project type and level first.{" "}
-        <Link href="/custom-projects/start" className="text-navy underline">
+        <Link href="/custom-projects/start" className="text-ink underline">
           Back to project details
         </Link>
         .
@@ -144,18 +144,18 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
 
   return (
     <div className="space-y-8">
-      <p className="text-xs text-slate">
+      <p className="text-xs text-ink-muted">
         Showing features for <strong>{TYPE_LABELS[draft.projectType]}</strong> ·{" "}
         <strong>{LEVEL_LABELS[draft.projectLevel]}</strong>.{" "}
-        <Link href="/custom-projects/start" className="underline hover:text-navy">
+        <Link href="/custom-projects/start" className="underline hover:text-ink">
           Change
         </Link>
       </p>
 
       {grouped.map(([category, rows]) => (
         <div key={category}>
-          <h2 className="font-serif text-lg text-navy">{category}</h2>
-          <div className="mt-2 divide-y divide-navy/10 border-t border-navy/10">
+          <h2 className="text-lg text-ink">{category}</h2>
+          <div className="mt-2 divide-y divide-line border-t border-line">
             {rows.map((f) => (
               <label key={f.id} className="flex cursor-pointer items-start gap-3 py-3">
                 <input
@@ -165,10 +165,10 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
                   className="mt-1"
                 />
                 <span className="flex-1">
-                  <span className="text-sm text-navy">{f.name}</span>
-                  {f.description && <span className="block text-xs text-slate">{f.description}</span>}
+                  <span className="text-sm text-ink">{f.name}</span>
+                  {f.description && <span className="block text-xs text-ink-muted">{f.description}</span>}
                 </span>
-                <span className="whitespace-nowrap text-sm text-navy">
+                <span className="whitespace-nowrap text-sm text-ink">
                   {Number(f.price) > 0 ? `+${formatINR(Number(f.price))}` : "Included"}
                 </span>
               </label>
@@ -177,45 +177,45 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
         </div>
       ))}
 
-      <div className="border-t border-navy/10 pt-4 text-sm text-navy">
+      <div className="border-t border-line pt-4 text-sm text-ink">
         Selected feature add-ons: <strong>{formatINR(featureSubtotal)}</strong>{" "}
-        <span className="text-xs text-slate">(the final estimate is calculated on the next step)</span>
+        <span className="text-xs text-ink-muted">(the final estimate is calculated on the next step)</span>
       </div>
 
       <div>
-        <h2 className="font-serif text-lg text-navy">Project image (optional)</h2>
+        <h2 className="text-lg text-ink">Project image (optional)</h2>
         <input
           type="file"
           accept={CP_IMAGE_TYPES.join(",")}
           onChange={handleImage}
           disabled={imageBusy}
-          className="mt-2 block w-full text-sm text-slate file:mr-3 file:rounded-sm file:border file:border-navy/20 file:bg-paper file:px-3 file:py-1.5 file:text-sm file:text-navy"
+          className="mt-2 block w-full text-sm text-ink-muted file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink"
         />
-        {draft.projectImagePath && <p className="mt-1 text-xs text-emerald">Image attached.</p>}
+        {draft.projectImagePath && <p className="mt-1 text-xs text-success">Image attached.</p>}
       </div>
 
       <div>
-        <h2 className="font-serif text-lg text-navy">Requirement / reference files (optional)</h2>
-        <p className="text-xs text-slate">PDF, DOC, DOCX, images or ZIP · up to {CP_MAX_FILE_MB} MB each.</p>
+        <h2 className="text-lg text-ink">Requirement / reference files (optional)</h2>
+        <p className="text-xs text-ink-muted">PDF, DOC, DOCX, images or ZIP · up to {CP_MAX_FILE_MB} MB each.</p>
         <input
           type="file"
           multiple
           accept={CP_DOC_TYPES.join(",")}
           onChange={handleFiles}
           disabled={fileBusy}
-          className="mt-2 block w-full text-sm text-slate file:mr-3 file:rounded-sm file:border file:border-navy/20 file:bg-paper file:px-3 file:py-1.5 file:text-sm file:text-navy"
+          className="mt-2 block w-full text-sm text-ink-muted file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink"
         />
         {draft.referenceFiles.length > 0 && (
           <ul className="mt-2 space-y-1">
             {draft.referenceFiles.map((r, i) => (
-              <li key={r.path} className="flex items-center gap-2 text-sm text-navy">
+              <li key={r.path} className="flex items-center gap-2 text-sm text-ink">
                 <span className="flex-1">
-                  {r.name} <span className="text-xs text-slate">({r.sizeMb} MB)</span>
+                  {r.name} <span className="text-xs text-ink-muted">({r.sizeMb} MB)</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => update((d) => ({ ...d, referenceFiles: d.referenceFiles.filter((_, j) => j !== i) }))}
-                  className="text-xs text-slate underline hover:text-navy"
+                  className="text-xs text-ink-muted underline hover:text-ink"
                 >
                   Remove
                 </button>
@@ -223,18 +223,18 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
             ))}
           </ul>
         )}
-        {uploadError && <p className="mt-2 text-xs text-red-700">{uploadError}</p>}
+        {uploadError && <p className="mt-2 text-xs text-danger">{uploadError}</p>}
       </div>
 
-      <div className="flex items-center justify-between border-t border-navy/10 pt-6">
-        <Link href="/custom-projects/start" className="text-sm text-navy underline">
+      <div className="flex items-center justify-between border-t border-line pt-6">
+        <Link href="/custom-projects/start" className="text-sm text-ink underline">
           Back
         </Link>
         <button
           type="button"
           onClick={handleContinue}
           disabled={going}
-          className="rounded-sm bg-navy px-6 py-2.5 text-sm text-paper hover:bg-navy/90 disabled:opacity-50"
+          className="rounded-lg bg-primary px-6 py-2.5 text-sm text-white hover:bg-primary/90 disabled:opacity-50"
         >
           {going ? "Saving…" : "Continue to estimate"}
         </button>

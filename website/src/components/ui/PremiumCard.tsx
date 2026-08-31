@@ -20,11 +20,13 @@ export type PremiumPlanData = {
 export function PremiumCard({
   plan,
   highlighted,
+  subNote,
   cta,
   className,
 }: {
   plan: PremiumPlanData;
   highlighted?: boolean;
+  subNote?: string;
   cta?: React.ReactNode;
   className?: string;
 }) {
@@ -48,6 +50,7 @@ export function PremiumCard({
       {typeof plan.original_price === "number" && plan.original_price > plan.price && (
         <span className="mt-1 text-xs text-ink-faint line-through">{formatINR(plan.original_price)}</span>
       )}
+      {subNote && <p className="mt-1 text-xs text-ink-faint">{subNote}</p>}
       {plan.features && plan.features.length > 0 && (
         <ul className="mt-4 flex-1 space-y-2">
           {plan.features.map((f, i) => (

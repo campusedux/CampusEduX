@@ -29,7 +29,7 @@ export default function BuilderStart() {
   const [going, setGoing] = useState(false);
   const [reqText, setReqText] = useState("");
 
-  if (!loaded) return <p className="text-sm text-slate">Loading your draft…</p>;
+  if (!loaded) return <p className="text-sm text-ink-muted">Loading your draft…</p>;
 
   const canContinue = !!(draft.projectType && draft.projectLevel && draft.platform && draft.title.trim());
 
@@ -42,15 +42,15 @@ export default function BuilderStart() {
   return (
     <div className="space-y-8">
       <fieldset>
-        <legend className="text-sm font-semibold text-navy">Project type</legend>
+        <legend className="text-sm font-semibold text-ink">Project type</legend>
         <div className="mt-2 flex flex-wrap gap-2">
           {PROJECT_TYPES.map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => patch({ projectType: t as ProjectType })}
-              className={`rounded-sm border px-4 py-2 text-sm ${
-                draft.projectType === t ? "border-navy bg-navy text-paper" : "border-navy/20 text-navy hover:border-navy/40"
+              className={`rounded-lg border px-4 py-2 text-sm ${
+                draft.projectType === t ? "border-primary bg-primary text-white" : "border-line text-ink hover:border-line"
               }`}
             >
               {TYPE_LABELS[t]}
@@ -60,15 +60,15 @@ export default function BuilderStart() {
       </fieldset>
 
       <fieldset>
-        <legend className="text-sm font-semibold text-navy">Level</legend>
+        <legend className="text-sm font-semibold text-ink">Level</legend>
         <div className="mt-2 flex flex-wrap gap-2">
           {PROJECT_LEVELS.map((l) => (
             <button
               key={l}
               type="button"
               onClick={() => patch({ projectLevel: l as ProjectLevel })}
-              className={`rounded-sm border px-4 py-2 text-sm ${
-                draft.projectLevel === l ? "border-navy bg-navy text-paper" : "border-navy/20 text-navy hover:border-navy/40"
+              className={`rounded-lg border px-4 py-2 text-sm ${
+                draft.projectLevel === l ? "border-primary bg-primary text-white" : "border-line text-ink hover:border-line"
               }`}
             >
               {LEVEL_LABELS[l]}
@@ -78,11 +78,11 @@ export default function BuilderStart() {
       </fieldset>
 
       <div>
-        <label className="text-sm font-semibold text-navy">Platform</label>
+        <label className="text-sm font-semibold text-ink">Platform</label>
         <select
           value={draft.platform ?? ""}
           onChange={(e) => patch({ platform: (e.target.value || null) as Platform | null })}
-          className="mt-2 block w-full max-w-sm border border-navy/20 bg-white px-3 py-2 text-sm"
+          className="mt-2 block w-full max-w-sm border border-line bg-white px-3 py-2 text-sm"
         >
           <option value="">Choose a platform…</option>
           {PLATFORMS.map((p) => (
@@ -94,42 +94,42 @@ export default function BuilderStart() {
       </div>
 
       <div>
-        <label className="text-sm font-semibold text-navy">Project title</label>
+        <label className="text-sm font-semibold text-ink">Project title</label>
         <input
           value={draft.title}
           onChange={(e) => patch({ title: e.target.value })}
           maxLength={200}
           placeholder="e.g. Hostel management system"
-          className="mt-2 block w-full border border-navy/20 bg-white px-3 py-2 text-sm"
+          className="mt-2 block w-full border border-line bg-white px-3 py-2 text-sm"
         />
       </div>
 
       {TEXT_FIELDS.map((f) => (
         <div key={f.key}>
-          <label className="text-sm font-semibold text-navy">{f.label}</label>
-          <p className="text-xs text-slate">{f.hint}</p>
+          <label className="text-sm font-semibold text-ink">{f.label}</label>
+          <p className="text-xs text-ink-muted">{f.hint}</p>
           <textarea
             value={draft[f.key]}
             onChange={(e) => patch({ [f.key]: e.target.value } as Partial<typeof draft>)}
             rows={3}
             maxLength={4000}
-            className="mt-1 block w-full border border-navy/20 bg-white px-3 py-2 text-sm"
+            className="mt-1 block w-full border border-line bg-white px-3 py-2 text-sm"
           />
         </div>
       ))}
 
       <div>
-        <label className="text-sm font-semibold text-navy">Custom requirements</label>
-        <p className="text-xs text-slate">Anything specific that isn&apos;t a standard feature. Add as many as you need.</p>
+        <label className="text-sm font-semibold text-ink">Custom requirements</label>
+        <p className="text-xs text-ink-muted">Anything specific that isn&apos;t a standard feature. Add as many as you need.</p>
         {draft.customRequirements.length > 0 && (
           <ul className="mt-2 space-y-2">
             {draft.customRequirements.map((r, i) => (
               <li key={i} className="flex items-center gap-2">
-                <span className="flex-1 border border-navy/10 bg-white px-3 py-1.5 text-sm text-navy">{r.text}</span>
+                <span className="flex-1 border border-line bg-white px-3 py-1.5 text-sm text-ink">{r.text}</span>
                 <button
                   type="button"
                   onClick={() => update((d) => ({ ...d, customRequirements: d.customRequirements.filter((_, j) => j !== i) }))}
-                  className="text-xs text-slate underline hover:text-navy"
+                  className="text-xs text-ink-muted underline hover:text-ink"
                 >
                   Remove
                 </button>
@@ -143,7 +143,7 @@ export default function BuilderStart() {
             onChange={(e) => setReqText(e.target.value)}
             maxLength={400}
             placeholder="Add a requirement…"
-            className="flex-1 border border-navy/20 bg-white px-3 py-1.5 text-sm"
+            className="flex-1 border border-line bg-white px-3 py-1.5 text-sm"
           />
           <button
             type="button"
@@ -153,20 +153,20 @@ export default function BuilderStart() {
               update((d) => ({ ...d, customRequirements: [...d.customRequirements, { text: t }] }));
               setReqText("");
             }}
-            className="rounded-sm border border-navy px-3 py-1.5 text-sm text-navy hover:bg-navy hover:text-paper"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink hover:bg-primary hover:text-white"
           >
             Add
           </button>
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-t border-navy/10 pt-6">
+      <div className="flex items-center justify-between border-t border-line pt-6">
         <button
           type="button"
           onClick={() => {
             if (confirm("Discard this draft and start over?")) clearDraft();
           }}
-          className="text-xs text-slate underline hover:text-navy"
+          className="text-xs text-ink-muted underline hover:text-ink"
           disabled={!userId}
         >
           Discard draft
@@ -175,13 +175,13 @@ export default function BuilderStart() {
           type="button"
           onClick={handleContinue}
           disabled={!canContinue || going}
-          className="rounded-sm bg-navy px-6 py-2.5 text-sm text-paper hover:bg-navy/90 disabled:opacity-50"
+          className="rounded-lg bg-primary px-6 py-2.5 text-sm text-white hover:bg-primary/90 disabled:opacity-50"
         >
           {going ? "Saving…" : "Continue to features"}
         </button>
       </div>
       {!canContinue && (
-        <p className="text-xs text-slate">Choose a project type, level, platform and a title to continue.</p>
+        <p className="text-xs text-ink-muted">Choose a project type, level, platform and a title to continue.</p>
       )}
     </div>
   );

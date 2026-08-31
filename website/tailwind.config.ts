@@ -9,11 +9,8 @@ import type { Config } from "tailwindcss";
  * surface, soft low card shadows, rounded-2xl cards, system sans (the app loads
  * no custom font — only `monospace` for code).
  *
- * The legacy editorial tokens (`navy` / `paper` / `marigold` / `emerald` /
- * `slate`) are kept as ALIASES pointing at app-aligned values so the ~65 pages
- * that still use them keep rendering coherently during the P2–P7 migration.
- * They are removed in the final cleanup once every page uses the shared
- * component system.
+ * The legacy editorial tokens (navy / paper / marigold / emerald / slate) were
+ * removed at the end of P7 once every page moved to the shared component system.
  */
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
@@ -44,19 +41,10 @@ const config: Config = {
         success: "#16A34A",
         danger: "#DC2626",
         warning: "#F59E0B",
-
-        // ---- Legacy aliases (interim — see file header) -------------------
-        navy: "#111827", // was #12213D → app ink
-        paper: "#FFFFFF", // was #F5F6F2 → app white surface
-        slate: "#6B7280", // app secondary text
-        marigold: { DEFAULT: "#F59E0B", deep: "#D97706" }, // app amber / "Premium" accent
-        "marigold-deep": "#D97706",
-        emerald: "#16A34A", // app success green / "Best seller"
       },
       fontFamily: {
-        // The app uses the platform system font. Both families resolve to the
-        // same stack so the 118 legacy `font-serif` usages lose the serif
-        // without a file-by-file sweep.
+        // The app uses the platform system font. `serif` is aliased to the same
+        // stack so any stray `font-serif` never reintroduces a serif.
         sans: [
           "-apple-system",
           "BlinkMacSystemFont",

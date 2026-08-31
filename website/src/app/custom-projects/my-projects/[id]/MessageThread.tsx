@@ -54,22 +54,22 @@ export default function MessageThread({
 
   return (
     <div className="mt-3">
-      <div className="max-h-96 space-y-3 overflow-y-auto border border-navy/10 bg-white p-4">
+      <div className="max-h-96 space-y-3 overflow-y-auto border border-line bg-white p-4">
         {messages.length === 0 ? (
-          <p className="text-sm text-slate">No messages yet. Ask the team anything about your request.</p>
+          <p className="text-sm text-ink-muted">No messages yet. Ask the team anything about your request.</p>
         ) : (
           messages.map((m) => {
             const mine = m.senderRole === "student";
             return (
               <div key={m.id} className={mine ? "text-right" : "text-left"}>
                 <div
-                  className={`inline-block max-w-[85%] rounded-sm px-3 py-2 text-sm ${
-                    mine ? "bg-navy text-paper" : "bg-paper text-navy border border-navy/10"
+                  className={`inline-block max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                    mine ? "bg-primary text-white" : "bg-surface text-ink border border-line"
                   }`}
                 >
                   <span className="whitespace-pre-line">{m.body}</span>
                 </div>
-                <div className="mt-0.5 text-[0.65rem] text-slate">
+                <div className="mt-0.5 text-[0.65rem] text-ink-muted">
                   {mine ? "You" : "CampusEduX team"} · {timeAgo(m.createdAt)}
                 </div>
               </div>
@@ -85,17 +85,17 @@ export default function MessageThread({
           onChange={(e) => setBody(e.target.value)}
           maxLength={4000}
           placeholder="Write a message…"
-          className="flex-1 border border-navy/20 bg-white px-3 py-2 text-sm"
+          className="flex-1 border border-line bg-white px-3 py-2 text-sm"
         />
         <button
           type="submit"
           disabled={sending || !body.trim()}
-          className="rounded-sm bg-navy px-5 py-2 text-sm text-paper hover:bg-navy/90 disabled:opacity-50"
+          className="rounded-lg bg-primary px-5 py-2 text-sm text-white hover:bg-primary/90 disabled:opacity-50"
         >
           {sending ? "Sending…" : "Send"}
         </button>
       </form>
-      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );
 }

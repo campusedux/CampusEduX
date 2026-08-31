@@ -1,30 +1,36 @@
 import { getPublicSupabase } from "@/lib/supabase/server";
+import { ResumeTemplateCard, type ResumeTemplateData, EmptyState } from "@/components/ui";
 
 export const revalidate = 300;
 export const metadata = { title: "Resume Templates" };
 
 export default async function ResumeTemplatesPage() {
   const supabase = getPublicSupabase();
-  let templates: any[] = [];
+  let templates: ResumeTemplateData[] = [];
   if (supabase) {
-    const { data } = await supabase.from("resume_templates").select("*").order("sort_order");
-    templates = data ?? [];
+    const { data } = await supabase
+      .from("resume_templates")
+      .select("id,name,description,is_premium")
+      .eq("status", "active")
+      .order("sort_order");
+    templates = (data ?? []).map((t: { id: string; name: string; description?: string | null; is_premium?: boolean | null }) => ({
+      id: t.id,
+      name: t.name,
+      category: t.description ?? null,
+      is_ats_friendly: !t.is_premium,
+    }));
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">Resume Templates</h1>
+    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      <h1 className="text-3xl font-bold text-ink">Resume Templates</h1>
+      <p className="mt-2 text-ink-muted">Pick a template in the app when you build your resume.</p>
       {templates.length === 0 ? (
-        <div className="empty-state mt-8">Templates will appear here once the catalog is connected.</div>
+        <EmptyState className="mt-8" title="No templates published yet" />
       ) : (
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {templates.map((t) => (
-            <div key={t.id} className="border border-navy/10 bg-white p-5">
-              <div className="h-2 w-10" style={{ background: t.accent_color }} />
-              <h2 className="mt-3 font-serif text-lg text-navy">{t.name}</h2>
-              <p className="mt-1 text-sm text-slate">{t.description}</p>
-              {t.is_premium && <span className="mt-2 inline-block rounded-sm bg-marigold px-2 py-0.5 text-xs font-semibold text-navy">Premium</span>}
-            </div>
+            <ResumeTemplateCard key={t.id} template={t} />
           ))}
         </div>
       )}

@@ -23,7 +23,7 @@ export default function PremiumSubscribeButton({
 
   if (!isSignedIn) {
     return (
-      <Link href={`/login?next=/premium`} className="mt-4 block rounded-sm bg-navy py-2 text-center text-sm text-paper hover:bg-navy/90">
+      <Link href={`/login?next=/premium`} className="btn-primary mt-4 w-full">
         Sign in to subscribe
       </Link>
     );
@@ -70,7 +70,7 @@ export default function PremiumSubscribeButton({
           router.refresh();
         },
         modal: { ondismiss: () => setStatus("idle") },
-        theme: { color: "#12213D" },
+        theme: { color: "#4F39F6" },
       });
       checkout.open();
     } catch (err: any) {
@@ -84,13 +84,13 @@ export default function PremiumSubscribeButton({
       <div className="flex gap-2 text-xs">
         <button
           onClick={() => setBillingCycle("monthly")}
-          className={`rounded-sm border px-2 py-1 ${billingCycle === "monthly" ? "border-navy bg-navy text-paper" : "border-navy/20 text-navy"}`}
+          className={`rounded-lg border px-3 py-1 font-medium ${billingCycle === "monthly" ? "border-primary bg-primary text-white" : "border-line text-ink-muted"}`}
         >
           Monthly
         </button>
         <button
           onClick={() => setBillingCycle("yearly")}
-          className={`rounded-sm border px-2 py-1 ${billingCycle === "yearly" ? "border-navy bg-navy text-paper" : "border-navy/20 text-navy"}`}
+          className={`rounded-lg border px-3 py-1 font-medium ${billingCycle === "yearly" ? "border-primary bg-primary text-white" : "border-line text-ink-muted"}`}
         >
           Yearly
         </button>
@@ -98,11 +98,11 @@ export default function PremiumSubscribeButton({
       <button
         onClick={handleSubscribe}
         disabled={status === "processing"}
-        className="mt-3 w-full rounded-sm bg-navy py-2 text-sm text-paper hover:bg-navy/90 disabled:opacity-60"
+        className="btn-primary mt-3 w-full"
       >
         {status === "processing" ? "Opening checkout…" : `Subscribe to ${planName}`}
       </button>
-      {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
+      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
     </div>
   );
 }

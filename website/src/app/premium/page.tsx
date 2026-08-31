@@ -1,61 +1,84 @@
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { PremiumCard, SectionHeader, EmptyState } from "@/components/ui";
 import { formatINR } from "@/lib/format";
 import PremiumSubscribeButton from "@/components/PremiumSubscribeButton";
 
 export const revalidate = 300;
 export const metadata = { title: "Premium" };
 
+type Plan = {
+  id: string;
+  name: string;
+  monthly_price: number;
+  yearly_price: number;
+  yearly_discount_percent: number;
+  features: string[] | null;
+  is_popular: boolean | null;
+};
+type Feature = { id: string; title: string; subtitle: string | null };
+
 export default async function PremiumPage() {
   const supabase = getPublicSupabase();
-  let plans: any[] = [];
-  let features: any[] = [];
+  let plans: Plan[] = [];
+  let features: Feature[] = [];
   if (supabase) {
     const [{ data: p }, { data: f }] = await Promise.all([
       supabase.from("premium_plans").select("*").order("sort_order"),
       supabase.from("premium_features").select("*").order("sort_order"),
     ]);
-    plans = p ?? [];
-    features = f ?? [];
+    plans = (p ?? []) as Plan[];
+    features = (f ?? []) as Feature[];
   }
 
-  const authedSupabase = createAuthedServerSupabase();
-  const { data: { user } } = await authedSupabase.auth.getUser();
+  const { data: { user } } = await createAuthedServerSupabase().auth.getUser();
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">Premium</h1>
-      <p className="mt-2 max-w-2xl text-slate">An optional tier on top of everything already free in CampusEduX — priority access, extra prep material, and faster support.</p>
+    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      <h1 className="text-3xl font-bold text-ink">Premium</h1>
+      <p className="mt-2 max-w-2xl text-ink-muted">
+        An optional tier on top of everything already free in CampusEduX — priority access, extra prep material and
+        faster support. Same account across web and the app.
+      </p>
 
       {features.length > 0 && (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          {features.map((f: any) => (
-            <div key={f.id} className="border border-navy/10 bg-white p-4">
-              <div className="font-serif text-navy">{f.title}</div>
-              <p className="mt-1 text-sm text-slate">{f.subtitle}</p>
-            </div>
-          ))}
+        <div className="mt-8">
+          <SectionHeader title="What you get" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {features.map((f) => (
+              <div key={f.id} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+                <div className="font-semibold text-ink">{f.title}</div>
+                {f.subtitle && <p className="mt-1 text-sm text-ink-muted">{f.subtitle}</p>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {plans.length === 0 ? (
-        <div className="empty-state mt-10">Plan pricing will appear here once published from the admin panel.</div>
-      ) : (
-        <div className="mt-10 grid gap-5 sm:grid-cols-3">
-          {plans.map((p: any) => (
-            <div key={p.id} className={`border p-6 ${p.is_popular ? "border-marigold" : "border-navy/10"} bg-white`}>
-              {p.is_popular && <div className="mb-2 text-xs font-semibold text-marigold">Most popular</div>}
-              <div className="font-serif text-xl text-navy">{p.name}</div>
-              <div className="mt-2 font-serif text-2xl text-navy">{formatINR(p.monthly_price)}<span className="text-sm text-slate">/mo</span></div>
-              <div className="text-xs text-slate">or {formatINR(p.yearly_price)}/yr{p.yearly_discount_percent > 0 ? ` (save ${p.yearly_discount_percent}%)` : ""}</div>
-              <ul className="mt-4 space-y-1 text-sm text-slate">
-                {(p.features ?? []).map((feat: string) => <li key={feat}>• {feat}</li>)}
-              </ul>
-              <PremiumSubscribeButton planId={p.id} planName={p.name} isSignedIn={!!user} />
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="mt-10">
+        <SectionHeader title="Plans" />
+        {plans.length === 0 ? (
+          <EmptyState title="Plan pricing coming soon" subtitle="Plans appear here once published from the admin panel." />
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-3">
+            {plans.map((p) => (
+              <PremiumCard
+                key={p.id}
+                plan={{
+                  id: p.id,
+                  name: p.name,
+                  price: Number(p.monthly_price) || 0,
+                  period_label: "/ month",
+                  features: p.features ?? [],
+                  is_popular: p.is_popular ?? false,
+                }}
+                subNote={`or ${formatINR(p.yearly_price)}/yr${p.yearly_discount_percent > 0 ? ` · save ${p.yearly_discount_percent}%` : ""}`}
+                cta={<PremiumSubscribeButton planId={p.id} planName={p.name} isSignedIn={!!user} />}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

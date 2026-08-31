@@ -2,11 +2,18 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { timeAgo } from "@/lib/format";
+import { Badge, EmptyState, Button } from "@/components/ui";
 
+const STATUS_TONE: Record<string, "primary" | "success" | "danger" | "neutral"> = {
+  in_review: "primary",
+  shortlisted: "success",
+  hired: "success",
+  rejected: "danger",
+};
 const STATUS_LABEL: Record<string, string> = {
   in_review: "In review",
   shortlisted: "Shortlisted",
-  rejected: "Rejected",
+  rejected: "Not selected",
   hired: "Hired",
 };
 
@@ -22,20 +29,31 @@ export default async function ApplicationsPage() {
 
   return (
     <div>
-      <h1 className="font-serif text-2xl text-navy">Your applications</h1>
+      <h1 className="text-2xl font-bold text-ink">Your applications</h1>
       {!applications || applications.length === 0 ? (
-        <div className="empty-state mt-6">No applications yet. <Link href="/jobs" className="text-navy underline">Browse open roles</Link>.</div>
+        <EmptyState
+          className="mt-6"
+          title="No applications yet"
+          action={<Button href="/jobs" size="sm">Browse open roles</Button>}
+        />
       ) : (
-        <div className="mt-6 divide-y divide-navy/10 border-t border-navy/10">
-          {applications.map((a: any) => (
-            <div key={a.id} className="flex items-center justify-between py-4">
-              <div>
-                <Link href={`/jobs/${a.job?.id}`} className="font-serif text-navy hover:text-marigold">{a.job?.title}</Link>
-                <div className="text-xs text-slate">{a.job?.company_name} · Applied {timeAgo(a.created_at)}</div>
+        <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-white">
+          {applications.map((a) => {
+            const job = Array.isArray(a.job) ? a.job[0] : a.job;
+            return (
+              <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-4">
+                <div className="min-w-0">
+                  <Link href={`/jobs/${job?.id}`} className="font-semibold text-ink hover:text-primary">
+                    {job?.title}
+                  </Link>
+                  <div className="text-xs text-ink-faint">
+                    {job?.company_name} · Applied {timeAgo(a.created_at)}
+                  </div>
+                </div>
+                <Badge tone={STATUS_TONE[a.status] ?? "neutral"}>{STATUS_LABEL[a.status] ?? a.status}</Badge>
               </div>
-              <span className="rounded-sm border border-navy/20 px-2 py-1 text-xs text-navy">{STATUS_LABEL[a.status] ?? a.status}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -27,8 +27,8 @@ export default async function Page() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="font-serif text-3xl text-navy">Features &amp; files</h1>
-      <p className="mt-2 text-sm text-slate">
+      <h1 className="text-3xl text-ink">Features &amp; files</h1>
+      <p className="mt-2 text-sm text-ink-muted">
         Pick the features your project needs, and attach any requirement or reference files.
       </p>
       <div className="mt-8">
@@ -36,7 +36,7 @@ export default async function Page() {
         {features.length === 0 ? (
           <div className="empty-state">
             The feature catalog isn&apos;t available right now.{" "}
-            <Link href="/custom-projects/estimate" className="text-navy underline">
+            <Link href="/custom-projects/estimate" className="text-ink underline">
               Skip to the estimate
             </Link>
             .

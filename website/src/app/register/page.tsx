@@ -57,9 +57,9 @@ function RegisterForm() {
   if (checkEmail) {
     return (
       <div className="mx-auto max-w-sm px-6 py-16 text-center">
-        <h1 className="font-serif text-2xl text-navy">Check your email</h1>
-        <p className="mt-3 text-sm text-slate">Confirm your email address to finish creating your account, then sign in.</p>
-        <Link href="/login" className="mt-6 inline-block rounded-sm border border-navy px-5 py-2.5 text-sm text-navy hover:bg-navy hover:text-paper">
+        <h1 className="text-2xl text-ink">Check your email</h1>
+        <p className="mt-3 text-sm text-ink-muted">Confirm your email address to finish creating your account, then sign in.</p>
+        <Link href="/login" className="mt-6 inline-block rounded-lg border border-line px-5 py-2.5 text-sm text-ink hover:bg-primary hover:text-white">
           Go to sign in
         </Link>
       </div>
@@ -68,37 +68,37 @@ function RegisterForm() {
 
   return (
     <div className="mx-auto max-w-sm px-6 py-16">
-      <h1 className="font-serif text-3xl text-navy">Create an account</h1>
-      <p className="mt-2 text-sm text-slate">Same account works in the CampusEduX app.</p>
+      <h1 className="text-3xl text-ink">Create an account</h1>
+      <p className="mt-2 text-sm text-ink-muted">Same account works in the CampusEduX app.</p>
 
       <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
         <div>
-          <label className="text-sm text-navy">Full name</label>
-          <input required value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1 w-full border border-navy/20 bg-white px-3 py-2 text-sm" />
+          <label className="text-sm text-ink">Full name</label>
+          <input required value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1 w-full border border-line bg-white px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="text-sm text-navy">Email</label>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full border border-navy/20 bg-white px-3 py-2 text-sm" />
+          <label className="text-sm text-ink">Email</label>
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full border border-line bg-white px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="text-sm text-navy">Mobile number</label>
-          <input required value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value)} className="mt-1 w-full border border-navy/20 bg-white px-3 py-2 text-sm" />
+          <label className="text-sm text-ink">Mobile number</label>
+          <input required value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value)} className="mt-1 w-full border border-line bg-white px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="text-sm text-navy">Password</label>
-          <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 w-full border border-navy/20 bg-white px-3 py-2 text-sm" />
+          <label className="text-sm text-ink">Password</label>
+          <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 w-full border border-line bg-white px-3 py-2 text-sm" />
         </div>
         {referralCode && (
-          <p className="text-xs text-emerald">Referral code &quot;{referralCode}&quot; will be applied.</p>
+          <p className="text-xs text-success">Referral code &quot;{referralCode}&quot; will be applied.</p>
         )}
-        {error && <p className="text-sm text-red-700">{error}</p>}
-        <button type="submit" disabled={loading} className="w-full rounded-sm bg-navy py-2.5 text-sm text-paper hover:bg-navy/90 disabled:opacity-60">
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <button type="submit" disabled={loading} className="w-full rounded-lg bg-primary py-2.5 text-sm text-white hover:bg-primary/90 disabled:opacity-60">
           {loading ? "Creating account…" : "Create account"}
         </button>
       </form>
 
-      <p className="mt-6 text-sm text-slate">
-        Already have an account? <Link href="/login" className="text-navy underline">Sign in</Link>
+      <p className="mt-6 text-sm text-ink-muted">
+        Already have an account? <Link href="/login" className="text-ink underline">Sign in</Link>
       </p>
     </div>
   );
@@ -109,8 +109,8 @@ export default function RegisterPage() {
     <Suspense
       fallback={
         <div className="mx-auto max-w-sm px-6 py-16">
-          <h1 className="font-serif text-3xl text-navy">Create an account</h1>
-          <p className="mt-2 text-sm text-slate">Loading…</p>
+          <h1 className="text-3xl text-ink">Create an account</h1>
+          <p className="mt-2 text-sm text-ink-muted">Loading…</p>
         </div>
       }
     >

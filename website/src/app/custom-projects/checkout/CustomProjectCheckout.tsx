@@ -86,7 +86,7 @@ export default function CustomProjectCheckout({
           router.refresh();
         },
         modal: { ondismiss: () => setStatus("idle") },
-        theme: { color: "#12213D" },
+        theme: { color: "#4F39F6" },
       });
       checkout.open();
     } catch (err: any) {
@@ -100,11 +100,11 @@ export default function CustomProjectCheckout({
       <button
         onClick={handlePay}
         disabled={status === "processing"}
-        className="rounded-sm bg-marigold px-6 py-2.5 text-sm font-semibold text-navy hover:bg-marigold-deep disabled:opacity-60"
+        className="btn-primary disabled:opacity-60"
       >
         {status === "processing" ? "Opening checkout…" : `Pay ${formatINR(tokenAmount)} token`}
       </button>
-      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );
 }

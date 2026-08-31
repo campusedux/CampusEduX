@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR, timeAgo } from "@/lib/format";
+import { Badge, EmptyState } from "@/components/ui";
 import CopyLinkButton from "./CopyLinkButton";
 
 export default async function AccountReferralPage() {
@@ -19,49 +20,52 @@ export default async function AccountReferralPage() {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://campusedux.app";
   const link = code?.code ? `${siteUrl}/register?ref=${code.code}` : null;
 
+  const STATS = [
+    { label: "Your code", value: code?.code ?? "—" },
+    { label: "Friends referred", value: code?.total_referrals ?? 0 },
+    { label: "Total earned", value: formatINR(code?.total_earned ?? 0) },
+  ];
+
   return (
     <div>
-      <h1 className="font-serif text-2xl text-navy">Referral</h1>
+      <h1 className="text-2xl font-bold text-ink">Referral</h1>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <div className="border border-navy/10 bg-white p-5">
-          <div className="text-xs text-slate">Your code</div>
-          <div className="mt-1 font-serif text-xl text-navy">{code?.code ?? "—"}</div>
-        </div>
-        <div className="border border-navy/10 bg-white p-5">
-          <div className="text-xs text-slate">Friends referred</div>
-          <div className="mt-1 font-serif text-xl text-navy">{code?.total_referrals ?? 0}</div>
-        </div>
-        <div className="border border-navy/10 bg-white p-5">
-          <div className="text-xs text-slate">Total earned</div>
-          <div className="mt-1 font-serif text-xl text-navy">{formatINR(code?.total_earned ?? 0)}</div>
-        </div>
+        {STATS.map((s) => (
+          <div key={s.label} className="rounded-2xl border border-line bg-white p-5 shadow-card">
+            <div className="text-xs text-ink-faint">{s.label}</div>
+            <div className="mt-1 text-xl font-bold text-ink">{s.value}</div>
+          </div>
+        ))}
       </div>
 
       {link && (
-        <div className="mt-6 flex items-center gap-3 border border-navy/10 bg-white p-4">
-          <code className="flex-1 truncate text-sm text-slate">{link}</code>
+        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-line bg-white p-4">
+          <code className="flex-1 truncate text-sm text-ink-muted">{link}</code>
           <CopyLinkButton link={link} />
         </div>
       )}
 
-      <h2 className="mt-10 font-serif text-lg text-navy">History</h2>
-      {(!referrals || referrals.length === 0) ? (
-        <div className="empty-state mt-3">No referrals yet — share your link above.</div>
+      <h2 className="mt-10 text-lg font-bold text-ink">History</h2>
+      {!referrals || referrals.length === 0 ? (
+        <EmptyState className="mt-3" title="No referrals yet" subtitle="Share your link above to start earning." />
       ) : (
-        <div className="mt-3 divide-y divide-navy/10 border-t border-navy/10">
-          {referrals.map((r: any) => (
-            <div key={r.id} className="flex items-center justify-between py-3 text-sm">
-              <div>
-                <div className="text-navy">{r.referred_user?.full_name || r.referred_user?.email || "Pending signup"}</div>
-                <div className="text-xs text-slate">{timeAgo(r.created_at)}</div>
+        <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-white">
+          {referrals.map((r) => {
+            const ref = Array.isArray(r.referred_user) ? r.referred_user[0] : r.referred_user;
+            return (
+              <div key={r.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                <div className="min-w-0">
+                  <div className="truncate text-ink">{ref?.full_name || ref?.email || "Pending signup"}</div>
+                  <div className="text-xs text-ink-faint">{timeAgo(r.created_at)}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-ink">{formatINR(r.reward_amount)}</span>
+                  <Badge tone={r.status === "successful" || r.status === "completed" ? "success" : "neutral"}>{r.status}</Badge>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-navy">{formatINR(r.reward_amount)}</div>
-                <div className="text-xs text-slate">{r.status}</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

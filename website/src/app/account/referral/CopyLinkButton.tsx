@@ -11,7 +11,7 @@ export default function CopyLinkButton({ link }: { link: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
-      className="rounded-sm border border-navy px-3 py-1.5 text-xs text-navy hover:bg-navy hover:text-paper"
+      className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface"
     >
       {copied ? "Copied" : "Copy"}
     </button>

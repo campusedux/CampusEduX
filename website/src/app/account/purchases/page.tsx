@@ -3,6 +3,7 @@ import Image from "next/image";
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR, timeAgo } from "@/lib/format";
+import { Badge, EmptyState, Button } from "@/components/ui";
 
 export default async function PurchasesPage() {
   const user = await requireUser();
@@ -16,26 +17,44 @@ export default async function PurchasesPage() {
 
   return (
     <div>
-      <h1 className="font-serif text-2xl text-navy">Your purchases</h1>
+      <h1 className="text-2xl font-bold text-ink">Your purchases</h1>
+      <p className="mt-1 text-sm text-ink-muted">
+        Source code and documentation for a purchased project download from the CampusEduX app, tied to this account.
+      </p>
       {!purchases || purchases.length === 0 ? (
-        <div className="empty-state mt-6">You haven&apos;t purchased any projects yet. <Link href="/projects" className="text-navy underline">Browse the marketplace</Link>.</div>
+        <EmptyState
+          className="mt-6"
+          title="No purchases yet"
+          action={<Button href="/projects" size="sm">Browse the marketplace</Button>}
+        />
       ) : (
-        <div className="mt-6 divide-y divide-navy/10 border-t border-navy/10">
-          {purchases.map((p: any) => (
-            <div key={p.id} className="flex items-center gap-4 py-4">
-              <div className="relative h-14 w-20 flex-shrink-0 bg-navy/5">
-                {p.project?.thumbnail_url && <Image src={p.project.thumbnail_url} alt={p.project.title} fill className="object-cover" />}
+        <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-white">
+          {purchases.map((p) => {
+            const project = Array.isArray(p.project) ? p.project[0] : p.project;
+            return (
+              <div key={p.id} className="flex items-center gap-4 px-4 py-4">
+                <div className="relative h-14 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-primary-50">
+                  {project?.thumbnail_url && (
+                    <Image src={project.thumbnail_url} alt={project.title} fill className="object-cover" sizes="80px" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <Link href={`/projects/${project?.id}`} className="font-semibold text-ink hover:text-primary">
+                    {project?.title}
+                  </Link>
+                  <div className="text-xs text-ink-faint">
+                    {project?.category_name} · {timeAgo(p.created_at)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-ink">{formatINR(p.total_amount)}</div>
+                  <Badge tone={p.status === "success" ? "success" : p.status === "failed" ? "danger" : "neutral"}>
+                    {p.status}
+                  </Badge>
+                </div>
               </div>
-              <div className="flex-1">
-                <Link href={`/projects/${p.project?.id}`} className="font-serif text-navy hover:text-marigold">{p.project?.title}</Link>
-                <div className="text-xs text-slate">{p.project?.category_name} · {timeAgo(p.created_at)}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm text-navy">{formatINR(p.total_amount)}</div>
-                <div className={`text-xs ${p.status === "success" ? "text-emerald" : p.status === "failed" ? "text-red-700" : "text-slate"}`}>{p.status}</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -23,8 +23,8 @@ export default async function Page() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="font-serif text-3xl text-navy">Estimate</h1>
-      <p className="mt-2 text-sm text-slate">
+      <h1 className="text-3xl text-ink">Estimate</h1>
+      <p className="mt-2 text-sm text-ink-muted">
         Calculated from the current CampusEduX pricing. The amount you pay now is a fixed token; the balance is handled later
         with the team.
       </p>
@@ -35,39 +35,39 @@ export default async function Page() {
         {missing.length > 0 ? (
           <div className="empty-state">
             Still need: {missing.join(", ")}.{" "}
-            <Link href="/custom-projects/start" className="text-navy underline">
+            <Link href="/custom-projects/start" className="text-ink underline">
               Go back and finish the details
             </Link>
             .
           </div>
         ) : (
           <>
-            <div className="border border-navy/10 bg-white p-5 text-sm">
-              <dl className="space-y-1 text-slate">
+            <div className="border border-line bg-white p-5 text-sm">
+              <dl className="space-y-1 text-ink-muted">
                 <div className="flex justify-between">
                   <dt>Configuration</dt>
-                  <dd className="text-navy">
+                  <dd className="text-ink">
                     {TYPE_LABELS[draft.projectType as ProjectType]} · {LEVEL_LABELS[draft.projectLevel as ProjectLevel]} ·{" "}
                     {PLATFORM_LABELS[draft.platform as Platform]}
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt>Base price</dt>
-                  <dd className="text-navy">{formatINR(estimate.basePrice)}</dd>
+                  <dd className="text-ink">{formatINR(estimate.basePrice)}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt>Platform charge</dt>
-                  <dd className="text-navy">{estimate.platformCharge > 0 ? formatINR(estimate.platformCharge) : "Included"}</dd>
+                  <dd className="text-ink">{estimate.platformCharge > 0 ? formatINR(estimate.platformCharge) : "Included"}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt>Features ({estimate.selectedFeatures.length})</dt>
-                  <dd className="text-navy">{formatINR(estimate.featureTotal)}</dd>
+                  <dd className="text-ink">{formatINR(estimate.featureTotal)}</dd>
                 </div>
-                <div className="mt-2 flex justify-between border-t border-navy/10 pt-2 font-semibold">
-                  <dt className="text-navy">Estimated project price</dt>
-                  <dd className="text-navy">{formatINR(estimate.estimatedTotal)}</dd>
+                <div className="mt-2 flex justify-between border-t border-line pt-2 font-semibold">
+                  <dt className="text-ink">Estimated project price</dt>
+                  <dd className="text-ink">{formatINR(estimate.estimatedTotal)}</dd>
                 </div>
-                <div className="flex justify-between text-navy">
+                <div className="flex justify-between text-ink">
                   <dt className="font-semibold">Token to pay now</dt>
                   <dd className="font-semibold">{formatINR(estimate.tokenAmount)}</dd>
                 </div>
@@ -76,29 +76,29 @@ export default async function Page() {
 
             {estimate.selectedFeatures.length > 0 && (
               <div className="mt-4">
-                <h2 className="text-sm font-semibold text-navy">Selected features</h2>
-                <ul className="mt-2 space-y-1 text-sm text-slate">
+                <h2 className="text-sm font-semibold text-ink">Selected features</h2>
+                <ul className="mt-2 space-y-1 text-sm text-ink-muted">
                   {estimate.selectedFeatures.map((f) => (
                     <li key={f.id} className="flex justify-between">
                       <span>{f.name}</span>
-                      <span className="text-navy">{f.price > 0 ? formatINR(f.price) : "Included"}</span>
+                      <span className="text-ink">{f.price > 0 ? formatINR(f.price) : "Included"}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
 
-            <p className="mt-4 text-xs text-slate">
+            <p className="mt-4 text-xs text-ink-muted">
               This estimate is recomputed on the server when you pay, so catalog changes can&apos;t skew what you&apos;re charged.
             </p>
 
-            <div className="mt-6 flex items-center justify-between border-t border-navy/10 pt-6">
-              <Link href="/custom-projects/features" className="text-sm text-navy underline">
+            <div className="mt-6 flex items-center justify-between border-t border-line pt-6">
+              <Link href="/custom-projects/features" className="text-sm text-ink underline">
                 Back
               </Link>
               <Link
                 href="/custom-projects/checkout"
-                className="rounded-sm bg-navy px-6 py-2.5 text-sm text-paper hover:bg-navy/90"
+                className="rounded-lg bg-primary px-6 py-2.5 text-sm text-white hover:bg-primary/90"
               >
                 Proceed to payment
               </Link>

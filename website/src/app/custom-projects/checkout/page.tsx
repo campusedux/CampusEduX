@@ -17,8 +17,8 @@ export default async function Page() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="font-serif text-3xl text-navy">Payment</h1>
-      <p className="mt-2 text-sm text-slate">
+      <h1 className="text-3xl text-ink">Payment</h1>
+      <p className="mt-2 text-sm text-ink-muted">
         Pay the token to submit your request. It&apos;s picked up by the CampusEduX team only after the payment is verified.
       </p>
 
@@ -28,21 +28,21 @@ export default async function Page() {
         {!estimate.ready ? (
           <div className="empty-state">
             Your request isn&apos;t complete yet.{" "}
-            <Link href="/custom-projects/start" className="text-navy underline">
+            <Link href="/custom-projects/start" className="text-ink underline">
               Go back to the start
             </Link>
             .
           </div>
         ) : (
           <>
-            <div className="border border-navy/10 bg-white p-5 text-sm">
-              <div className="font-serif text-navy">{draft.title}</div>
-              <dl className="mt-3 space-y-1 text-slate">
+            <div className="border border-line bg-white p-5 text-sm">
+              <div className="text-ink">{draft.title}</div>
+              <dl className="mt-3 space-y-1 text-ink-muted">
                 <div className="flex justify-between">
                   <dt>Estimated project price</dt>
-                  <dd className="text-navy">{formatINR(estimate.estimatedTotal)}</dd>
+                  <dd className="text-ink">{formatINR(estimate.estimatedTotal)}</dd>
                 </div>
-                <div className="flex justify-between font-semibold text-navy">
+                <div className="flex justify-between font-semibold text-ink">
                   <dt>Token due now</dt>
                   <dd>{formatINR(estimate.tokenAmount)}</dd>
                 </div>
@@ -51,10 +51,10 @@ export default async function Page() {
 
             <CustomProjectCheckout draft={draft} tokenAmount={estimate.tokenAmount} />
 
-            <p className="mt-4 text-xs text-slate">
+            <p className="mt-4 text-xs text-ink-muted">
               Payments are processed by Razorpay and verified server-side. CampusEduX never sees your card or UPI details.
             </p>
-            <Link href="/custom-projects/estimate" className="mt-4 inline-block text-sm text-navy underline">
+            <Link href="/custom-projects/estimate" className="mt-4 inline-block text-sm text-ink underline">
               Back to estimate
             </Link>
           </>

@@ -50,42 +50,42 @@ function LoginForm() {
 
   return (
     <div className="mx-auto max-w-sm px-6 py-16">
-      <h1 className="font-serif text-3xl text-navy">Sign in</h1>
-      <p className="mt-2 text-sm text-slate">Use the same account as the CampusEduX app.</p>
+      <h1 className="text-3xl text-ink">Sign in</h1>
+      <p className="mt-2 text-sm text-ink-muted">Use the same account as the CampusEduX app.</p>
 
       <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
         <div>
-          <label className="text-sm text-navy">Email or mobile number</label>
+          <label className="text-sm text-ink">Email or mobile number</label>
           <input
             type="text"
             required
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            className="mt-1 w-full border border-navy/20 bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full border border-line bg-white px-3 py-2 text-sm"
           />
         </div>
         <div>
-          <label className="text-sm text-navy">Password</label>
+          <label className="text-sm text-ink">Password</label>
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full border border-navy/20 bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full border border-line bg-white px-3 py-2 text-sm"
           />
         </div>
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-sm bg-navy py-2.5 text-sm text-paper hover:bg-navy/90 disabled:opacity-60"
+          className="w-full rounded-lg bg-primary py-2.5 text-sm text-white hover:bg-primary/90 disabled:opacity-60"
         >
           {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
 
-      <p className="mt-6 text-sm text-slate">
-        New to CampusEduX? <Link href="/register" className="text-navy underline">Create an account</Link>
+      <p className="mt-6 text-sm text-ink-muted">
+        New to CampusEduX? <Link href="/register" className="text-ink underline">Create an account</Link>
       </p>
     </div>
   );
@@ -96,8 +96,8 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <div className="mx-auto max-w-sm px-6 py-16">
-          <h1 className="font-serif text-3xl text-navy">Sign in</h1>
-          <p className="mt-2 text-sm text-slate">Loading…</p>
+          <h1 className="text-3xl text-ink">Sign in</h1>
+          <p className="mt-2 text-sm text-ink-muted">Loading…</p>
         </div>
       }
     >

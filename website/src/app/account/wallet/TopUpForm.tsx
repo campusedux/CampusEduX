@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { loadRazorpayScript } from "@/lib/razorpay";
 import { interpretVerifyResponse } from "@/lib/payments";
+import { Button } from "@/components/ui";
 
 export default function TopUpForm() {
   const router = useRouter();
@@ -61,7 +62,7 @@ export default function TopUpForm() {
         modal: {
           ondismiss: () => setStatus("idle"),
         },
-        theme: { color: "#12213D" },
+        theme: { color: "#4F39F6" },
       });
 
       checkout.open();
@@ -79,16 +80,12 @@ export default function TopUpForm() {
         max={100000}
         value={amount}
         onChange={(e) => setAmount(Number(e.target.value))}
-        className="w-28 border border-navy/20 bg-white px-3 py-2 text-sm"
+        className="w-28 rounded-lg border border-line bg-white px-3 py-2 text-sm"
       />
-      <button
-        onClick={handleTopUp}
-        disabled={status === "processing"}
-        className="rounded-sm bg-marigold px-5 py-2 text-sm font-semibold text-navy hover:bg-marigold-deep disabled:opacity-60"
-      >
+      <Button onClick={handleTopUp} loading={status === "processing"}>
         {status === "processing" ? "Opening checkout…" : "Top up"}
-      </button>
-      {error && <p className="w-full text-sm text-red-700">{error}</p>}
+      </Button>
+      {error && <p className="w-full text-sm text-danger">{error}</p>}
     </div>
   );
 }

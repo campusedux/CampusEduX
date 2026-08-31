@@ -3,14 +3,14 @@ export const metadata = { title: "Delete Account" };
 export default function DeleteAccountPage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">Delete Your Account</h1>
-      <p className="mt-4 text-slate">
+      <h1 className="text-3xl text-ink">Delete Your Account</h1>
+      <p className="mt-4 text-ink-muted">
         Account deletion is a real, working action inside the app — go to <strong>Settings → Delete Account</strong> while
         signed in. This is not a support-ticket workaround.
       </p>
 
-      <h2 className="mt-8 font-serif text-lg text-navy">What happens when you delete your account</h2>
-      <ul className="mt-3 list-disc space-y-2 pl-5 text-slate">
+      <h2 className="mt-8 text-lg text-ink">What happens when you delete your account</h2>
+      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-muted">
         <li>Your wallet transaction history, wallet top-up orders and referral earnings records tied to your account are removed.</li>
         <li>Your premium subscription record, notifications and notification preferences are removed.</li>
         <li>Your test attempts and DSA progress, saved/favourite questions and preferences are removed.</li>
@@ -21,7 +21,7 @@ export default function DeleteAccountPage() {
         <li>Your account itself is then permanently removed and you can no longer sign in with it.</li>
       </ul>
 
-      <p className="mt-6 text-sm text-slate">
+      <p className="mt-6 text-sm text-ink-muted">
         This runs as a single authenticated action tied to your own session — one account can only delete itself, never another
         student&apos;s account.
       </p>

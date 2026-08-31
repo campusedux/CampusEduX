@@ -24,12 +24,12 @@ export default async function CmsLegalPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">{title}</h1>
+      <h1 className="text-3xl text-ink">{title}</h1>
       {page?.updated_at && (
-        <p className="mt-1 text-xs text-slate">Last updated {new Date(page.updated_at).toLocaleDateString("en-IN")}</p>
+        <p className="mt-1 text-xs text-ink-muted">Last updated {new Date(page.updated_at).toLocaleDateString("en-IN")}</p>
       )}
       {page?.content ? (
-        <div className="mt-6 whitespace-pre-line text-slate">{page.content}</div>
+        <div className="mt-6 whitespace-pre-line text-ink-muted">{page.content}</div>
       ) : (
         <div className="empty-state mt-6">
           This policy has not been written yet in the admin panel CMS (Settings → CMS Pages → {cmsKey}). Publishing it there will make it appear here automatically — this page intentionally does not show placeholder legal text, since a real Privacy Policy / Terms document must reflect actual data practices, business rules and legal entity details that only the CampusEduX owner can confirm.

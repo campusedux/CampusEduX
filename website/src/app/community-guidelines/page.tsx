@@ -3,9 +3,9 @@ export const metadata = { title: "Community Guidelines" };
 export default function CommunityGuidelinesPage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">Community Guidelines</h1>
-      <p className="mt-4 text-slate">CampusEduX exists for genuine student projects, reviews and job activity. To keep it useful for everyone:</p>
-      <ul className="mt-4 list-disc space-y-2 pl-5 text-slate">
+      <h1 className="text-3xl text-ink">Community Guidelines</h1>
+      <p className="mt-4 text-ink-muted">CampusEduX exists for genuine student projects, reviews and job activity. To keep it useful for everyone:</p>
+      <ul className="mt-4 list-disc space-y-2 pl-5 text-ink-muted">
         <li>Reviews should reflect real experience with a project — the platform supports one review per purchased project per user, and moderates reported reviews from the admin panel.</li>
         <li>Do not upload content you do not have the right to distribute.</li>
         <li>Do not impersonate a company, recruiter or another student.</li>

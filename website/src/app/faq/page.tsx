@@ -30,18 +30,18 @@ export default async function FaqPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-14">
       {faqJsonLd && <JsonLd data={faqJsonLd} />}
-      <h1 className="font-serif text-3xl text-navy">Frequently Asked Questions</h1>
+      <h1 className="text-3xl text-ink">Frequently Asked Questions</h1>
       {faqs.length === 0 ? (
         <div className="empty-state mt-8">FAQs are managed from the admin panel CMS and will appear here once published.</div>
       ) : (
         Object.entries(grouped).map(([category, items]) => (
           <div key={category} className="mt-10">
-            <h2 className="font-serif text-lg text-navy">{category}</h2>
-            <div className="mt-3 divide-y divide-navy/10 border-t border-navy/10">
+            <h2 className="text-lg text-ink">{category}</h2>
+            <div className="mt-3 divide-y divide-line border-t border-line">
               {items.map((f) => (
                 <details key={f.id} className="py-4">
-                  <summary className="cursor-pointer text-navy">{f.question}</summary>
-                  <p className="mt-2 text-sm text-slate">{f.answer}</p>
+                  <summary className="cursor-pointer text-ink">{f.question}</summary>
+                  <p className="mt-2 text-sm text-ink-muted">{f.answer}</p>
                 </details>
               ))}
             </div>
