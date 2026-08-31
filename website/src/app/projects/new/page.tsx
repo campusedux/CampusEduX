@@ -1,5 +1,7 @@
 import { getPublicSupabase } from "@/lib/supabase/server";
-import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
+import type { ProjectCardData } from "@/components/ProjectCard";
+import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
+import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
 
 export const revalidate = 300;
 export const metadata = { title: "New Arrivals" };
@@ -10,17 +12,16 @@ export default async function NewArrivalsPage() {
   if (supabase) {
     const { data } = await supabase
       .from("projects")
-      .select("id,title,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller")
+      .select(PROJECT_LIST_FIELDS)
       .order("created_at", { ascending: false })
       .limit(48);
     projects = (data ?? []) as ProjectCardData[];
   }
   return (
-    <div className="mx-auto max-w-6xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">New Arrivals</h1>
-      <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {projects.map((p) => <ProjectCard key={p.id} project={p} />)}
-      </div>
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <h1 className="text-3xl font-bold text-ink">New Arrivals</h1>
+      <p className="mt-2 text-ink-muted">Freshly listed projects from the CampusEduX community.</p>
+      <ProjectGrid projects={projects} emptyTitle="No new projects yet" />
     </div>
   );
 }

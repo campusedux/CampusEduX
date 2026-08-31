@@ -1,36 +1,37 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
-import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
+import type { ProjectCardData } from "@/components/ProjectCard";
+import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
+import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
 
 export const revalidate = 300;
 
-export default async function CategoryPage({ params }: { params: { category: string } }) {
+async function getData(categoryId: string) {
   const supabase = getPublicSupabase();
-  let projects: ProjectCardData[] = [];
-  let categoryName = params.category;
+  if (!supabase) return { name: categoryId, projects: [] as ProjectCardData[] };
+  const [{ data: cat }, { data }] = await Promise.all([
+    supabase.from("categories").select("name").eq("id", categoryId).maybeSingle(),
+    supabase
+      .from("projects")
+      .select(PROJECT_LIST_FIELDS)
+      .eq("category_id", categoryId)
+      .order("created_at", { ascending: false }),
+  ]);
+  return { name: cat?.name ?? categoryId, projects: (data ?? []) as ProjectCardData[] };
+}
 
-  if (supabase) {
-    const [{ data: cat }, { data }] = await Promise.all([
-      supabase.from("categories").select("name").eq("id", params.category).maybeSingle(),
-      supabase
-        .from("projects")
-        .select("id,title,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller")
-        .eq("category_id", params.category)
-        .order("created_at", { ascending: false }),
-    ]);
-    if (cat?.name) categoryName = cat.name;
-    projects = (data ?? []) as ProjectCardData[];
-  }
+export async function generateMetadata({ params }: { params: { category: string } }): Promise<Metadata> {
+  const { name } = await getData(params.category);
+  return { title: `${name} projects` };
+}
 
+export default async function CategoryPage({ params }: { params: { category: string } }) {
+  const { name, projects } = await getData(params.category);
   return (
-    <div className="mx-auto max-w-6xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">{categoryName}</h1>
-      {projects.length === 0 ? (
-        <div className="empty-state mt-8">No projects listed in this category yet.</div>
-      ) : (
-        <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {projects.map((p) => <ProjectCard key={p.id} project={p} />)}
-        </div>
-      )}
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <h1 className="text-3xl font-bold text-ink">{name}</h1>
+      <p className="mt-2 text-ink-muted">Projects listed under {name}.</p>
+      <ProjectGrid projects={projects} emptyTitle="No projects in this category yet" />
     </div>
   );
 }

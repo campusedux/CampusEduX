@@ -1,57 +1,83 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import JobCard, { JobCardData } from "@/components/JobCard";
+import { SearchBar, FilterSheet, Pagination, EmptyState } from "@/components/ui";
+import { JobFilters } from "@/components/marketplace/JobFilters";
+import { JOB_LIST_FIELDS, JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobSort, parsePage, totalPages } from "@/lib/marketplace";
 
+export const metadata: Metadata = { title: "Jobs & Internships" };
 export const revalidate = 120;
-export const metadata = { title: "Jobs & Internships" };
 
-export default async function JobsPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; location?: string; type?: string };
-}) {
+type SP = { q?: string; location?: string; type?: string; sort?: string; page?: string };
+
+export default async function JobsPage({ searchParams }: { searchParams: SP }) {
   const supabase = getPublicSupabase();
+  const page = parsePage(searchParams.page);
+  const sort = jobSort(searchParams.sort);
+
   let jobs: JobCardData[] = [];
+  let count: number | null = 0;
 
   if (supabase) {
+    const from = (page - 1) * JOB_PAGE_SIZE;
+    const s = JOB_SORTS[sort];
+
     let query = supabase
       .from("jobs")
-      .select("id,title,company_name,location,job_type,salary_range,skills,posted_at")
-      .order("posted_at", { ascending: false })
-      .limit(48);
+      .select(JOB_LIST_FIELDS, { count: "exact" })
+      .order(s.column, { ascending: s.ascending, nullsFirst: false })
+      .range(from, from + JOB_PAGE_SIZE - 1);
 
     if (searchParams.q) query = query.ilike("title", `%${searchParams.q}%`);
     if (searchParams.location) query = query.ilike("location", `%${searchParams.location}%`);
     if (searchParams.type) query = query.eq("job_type", searchParams.type);
 
-    const { data } = await query;
+    const { data, count: c } = await query;
     jobs = (data ?? []) as JobCardData[];
+    count = c;
   }
 
+  const pages = totalPages(count, JOB_PAGE_SIZE);
+  const filterState = { q: searchParams.q, location: searchParams.location, type: searchParams.type, sort: searchParams.sort };
+  const activeCount = [searchParams.location, searchParams.type, searchParams.sort && searchParams.sort !== "newest" ? "1" : ""].filter(Boolean).length;
+  const carried = cleanParams({ ...filterState, page: undefined });
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">Jobs &amp; Internships</h1>
-      <p className="mt-2 max-w-2xl text-slate">Roles posted for CampusEduX students — filter by role, location or type, and apply from inside the app.</p>
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <h1 className="text-3xl font-bold text-ink">Jobs &amp; Internships</h1>
+      <p className="mt-2 max-w-2xl text-ink-muted">
+        Roles posted for CampusEduX students — filter by location and type, and apply from the web or the app with the
+        same account.
+      </p>
 
-      <form className="mt-6 flex flex-wrap gap-3" action="/jobs" method="get">
-        <input type="text" name="q" defaultValue={searchParams.q} placeholder="Job title…" className="border border-navy/20 bg-white px-3 py-2 text-sm" />
-        <input type="text" name="location" defaultValue={searchParams.location} placeholder="Location…" className="border border-navy/20 bg-white px-3 py-2 text-sm" />
-        <select name="type" defaultValue={searchParams.type ?? ""} className="border border-navy/20 bg-white px-3 py-2 text-sm">
-          <option value="">All types</option>
-          <option value="Full Time">Full Time</option>
-          <option value="Part Time">Part Time</option>
-          <option value="Internship">Internship</option>
-          <option value="Contract">Contract</option>
-        </select>
-        <button className="border border-navy px-4 py-2 text-sm text-navy hover:bg-navy hover:text-paper">Search</button>
-      </form>
+      <div className="mt-6 max-w-xl">
+        <SearchBar action="/jobs" defaultValue={searchParams.q} placeholder="Job title…" hiddenParams={carried} />
+      </div>
 
-      {jobs.length === 0 ? (
-        <div className="empty-state mt-8">No roles match yet — try broadening the search.</div>
-      ) : (
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {jobs.map((j) => <JobCard key={j.id} job={j} />)}
+      <div className="mt-8 grid gap-8 lg:grid-cols-[240px_1fr]">
+        <FilterSheet title="Filters" activeCount={activeCount}>
+          <JobFilters state={filterState} />
+        </FilterSheet>
+
+        <div>
+          <div className="mb-4 text-sm text-ink-muted">
+            {count ?? 0} role{(count ?? 0) === 1 ? "" : "s"}
+            {page > 1 ? ` · page ${page} of ${pages}` : ""}
+          </div>
+
+          {jobs.length === 0 ? (
+            <EmptyState title="No roles match these filters" subtitle="Try broadening the location or clearing the job-type filter." />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {jobs.map((j) => (
+                <JobCard key={j.id} job={j} />
+              ))}
+            </div>
+          )}
+
+          <Pagination page={page} totalPages={pages} basePath="/jobs" params={carried} />
         </div>
-      )}
+      </div>
     </div>
   );
 }

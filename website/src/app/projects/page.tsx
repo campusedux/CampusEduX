@@ -1,58 +1,121 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
+import { SearchBar, FilterSheet, Pagination, EmptyState } from "@/components/ui";
+import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
+import {
+  PROJECT_LIST_FIELDS,
+  PROJECT_PAGE_SIZE,
+  PROJECT_SORTS,
+  cleanParams,
+  parsePage,
+  parsePrice,
+  projectSort,
+  totalPages,
+} from "@/lib/marketplace";
 
-export const metadata = { title: "Project Marketplace" };
+export const metadata: Metadata = { title: "Project Marketplace" };
 export const revalidate = 120;
 
-export default async function ProjectsPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; category?: string };
-}) {
+type SP = {
+  q?: string;
+  category?: string;
+  min?: string;
+  max?: string;
+  sort?: string;
+  flag?: string;
+  page?: string;
+};
+
+export default async function ProjectsPage({ searchParams }: { searchParams: SP }) {
   const supabase = getPublicSupabase();
+  const page = parsePage(searchParams.page);
+  const sort = projectSort(searchParams.sort);
+  const min = parsePrice(searchParams.min);
+  const max = parsePrice(searchParams.max);
+  const flag = searchParams.flag === "premium" || searchParams.flag === "bestseller" ? searchParams.flag : undefined;
+
   let projects: ProjectCardData[] = [];
+  let count: number | null = 0;
+  let categories: { id: string; name: string }[] = [];
 
   if (supabase) {
+    const from = (page - 1) * PROJECT_PAGE_SIZE;
+    const s = PROJECT_SORTS[sort];
+
     let query = supabase
       .from("projects")
-      .select("id,title,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller")
-      .order("created_at", { ascending: false })
-      .limit(48);
+      .select(PROJECT_LIST_FIELDS, { count: "exact" })
+      .order(s.column, { ascending: s.ascending })
+      .range(from, from + PROJECT_PAGE_SIZE - 1);
 
     if (searchParams.q) query = query.ilike("title", `%${searchParams.q}%`);
     if (searchParams.category) query = query.eq("category_id", searchParams.category);
+    if (min !== undefined) query = query.gte("price", min);
+    if (max !== undefined) query = query.lte("price", max);
+    if (flag === "premium") query = query.eq("is_premium", true);
+    if (flag === "bestseller") query = query.eq("is_best_seller", true);
 
-    const { data } = await query;
+    const [{ data, count: c }, { data: cats }] = await Promise.all([
+      query,
+      supabase.from("categories").select("id,name").order("name"),
+    ]);
     projects = (data ?? []) as ProjectCardData[];
+    count = c;
+    categories = cats ?? [];
   }
 
+  const pages = totalPages(count, PROJECT_PAGE_SIZE);
+  const filterState = {
+    q: searchParams.q,
+    category: searchParams.category,
+    min: searchParams.min,
+    max: searchParams.max,
+    sort: searchParams.sort,
+    flag,
+  };
+  const activeCount = [searchParams.category, searchParams.min, searchParams.max, flag, searchParams.sort && searchParams.sort !== "newest" ? "1" : ""].filter(Boolean).length;
+  const carried = cleanParams({ ...filterState, page: undefined });
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-14">
-      <h1 className="font-serif text-3xl text-navy">Project Marketplace</h1>
-      <p className="mt-2 max-w-2xl text-slate">
-        Browse academic, personal and business projects listed by the CampusEduX community. Filter by category, or search by title.
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <h1 className="text-3xl font-bold text-ink">Project Marketplace</h1>
+      <p className="mt-2 max-w-2xl text-ink-muted">
+        Academic, personal and business projects listed by the CampusEduX community — filter by category and price, or
+        search by title.
       </p>
 
-      <form className="mt-6 flex gap-3" action="/projects" method="get">
-        <input
-          type="text"
-          name="q"
-          defaultValue={searchParams.q}
-          placeholder="Search projects…"
-          className="w-full max-w-md border border-navy/20 bg-white px-3 py-2 text-sm"
-        />
-        <button className="border border-navy px-4 py-2 text-sm text-navy hover:bg-navy hover:text-paper">Search</button>
-      </form>
+      <div className="mt-6 max-w-xl">
+        <SearchBar action="/projects" defaultValue={searchParams.q} placeholder="Search projects…" hiddenParams={carried} />
+      </div>
 
-      {projects.length === 0 ? (
-        <div className="empty-state mt-8">
-          No projects match this search yet — try a different keyword, or check back once the catalog is connected.
+      <div className="mt-8 grid gap-8 lg:grid-cols-[240px_1fr]">
+        <FilterSheet title="Filters" activeCount={activeCount}>
+          <ProjectFilters categories={categories} state={filterState} />
+        </FilterSheet>
+
+        <div>
+          <div className="mb-4 text-sm text-ink-muted">
+            {count ?? 0} project{(count ?? 0) === 1 ? "" : "s"}
+            {page > 1 ? ` · page ${page} of ${pages}` : ""}
+          </div>
+
+          {projects.length === 0 ? (
+            <EmptyState
+              title="No projects match these filters"
+              subtitle="Try widening the price range, clearing a filter, or a different search term."
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {projects.map((p) => (
+                <ProjectCard key={p.id} project={p} />
+              ))}
+            </div>
+          )}
+
+          <Pagination page={page} totalPages={pages} basePath="/projects" params={carried} />
         </div>
-      ) : (
-        <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {projects.map((p) => <ProjectCard key={p.id} project={p} />)}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

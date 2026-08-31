@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Bookmark, BookmarkCheck } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { applyToJobAction, toggleSaveJobAction } from "@/lib/actions/jobs";
 import {
@@ -14,6 +15,7 @@ import {
   resumeStoragePath,
 } from "@/lib/resume";
 import { timeAgo } from "@/lib/format";
+import { Button } from "@/components/ui";
 
 type ResumeRow = { id: string; file_name: string; uploaded_at: string };
 type AppliedInfo = { status: string; created_at: string };
@@ -148,7 +150,6 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
         setSubmitError(result.error);
         return;
       }
-      // Success — reflect it without a full reload.
       setApplied({ status: "in_review", created_at: new Date().toISOString() });
       await load();
     } finally {
@@ -158,65 +159,57 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
 
   // ---- render ------------------------------------------------------------
   if (phase === "loading") {
-    return <div className="mt-10 border-t border-navy/10 pt-6 text-sm text-slate">Loading your application options…</div>;
+    return <div className="mt-10 border-t border-line pt-6 text-sm text-ink-muted">Loading your application options…</div>;
   }
 
   if (phase === "anon") {
     return (
-      <div className="mt-10 border-t border-navy/10 pt-6">
-        <p className="text-sm text-slate">Sign in to apply for this role or save it for later.</p>
-        <Link
-          href={`/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`}
-          className="mt-3 inline-block rounded-sm bg-navy px-8 py-2.5 text-sm text-paper hover:bg-navy/90"
-        >
-          Sign in to apply
-        </Link>
+      <div className="mt-10 border-t border-line pt-6">
+        <p className="text-sm text-ink-muted">Sign in to apply for this role or save it for later.</p>
+        <div className="mt-3">
+          <Button href={`/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`}>Sign in to apply</Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mt-10 border-t border-navy/10 pt-6">
+    <div className="mt-10 border-t border-line pt-6">
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={handleToggleSave}
           disabled={savePending}
-          className="rounded-sm border border-navy px-4 py-2 text-sm text-navy hover:bg-navy hover:text-paper disabled:opacity-60"
+          leftIcon={isSaved ? BookmarkCheck : Bookmark}
         >
-          {savePending ? "Saving…" : isSaved ? "★ Saved — remove" : "☆ Save job"}
-        </button>
+          {savePending ? "Saving…" : isSaved ? "Saved — remove" : "Save job"}
+        </Button>
         {isSaved && (
-          <Link href="/account/saved-jobs" className="text-xs text-slate underline hover:text-navy">
+          <Link href="/account/saved-jobs" className="text-xs text-ink-muted underline hover:text-ink">
             View saved jobs
           </Link>
         )}
       </div>
-      {saveError && <p className="mt-2 text-sm text-red-700">{saveError}</p>}
+      {saveError && <p className="mt-2 text-sm text-danger">{saveError}</p>}
 
       <div className="mt-6">
         {applied ? (
-          <div className="border border-navy/10 bg-white p-4">
-            <div className="font-serif text-navy">Application submitted</div>
-            <p className="mt-1 text-sm text-slate">
+          <div className="rounded-2xl border border-line bg-white p-4 shadow-card">
+            <div className="font-bold text-ink">Application submitted</div>
+            <p className="mt-1 text-sm text-ink-muted">
               Status: {STATUS_LABEL[applied.status] ?? applied.status} · Applied {timeAgo(applied.created_at)}.
             </p>
-            <Link href="/account/applications" className="mt-2 inline-block text-xs text-navy underline">
+            <Link href="/account/applications" className="mt-2 inline-block text-xs font-semibold text-primary underline">
               Track it in your account
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleApply} className="border border-navy/10 bg-white p-4">
-            <div className="font-serif text-navy">Apply with your resume</div>
+          <form onSubmit={handleApply} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+            <div className="font-bold text-ink">Apply with your resume</div>
 
             {resumes.length > 0 && (
-              <label className="mt-3 flex items-center gap-2 text-sm text-navy">
-                <input
-                  type="radio"
-                  name="resume-mode"
-                  checked={mode === "existing"}
-                  onChange={() => setMode("existing")}
-                />
+              <label className="mt-3 flex items-center gap-2 text-sm text-ink">
+                <input type="radio" name="resume-mode" checked={mode === "existing"} onChange={() => setMode("existing")} />
                 Use a resume already on your account
               </label>
             )}
@@ -225,7 +218,7 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
               <select
                 value={selectedResumeId}
                 onChange={(e) => setSelectedResumeId(e.target.value)}
-                className="mt-2 w-full border border-navy/20 bg-white px-3 py-2 text-sm"
+                className="mt-2 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm"
               >
                 {resumes.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -236,13 +229,8 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
             )}
 
             {resumes.length > 0 && (
-              <label className="mt-3 flex items-center gap-2 text-sm text-navy">
-                <input
-                  type="radio"
-                  name="resume-mode"
-                  checked={mode === "upload"}
-                  onChange={() => setMode("upload")}
-                />
+              <label className="mt-3 flex items-center gap-2 text-sm text-ink">
+                <input type="radio" name="resume-mode" checked={mode === "upload"} onChange={() => setMode("upload")} />
                 Upload a new file
               </label>
             )}
@@ -253,23 +241,21 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
                   type="file"
                   accept={ACCEPT_ATTR}
                   onChange={handleFileChange}
-                  className="block w-full text-sm text-slate file:mr-3 file:rounded-sm file:border file:border-navy/20 file:bg-paper file:px-3 file:py-1.5 file:text-sm file:text-navy"
+                  className="block w-full text-sm text-ink-muted file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink"
                 />
-                <p className="mt-1 text-xs text-slate">PDF, DOC or DOCX · up to {RESUME_MAX_MB} MB</p>
-                {fileError && <p className="mt-1 text-xs text-red-700">{fileError}</p>}
+                <p className="mt-1 text-xs text-ink-faint">PDF, DOC or DOCX · up to {RESUME_MAX_MB} MB</p>
+                {fileError && <p className="mt-1 text-xs text-danger">{fileError}</p>}
               </div>
             )}
 
-            {submitError && <p className="mt-3 text-sm text-red-700">{submitError}</p>}
+            {submitError && <p className="mt-3 text-sm text-danger">{submitError}</p>}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="mt-4 rounded-sm bg-navy px-8 py-2.5 text-sm text-paper hover:bg-navy/90 disabled:opacity-60"
-            >
-              {submitting ? "Submitting…" : "Submit application"}
-            </button>
-            <p className="mt-2 text-xs text-slate">
+            <div className="mt-4">
+              <Button type="submit" loading={submitting}>
+                {submitting ? "Submitting…" : "Submit application"}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-ink-faint">
               Your resume is stored privately and shared only with this employer&apos;s review team.
             </p>
           </form>
