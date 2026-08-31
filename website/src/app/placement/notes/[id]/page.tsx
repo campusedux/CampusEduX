@@ -4,8 +4,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Download, ArrowLeft } from "lucide-react";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import JsonLd from "@/components/JsonLd";
 import { Badge, TagPill, SectionHeader } from "@/components/ui";
 import { NoteCard, type NoteCardData } from "@/components/placement/NoteCard";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import BookmarkButton from "./BookmarkButton";
 
 export const revalidate = 300;
@@ -39,6 +41,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   return {
     title: note.title,
     description: (note.content || `${note.category} study note`).slice(0, 155),
+    alternates: { canonical: absoluteUrl(`/placement/notes/${params.id}`) },
+    openGraph: { title: note.title, url: absoluteUrl(`/placement/notes/${params.id}`), type: "article" },
   };
 }
 
@@ -50,6 +54,13 @@ export default async function NoteDetailPage({ params }: { params: { id: string 
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Placement", path: "/placement" },
+          { name: "Notes", path: "/placement/notes" },
+          { name: note.title, path: `/placement/notes/${note.id}` },
+        ])}
+      />
       <Link href="/placement/notes" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
         <ArrowLeft className="h-4 w-4" aria-hidden /> All notes
       </Link>

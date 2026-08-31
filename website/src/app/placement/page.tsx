@@ -32,8 +32,8 @@ const getPlacementData = cache(async () => {
   const [aptitude, dsaTopics, dsaProblems, hr, tests, companies, notes] = await Promise.all([
     supabase.from("aptitude_topics").select("id,name,category,total_questions").order("sort_order").limit(40),
     supabase.from("dsa_topics").select("id,name").order("sort_order").limit(40),
-    supabase.from("dsa_problems").select("topic_id"),
-    supabase.from("hr_questions").select("category"),
+    supabase.from("dsa_problems").select("topic_id").limit(2000),
+    supabase.from("hr_questions").select("category").limit(2000),
     supabase
       .from("practice_tests")
       .select("id,title,category,question_count,duration_minutes")

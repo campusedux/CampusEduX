@@ -8,6 +8,7 @@ import { getPublicSupabase } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/format";
 import JsonLd from "@/components/JsonLd";
 import { TagPill } from "@/components/ui";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import JobApplyPanel from "./JobApplyPanel";
 
 export const revalidate = 300;
@@ -30,6 +31,9 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   return {
     title: `${job.title} at ${company}`,
     description: (job.description || `${job.title} — ${company}`).slice(0, 155),
+    alternates: { canonical: absoluteUrl(`/jobs/${params.id}`) },
+    openGraph: { title: `${job.title} at ${company}`, url: absoluteUrl(`/jobs/${params.id}`), type: "website" },
+    twitter: { card: "summary", title: `${job.title} at ${company}` },
   };
 }
 
@@ -61,6 +65,12 @@ export default async function JobDetailPage({ params }: { params: { id: string }
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <JsonLd data={jobJsonLd} />
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Jobs", path: "/jobs" },
+          { name: job.title, path: `/jobs/${job.id}` },
+        ])}
+      />
 
       <div className="flex items-start gap-4">
         <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary-50">

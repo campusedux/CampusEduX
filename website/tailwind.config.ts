@@ -34,8 +34,8 @@ const config: Config = {
         surface: "#F8F9FC",
         ink: {
           DEFAULT: "#111827", // textPrimary
-          muted: "#6B7280", // textSecondary
-          faint: "#9CA3AF", // textMuted
+          muted: "#6B7280", // textSecondary — AA on white (4.8:1)
+          faint: "#6E7583", // textMuted — darkened from the app's #9CA3AF to ~4.2:1 for a11y
         },
         line: "#E5E7EB", // border
         success: "#16A34A",

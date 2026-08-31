@@ -7,6 +7,7 @@ import JsonLd from "@/components/JsonLd";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import { Badge, Rating, PriceDisplay, TagPill, ReviewCard, SectionHeader, EmptyState } from "@/components/ui";
 import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import ProjectPurchasePanel from "./ProjectPurchasePanel";
 
 export const revalidate = 300;
@@ -60,10 +61,13 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const result = await getProject(params.id);
   if (!result?.project) return { title: "Project not found" };
   const { project } = result;
+  const image = project.thumbnail_url ? [{ url: project.thumbnail_url }] : undefined;
   return {
     title: project.title,
     description: (project.description || "").slice(0, 155),
-    openGraph: { title: project.title, images: project.thumbnail_url ? [{ url: project.thumbnail_url }] : undefined },
+    alternates: { canonical: absoluteUrl(`/projects/${params.id}`) },
+    openGraph: { title: project.title, images: image, url: absoluteUrl(`/projects/${params.id}`), type: "website" },
+    twitter: { card: "summary_large_image", title: project.title, images: project.thumbnail_url ? [project.thumbnail_url] : undefined },
   };
 }
 
@@ -96,6 +100,12 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <JsonLd data={productJsonLd} />
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Projects", path: "/projects" },
+          { name: project.title, path: `/projects/${project.id}` },
+        ])}
+      />
 
       <div className="grid gap-8 lg:grid-cols-[1.15fr_1fr]">
         {/* Gallery */}

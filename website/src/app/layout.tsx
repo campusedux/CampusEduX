@@ -21,18 +21,28 @@ const organizationJsonLd = {
   url: siteUrl,
 };
 
+const description =
+  "CampusEduX is a student platform for the project marketplace, jobs & internships, placement preparation, resume building and custom project development.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
     default: `${BRAND.name} — Projects, Jobs, Placement Prep & Resume, in one app`,
     template: `%s | ${BRAND.name}`,
   },
-  description:
-    "CampusEduX is a student platform for the project marketplace, jobs & internships, placement preparation, resume building and custom project development.",
+  description,
   applicationName: BRAND.name,
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: BRAND.name,
+    url: siteUrl,
+    description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${BRAND.name} — for students, from sign-up to placement`,
+    description,
   },
 };
 
@@ -40,10 +50,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="bg-white font-sans text-ink antialiased">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+        >
+          Skip to content
+        </a>
         <JsonLd data={organizationJsonLd} />
         <Header />
         <AnnouncementBar />
-        <main className="min-h-[60vh]">{children}</main>
+        <main id="main-content" className="min-h-[60vh]">
+          {children}
+        </main>
         <Footer />
         {/* Clears the fixed mobile bottom nav. */}
         <div className="h-16 md:hidden" aria-hidden />

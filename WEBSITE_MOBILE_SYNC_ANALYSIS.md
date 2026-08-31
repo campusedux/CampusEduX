@@ -359,7 +359,9 @@ Ordered so each phase ends with `typecheck` + `lint` + `test` + `build` green an
 | **P5 — Marketplace + Jobs + direct purchase** ✅ **DONE** | **Migration pair `0041_public_catalog.sql` (mobile) + `017_public_catalog.sql` (admin)** — additive `SELECT TO anon` policy on `projects`/`jobs` (`USING(true)`) + `prep_notes` (`USING(is_published)`); nothing existing touched. **Validated on real PG17**: before = anon global‑only + no notes; after = anon full catalog + published notes; authenticated Course/Branch scoping (0036) unchanged; idempotent. **NOT applied to live — owner runs `supabase db push`.** `src/lib/marketplace.ts` + `ProjectFilters`/`JobFilters` (GET `<form>`, no‑JS) in `FilterSheet`; `/projects` search + category/price/flag + sort + server pagination (`count:exact`+`range`); `/jobs` search + location/type + sort + pagination; `/projects/[id]` reskin (gallery, tech pills, reviews via normalised to‑one embed, related) + **`ProjectPurchasePanel`** (direct buy via `create/verify-razorpay-order` → Checkout.js → `interpretVerifyResponse`; owned/anon/free states; success → `/account/purchases`; **no file exposure**); `/jobs/[id]` + `JobApplyPanel` reskin (logic unchanged); curated pages → shared `ProjectGrid`. **Deferred:** tech‑stack facet filter, recommended‑jobs feed, job‑alerts UI. | `typecheck` + `lint` (0) + `build` (47; `/`+curated still Static, `/projects`+`/jobs` now dynamic) + `vitest` 54/54; dev smoke all 200. mobile/admin code untouched (SQL files added). |
 | **P6 — Placement / Learn** ✅ **DONE** | `/placement` rebuilt (was static): app‑boundary banner, 6 track cards w/ live counts, read‑only catalogs from public tables (`aptitude_topics`, `dsa_topics` + per‑topic problem counts, `hr_questions` grouped, `practice_tests`, `companies`) — all `select using(true)`, no migration. NEW `/placement/notes` browser (`prep_notes` published, 9‑category `Chip` filter, search, `NoteCard` grid) + `/placement/notes/[id]` (badges, tags, **plain‑text** content, `file_url` download, related) + `BookmarkButton` (client, `prep_note_bookmarks` own‑rows). Anon visibility gated on migration `0041` → honest empty state until applied. New `src/lib/placement.ts`, `NoteCard`, `placement/loading.tsx`; `HomeLearning` + drawer + sitemap updated. **Deferred:** student‑facing leaderboard (needs SECURITY DEFINER view/RPC + privacy call; no such screen in the app either). | `typecheck` + `lint` (0) + `build` (50 routes; `/placement` Static, `/placement/notes` dynamic) + `vitest` 54/54; dev smoke all 200. mobile/admin untouched. |
 | **P7 — Resume, Premium, Referral, Custom, Account** ✅ **DONE** | All `/account/*` pages + islands → shared components. NEW `/account/saved-projects` (`wishlists` → `ProjectCard`) + `AccountNav`/overview links. `/account/profile` **academic editor** — Course/Branch/Year `<select>`s from `courses`/`branches`/`academic_years` (branch course‑scoped, stores names; free‑text fallback). **Notification images** (`notifications.image_url`). Public reskin: `/premium` (`PremiumCard`+subNote), `PremiumSubscribeButton`, `/resume` (+ template teaser), `/resume/templates` (`ResumeTemplateCard`), `/referral`, `/custom-projects`, `/jobs/companies`+`[id]` (`CompanyCard`). Razorpay Checkout theme `#12213D`→`#4F39F6` everywhere. **Legacy‑token cleanup:** retoken sweep of the remaining legal/auth/contact pages + custom‑project wizard islands; **removed navy/paper/slate/marigold/emerald aliases** from `tailwind.config.ts` — `src/` is 100% on the app palette. **Deferred:** pixel‑level polish of the wizard step screens (functional + retokened). | `typecheck` + `lint` (0) + `build` (52 routes) + `vitest` 54/54; dev smoke public 200, `/account/*`→307. mobile/admin untouched. |
-| **P8 — SEO, a11y, perf, tests, audit** | `Product`/`JobPosting`/`FAQPage`/`BreadcrumbList` JSON‑LD; `loading.tsx`/`error.tsx` per route; a11y pass; image sizing; component + RLS tests; security audit (§37); final side‑by‑side vs app. | `[READY]` or `[READY WITH MANUAL ACTIONS]`. |
+| **P8 — SEO, a11y, perf, tests, audit** ✅ **DONE** | `BreadcrumbList` on `/projects/[id]`, `/jobs/[id]`, `/jobs/companies/[id]`, `/placement/notes/[id]`; `FAQPage` on `/faq`; `Product`/`JobPosting` verified; `alternates.canonical` + `twitter` cards on detail pages + root; `Organization` in root. NEW `app/error.tsx` (client boundary, `ErrorState`, no raw dump) + 5 `loading.tsx` skeletons. a11y: skip‑link + `<main id>`, `ink-faint` darkened `#9CA3AF→#6E7583` (~4.2:1), login/register input polish. **Security: `safeInternalPath()` closes the `/login?next=` open‑redirect** + audit greps clean (no service‑role key, no Razorpay secret, no `project-files` refs, no `eval`, only `JsonLd` uses `dangerouslySetInnerHTML` on controlled JSON). Perf: `.limit()` on the two unbounded placement queries. Tests **54 → 71** (`marketplace`, `home`, `placement`, `nav`, `seo`). | `typecheck` + `lint` (0) + `build` (52) + `vitest` **71/71**; dev smoke: JSON‑LD present, skip‑link renders, not‑found UI renders. |
+
+**See §15 for the final deliverable (Architecture / Route Matrix / Mobile map / DB deps / Security / Production checklist / Gaps) and the readiness verdict.**
 
 ### Locked decisions (owner, 2026-08-31)
 1. **ProjectHub → removed entirely.** "CampusEduX" everywhere, no legal alias. Strip it from `NavBar`, `Footer`, `layout.tsx` (`alternateName` + description), `about/page.tsx`, and anywhere else it appears.
@@ -368,6 +370,95 @@ Ordered so each phase ends with `typecheck` + `lint` + `test` + `build` green an
 4. **Public project catalog: YES — add a public read path.** Logged‑out visitors browse the full catalog; login is required only for purchase and other protected actions. See §9.3 for the safe (additive, RLS‑preserving) approach.
 5. **Bottom navigation: YES on mobile web**, mirroring the app's structure; on desktop it adapts to a proper responsive top/side navigation.
 6. **Test login + migrations:** owner will supply a test account. Apply pending migrations (incl. `website/supabase/migrations/0001_contact_submissions.sql`) **only after** verifying compatibility with the live schema and that mobile + admin are unaffected — validate against a scratch Postgres first, as prior migrations were.
+
+---
+
+## 15. FINAL DELIVERABLE (post‑P8)
+
+_Engagement branch: `website-mobile-ui-sync` · baseline `70be5e1` → P1…P8. Every phase ran `typecheck` + `lint` + `build` + `vitest` green and left `mobile-app` / `admin-panel` code untouched._
+
+### A. Architecture summary
+Next.js 14.2.5 App Router. **Server Components + ISR** (`revalidate` 120–300) for every public/catalog page; **thin `"use client"` islands** only where interactivity is unavoidable (nav drawer/bottom‑nav, auth menu, filters sheet, purchase/checkout/apply/bookmark/top‑up, announcement bar). Three Supabase clients: `getPublicSupabase()` (anon, `persistSession:false`) for catalog reads; `createAuthedServerSupabase()` (cookie session) for `/account/*` + Server Actions; `createBrowserSupabase()` for client islands. `middleware.ts` refreshes the session on every non‑asset request. Payments = the **existing** Edge Functions unchanged, every verify response routed through `interpretVerifyResponse()`. Design system = `tailwind.config.ts` (app palette, `shadow-card`, radius scale) + `src/components/ui/*` (22 components) mirroring `mobile-app/src/components/ui|cards/*`; the legacy editorial tokens are gone.
+
+### B. Route matrix (delta from §5 — all now reskinned to the component system)
+| Route | Data | Auth | Admin‑controlled | Rendering |
+|---|---|---|---|---|
+| `/` | `banners`,`announcements`,`offer_banners`,`categories`,`projects`,`jobs`,`prep_notes`*,`testimonials`,`faqs` | public | yes | Static (ISR 300) |
+| `/projects` | `projects` (+filters/sort/pagination), `categories` | public | yes | Dynamic (searchParams) |
+| `/projects/[id]` | `projects`,`reviews`,related; **buy** via `create/verify-razorpay-order` | public / `user` to buy | yes | Dynamic · `Product`+`BreadcrumbList` JSON‑LD · canonical |
+| `/projects/{trending,premium,best-sellers,new}` , `/projects/category/[c]` | `projects` filtered | public | yes | Static / Dynamic(param) |
+| `/jobs` , `/jobs/[id]` , `/jobs/companies` , `/jobs/companies/[id]` | `jobs`,`companies`,`applications`,`saved_jobs`,`resumes` | public / `user` to apply·save | yes | `/jobs` Dynamic · detail `JobPosting`+`BreadcrumbList` |
+| `/placement` , `/placement/notes` , `/placement/notes/[id]` | `aptitude_topics`,`dsa_topics`,`dsa_problems`,`hr_questions`,`practice_tests`,`companies`,`prep_notes`*,`prep_note_bookmarks` | public / `user` to bookmark | yes | `/placement` Static · notes Dynamic |
+| `/resume` , `/resume/templates` | `resume_templates` | public | yes | Static (ISR 300) |
+| `/premium` | `premium_plans`,`premium_features`; **subscribe** via `create/verify-premium-order` | public / `user` state | yes | Dynamic (auth peek) |
+| `/custom-projects` + wizard (`start`/`features`/`estimate`/`checkout`/`my-projects[/id]`) | `custom_project_*` (14 tables), `create/verify-custom-project-payment` | `user` (wizard) | yes | explainer Static · wizard `noindex` Dynamic |
+| `/referral` | `reward_settings` | public | yes | Static |
+| `/account` , `/account/{profile,purchases,applications,saved-jobs,saved-projects,resume,wallet,referral,notifications}` | user‑owned rows via authed session; `wishlists`; `courses`/`branches`/`academic_years` (profile editor) | `user` (redirect `/login`) | — | Dynamic · `noindex` |
+| `/login` `/register` `/logout` | Supabase Auth, `rpc email_for_mobile` | public | — | Static shell + island |
+| `/contact` | `submit_contact_message()` RPC → `contact_submissions` | public | yes | Static + island |
+| `/faq` `/support` | `faqs` | public | yes | Static · `FAQPage` JSON‑LD |
+| `/about` `/terms` `/privacy-policy` `/refund-policy` `/disclaimer` `/community-guidelines` `/project-license` `/delete-account` | `cms_pages` (terms/privacy) · rest static | public | partial | Static |
+| `/sitemap.xml` `/robots.txt` | `projects`,`jobs`,`categories`,`companies`,`prep_notes` | public | — | Static |
+
+`*` `prep_notes` on public/anon surfaces needs migration **`0041`** applied — until then those sections show honest empty states.
+
+### C. Mobile → website mapping (final status)
+| Mobile module | Website | Parity |
+|---|---|---|
+| Home (6 tiles + trending + jobs + learning) | `/` | ✅ + announcements/offers/banners CMS |
+| Projects (list/detail/filter/search/wishlist/**buy**/reviews/related) | `/projects*`, `/projects/[id]`, `/account/saved-projects` | ✅ — review *writing* still app‑only |
+| Jobs (list/detail/apply/save/companies) | `/jobs*`, `/account/{applications,saved-jobs}` | ✅ — job‑alerts UI + recommended feed deferred |
+| Placement / Learn (catalogs + notes + bookmarks) | `/placement`, `/placement/notes*` | ✅ read‑only — timed tests / DSA judge stay app‑only by design |
+| Resume (templates + history) | `/resume`, `/resume/templates`, `/account/resume` | ✅ — editor + PDF export app‑only by design |
+| Custom Project Builder (wizard + tracking + messaging) | `/custom-projects/*` | ✅ full parity (STEP 4) — step‑screen visual polish deferred |
+| Premium / Wallet / Referral | `/premium`, `/account/{wallet,referral}`, `/referral` | ✅ |
+| Profile / academic details | `/account/profile` (+ Course/Branch/Year editor) | ✅ |
+| Notifications (+images) | `/account/notifications` | ✅ |
+| Auth + onboarding | `/login`, `/register` | ⚠️ no onboarding carousel / first‑run academic step (web relies on the app for first run) |
+
+### D. Database dependencies (final)
+**Anon reads:** `banners`, `announcements`, `offer_banners`, `categories`, `projects`, `reviews`, `companies`, `jobs`, `premium_plans`, `premium_features`, `resume_templates`, `reward_settings`, `faqs`, `testimonials`, `cms_pages`, `custom_project_pricing`, `custom_project_platform_pricing`, `custom_project_features`, `aptitude_topics`, `dsa_topics`, `dsa_problems`, `hr_questions`, `practice_tests`, `courses`, `branches`, `academic_years`, `prep_notes` (needs `0041` for anon).
+**Authed (own‑row) reads/writes:** `profiles`, `purchases`, `applications`, `saved_jobs`, `wishlists`, `resumes`, `resumes_builder`, `resume_downloads`, `wallet_transactions`, `referral_codes`, `referrals`, `notifications`, `prep_note_bookmarks`, `custom_project_drafts` + `custom_project_requests` (+ `_request_features`/`_request_files`/`_request_history`/`_deliveries`/`_delivery_assets`/`_messages`).
+**RPCs:** `email_for_mobile`, `submit_contact_message` (needs website `0001`).
+**Edge Functions (unchanged):** `create/verify-razorpay-order`, `create/verify-premium-order`, `create/verify-wallet-topup-order`, `create/verify-custom-project-payment`.
+**Storage:** reads `project-media`, `resume-templates`, `avatars`, `banners`, `site`; writes `resumes`, `custom-project-uploads` (owner folders); signed‑URL reads of `custom-project-deliveries`. **Never touches `project-files`.**
+**Migrations to apply (owner):** `mobile 0041_public_catalog.sql` + `admin 017_public_catalog.sql` (validated PG17) · `website 0001_contact_submissions.sql` · plus any of the pre‑existing `0026…0040` / admin `010…016` not yet on the live project (verify `schema_migrations`).
+
+### E. Security changes & posture
+* **Fixed:** `/login?next=` open redirect → `safeInternalPath()` (same‑origin relative only). New `tests/lib/nav.test.ts`.
+* **Verified clean:** no service‑role key, no Razorpay secret, no hardcoded Supabase keys, no `eval`/`new Function`, no `project-files`/`source_code` references anywhere in `website/src`. `dangerouslySetInnerHTML` only in `JsonLd` (`JSON.stringify` of controlled data). CMS content (`cms_pages`, notes) rendered as **text**, never HTML.
+* **Payments:** client sends only ids (`projectId`, `planId`, `amount`); every amount is recomputed server‑side; `interpretVerifyResponse()` is the single success gate; a completed project purchase redirects to `/account/purchases` and never exposes a file URL.
+* **RLS:** website adds no policy weakening. Migration `0041` is **additive** (`TO anon` only) — authenticated/admin visibility is byte‑for‑byte unchanged (proven on PG17).
+* **Headers:** CSP (`self` + `*.supabase.co` + Razorpay only), `X‑Content‑Type‑Options`, `Referrer‑Policy`, `Permissions‑Policy`, `frame-ancestors 'none'`. `/account/*` + custom‑project wizard `noindex` + robots‑disallowed.
+* **Remaining risk (needs owner):** cross‑user RLS tests (user A ≠ user B on purchases/applications/wallet/resumes/notifications/custom‑projects) are written as a checklist in `TESTING.md` but **not executed** — needs a confirmed test login. Recommend running them before public launch.
+
+### F. Production checklist
+| Area | Status |
+|---|---|
+| UI matches the app | ✅ palette, system font, cards, badges, drawer + bottom nav, empty/loading/error states |
+| Responsive 320→1440 | ✅ mobile‑first; no horizontal overflow; wide tables/filters scroll in‑container |
+| Supabase‑connected | ✅ home CMS, marketplace, jobs, placement, notes, premium, referral, custom, account all dynamic |
+| Authentication shared | ✅ same `@supabase/ssr` session as app; mobile‑number login via RPC |
+| RLS respected | ✅ + additive `0041`; ⚠️ cross‑user tests pending a test login |
+| Payments server‑verified | ✅ project / premium / wallet / custom all via existing Edge Functions |
+| Storage gating | ✅ audited — no protected‑file exposure |
+| SEO | ✅ metadata/OG/Twitter/canonical, sitemap (+notes), robots, `Organization`/`Product`/`JobPosting`/`FAQPage`/`BreadcrumbList` JSON‑LD |
+| Performance | ✅ RSC + ISR, `next/image` with `sizes`, pagination, bounded queries, `cache()` on multi‑read pages |
+| Accessibility | ✅ skip‑link, landmarks, `:focus-visible`, labelled forms, `aria` on drawer/modal/nav, alt text · ⚠️ `ink-faint` ≈4.2:1 (just under AA for the smallest incidental text) |
+| Testing | ✅ `typecheck`/`lint`/`build`/`vitest` **71/71** green · ⚠️ no jsdom component tests, no executed cross‑user RLS tests |
+| Build | ✅ 52 routes, `/` + curated + legal Static, filterable lists Dynamic |
+
+### G. Remaining gaps (and why)
+1. **Migrations not applied to live** — `0041_public_catalog` + website `0001_contact_submissions` (+ verify the older chain). Owner action; can't run here (no service‑role key / DB access). Until `0041`: logged‑out catalog = `target_type='global'` rows only, no public Learning notes; contact form degrades to `mailto:`.
+2. **Cross‑user RLS tests not executed** — needs a confirmed test account (owner will provide). Checklist in `TESTING.md`.
+3. **Owner env still blank** — `NEXT_PUBLIC_LEGAL_ENTITY_NAME`, `NEXT_PUBLIC_BUSINESS_ADDRESS`, `NEXT_PUBLIC_GOVERNING_JURISDICTION`, `NEXT_PUBLIC_PLAY_STORE_URL` → footer + legal pages + the "Get the app" button show placeholders / stay hidden.
+4. **`cms_pages` content empty** — `terms`/`privacy` rows exist but unwritten; `about`/`refund_policy` not seeded. Legal pages show an honest "not written yet" state by design.
+5. **App‑only by design (boundary preserved, linked out):** timed practice / mock / live tests + DSA code‑editor & judge; resume section editing + PDF export + ATS scoring; onboarding carousel; push notifications; avatar upload.
+6. **Deferred polish / features (non‑blocking):** job‑alerts UI + recommended‑jobs feed; a student‑facing placement leaderboard (needs a `SECURITY DEFINER` view/RPC + a privacy decision; not a screen in the app either); pixel‑level restyle of the custom‑project wizard step screens (functional + retokened); tech‑stack facet filter on the marketplace (no facet source table); jsdom component tests.
+7. **`notFound()` returns HTTP 200 in `next dev`** for nested dynamic routes (known Next 14 dev quirk) — the `not-found.tsx` UI renders correctly and `next start` returns 404. Not a code issue.
+
+### Readiness verdict
+**`[READY WITH MANUAL ACTIONS]`** — the website is dynamic, responsive, Supabase‑connected, mobile‑consistent, admin‑controlled, secure and SEO‑ready; `typecheck`/`lint`/`build`/`vitest` are green and the mobile app + admin panel are untouched. Before flipping it public the owner must: **(1)** apply `0041_public_catalog` (mobile+admin) and website `0001_contact_submissions`, and confirm the rest of the migration chain is live; **(2)** run the cross‑user RLS checklist with a real test account; **(3)** fill the four `NEXT_PUBLIC_*` owner vars and write the `cms_pages` legal content in the admin panel. None of these are code changes.
 
 ---
 

@@ -4,7 +4,9 @@ import Image from "next/image";
 import { Building2, Star } from "lucide-react";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import JobCard, { JobCardData } from "@/components/JobCard";
+import JsonLd from "@/components/JsonLd";
 import { EmptyState } from "@/components/ui";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 
 export const revalidate = 300;
 
@@ -25,7 +27,12 @@ async function getCompany(id: string) {
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const res = await getCompany(params.id);
-  return { title: res ? `${res.company.name} — jobs` : "Company not found" };
+  if (!res) return { title: "Company not found" };
+  return {
+    title: `${res.company.name} — jobs`,
+    description: (res.company.about || `Open roles at ${res.company.name}`).slice(0, 155),
+    alternates: { canonical: absoluteUrl(`/jobs/companies/${params.id}`) },
+  };
 }
 
 export default async function CompanyDetailPage({ params }: { params: { id: string } }) {
@@ -35,6 +42,12 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Companies", path: "/jobs/companies" },
+          { name: company.name, path: `/jobs/companies/${company.id}` },
+        ])}
+      />
       <div className="flex items-start gap-4">
         <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary-50">
           {company.logo_url ? (
