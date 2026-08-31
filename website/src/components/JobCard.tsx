@@ -1,36 +1,78 @@
 import Link from "next/link";
+import Image from "next/image";
+import { Building2, MapPin } from "lucide-react";
 import { timeAgo } from "@/lib/format";
+import { cn } from "@/lib/cn";
 
 export type JobCardData = {
   id: string;
   title: string;
   company_name: string | null;
+  company_logo_url?: string | null;
   location: string | null;
-  job_type: string;
+  job_type: string | null;
   salary_range: string | null;
   skills: string[] | null;
-  posted_at: string;
+  posted_at: string | null;
 };
 
-export default function JobCard({ job }: { job: JobCardData }) {
+const NEW_WINDOW_DAYS = 7;
+
+function isNew(postedAt: string | null): boolean {
+  if (!postedAt) return false;
+  return Date.now() - new Date(postedAt).getTime() < NEW_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Job card — mirrors `mobile-app/src/components/cards/JobCard.tsx`: logo tile,
+ * title + company, a job-type chip + location + NEW pill, salary + posted time.
+ */
+export function JobCard({ job, className }: { job: JobCardData; className?: string }) {
   return (
-    <Link href={`/jobs/${job.id}`} className="block border border-navy/10 bg-white p-5 transition hover:border-navy/30">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-serif text-base text-navy">{job.title}</h3>
-          <div className="mt-1 text-sm text-slate">{job.company_name || "Company not listed"} · {job.location || "Location not specified"}</div>
+    <Link
+      href={`/jobs/${job.id}`}
+      className={cn(
+        "block rounded-2xl border border-line bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg",
+        className,
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary-50">
+          {job.company_logo_url ? (
+            <Image src={job.company_logo_url} alt={job.company_name ?? ""} width={48} height={48} className="h-full w-full object-cover" />
+          ) : (
+            <Building2 className="h-5 w-5 text-primary" aria-hidden />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-bold text-ink">{job.title}</h3>
+          <p className="truncate text-sm text-ink-muted">{job.company_name || "Company"}</p>
         </div>
-        <span className="whitespace-nowrap rounded-sm border border-navy/20 px-2 py-1 text-[0.7rem] text-navy">{job.job_type}</span>
       </div>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {(job.skills ?? []).slice(0, 4).map((s) => (
-          <span key={s} className="rounded-sm bg-paper px-1.5 py-0.5 text-[0.68rem] text-navy border border-navy/10">{s}</span>
-        ))}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {job.job_type && (
+          <span className="rounded-lg bg-primary-50 px-2.5 py-1 text-[0.7rem] font-semibold text-primary">
+            {job.job_type}
+          </span>
+        )}
+        {job.location && (
+          <span className="inline-flex items-center gap-1 text-xs text-ink-faint">
+            <MapPin className="h-3.5 w-3.5" aria-hidden />
+            <span className="truncate">{job.location}</span>
+          </span>
+        )}
+        {isNew(job.posted_at) && (
+          <span className="rounded-lg bg-success/15 px-2 py-1 text-[0.7rem] font-semibold text-success">NEW</span>
+        )}
       </div>
-      <div className="mt-3 flex items-center justify-between text-sm text-slate">
-        <span>{job.salary_range || "Salary not disclosed"}</span>
-        <span>{timeAgo(job.posted_at)}</span>
+
+      <div className="mt-2.5 flex items-center justify-between">
+        <span className="text-sm font-semibold text-primary">{job.salary_range || "Salary undisclosed"}</span>
+        {job.posted_at && <span className="text-xs text-ink-faint">{timeAgo(job.posted_at)}</span>}
       </div>
     </Link>
   );
 }
+
+export default JobCard;

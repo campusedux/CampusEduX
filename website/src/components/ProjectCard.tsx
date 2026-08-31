@@ -1,6 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
-import { formatINR } from "@/lib/format";
+import { ArrowRight, Box, Gem } from "lucide-react";
+import { Rating } from "@/components/ui/Rating";
+import { PriceDisplay } from "@/components/ui/PriceDisplay";
+import { cn } from "@/lib/cn";
 
 export type ProjectCardData = {
   id: string;
@@ -8,6 +11,7 @@ export type ProjectCardData = {
   category_name: string | null;
   tech_stack: string[] | null;
   price: number;
+  original_price?: number | null;
   rating: number;
   review_count: number;
   thumbnail_url: string | null;
@@ -15,13 +19,25 @@ export type ProjectCardData = {
   is_best_seller: boolean;
 };
 
-export default function ProjectCard({ project }: { project: ProjectCardData }) {
+/**
+ * Project card — mirrors `mobile-app/src/components/cards/ProjectCard.tsx`
+ * (`featured` layout): white rounded-2xl card, image on top with a dark
+ * translucent badge, tech line, rating + price + "View" chip footer.
+ */
+export function ProjectCard({ project, rank, className }: { project: ProjectCardData; rank?: number; className?: string }) {
+  const techLine =
+    (project.tech_stack ?? []).slice(0, 3).join(" • ") || project.category_name || "Project";
+  const badge = project.is_premium ? "PREMIUM" : project.is_best_seller ? "BESTSELLER" : null;
+
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group block overflow-hidden border border-navy/10 bg-white transition hover:border-navy/30"
+      className={cn(
+        "group block overflow-hidden rounded-2xl border border-line bg-white shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg",
+        className,
+      )}
     >
-      <div className="relative aspect-[4/3] bg-navy/5">
+      <div className="relative flex aspect-[16/10] items-center justify-center bg-primary-50">
         {project.thumbnail_url ? (
           <Image
             src={project.thumbnail_url}
@@ -30,38 +46,40 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
             className="object-cover"
             sizes="(max-width: 768px) 100vw, 25vw"
           />
+        ) : project.is_premium ? (
+          <Gem className="h-10 w-10 text-primary" aria-hidden />
         ) : (
-          <div className="flex h-full items-center justify-center text-xs text-slate">No preview image</div>
+          <Box className="h-10 w-10 text-primary" aria-hidden />
         )}
-        {project.is_premium && (
-          <span className="absolute left-2 top-2 rounded-sm bg-marigold px-2 py-0.5 text-[0.65rem] font-semibold text-navy">
-            Premium
+
+        {typeof rank === "number" && (
+          <span className="absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-primary text-xs font-bold text-white">
+            {rank}
           </span>
         )}
-        {project.is_best_seller && !project.is_premium && (
-          <span className="absolute left-2 top-2 rounded-sm bg-emerald px-2 py-0.5 text-[0.65rem] font-semibold text-white">
-            Best seller
+        {badge && (
+          <span className="absolute right-3 top-3 rounded-full bg-ink/80 px-2.5 py-1 text-[0.62rem] font-bold tracking-wide text-white">
+            {badge}
           </span>
         )}
       </div>
+
       <div className="p-4">
-        <div className="text-xs text-slate">{project.category_name || "Uncategorised"}</div>
-        <h3 className="mt-1 font-serif text-base text-navy group-hover:text-marigold">{project.title}</h3>
-        <div className="mt-2 flex flex-wrap gap-1">
-          {(project.tech_stack ?? []).slice(0, 3).map((t) => (
-            <span key={t} className="rounded-sm bg-paper px-1.5 py-0.5 text-[0.68rem] text-navy border border-navy/10">
-              {t}
+        <h3 className="truncate font-bold text-ink group-hover:text-primary">{project.title}</h3>
+        <p className="mt-1 truncate text-xs text-ink-muted">{techLine}</p>
+        <div className="mt-3 flex items-center justify-between">
+          <Rating value={project.rating} count={project.review_count} size={13} showEmpty />
+          <div className="flex items-center gap-2">
+            <PriceDisplay price={project.price} originalPrice={project.original_price} size="sm" />
+            <span className="inline-flex items-center gap-0.5 rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary">
+              View
+              <ArrowRight className="h-3 w-3" aria-hidden />
             </span>
-          ))}
-        </div>
-        <div className="mt-3 flex items-center justify-between text-sm">
-          <span className="text-navy">
-            {project.rating > 0 ? `★ ${project.rating.toFixed(1)}` : "No ratings yet"}{" "}
-            <span className="text-slate">({project.review_count})</span>
-          </span>
-          <span className="font-semibold text-navy">{project.price > 0 ? formatINR(project.price) : "Free"}</span>
+          </div>
         </div>
       </div>
     </Link>
   );
 }
+
+export default ProjectCard;
