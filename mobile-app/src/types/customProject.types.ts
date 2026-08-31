@@ -1,0 +1,222 @@
+// Custom Project Builder v3 — shared types + the spec's fixed money/progress maps.
+
+export const CUSTOM_PROJECT_TYPES = ["academic", "personal", "business"] as const;
+export type CustomProjectType = (typeof CUSTOM_PROJECT_TYPES)[number];
+
+export const CUSTOM_PROJECT_LEVELS = ["standard", "advanced"] as const;
+export type CustomProjectLevel = (typeof CUSTOM_PROJECT_LEVELS)[number];
+
+/** Feature tier shown in the catalog (admin-managed, spec §5). Distinct from a project's level. */
+export const CUSTOM_FEATURE_LEVELS = ["basic", "standard", "advanced", "premium"] as const;
+export type CustomFeatureLevel = (typeof CUSTOM_FEATURE_LEVELS)[number];
+
+export const CUSTOM_PLATFORMS = [
+  "web",
+  "android",
+  "ios",
+  "web_android",
+  "web_android_ios",
+] as const;
+export type CustomPlatform = (typeof CUSTOM_PLATFORMS)[number];
+
+export const CUSTOM_PROJECT_STATUSES = [
+  "new",
+  "in_development",
+  "testing",
+  "ready",
+  "delivered",
+  "cancelled",
+] as const;
+export type CustomProjectStatus = (typeof CUSTOM_PROJECT_STATUSES)[number];
+
+export type CustomTokenPaymentStatus = "pending" | "paid" | "failed";
+
+/**
+ * Trusted token per project type (spec §2). The SERVER decides the real charge
+ * (create-custom-project-order recomputes it); this map is for DISPLAY only —
+ * button labels and the estimate screen. It is NOT derived from the estimate or
+ * the selected features, and Standard↔Advanced never changes it.
+ */
+export const CUSTOM_PROJECT_TOKENS: Record<CustomProjectType, number> = {
+  academic: 1500,
+  personal: 3000,
+  business: 6000,
+};
+
+/** Progress % per status (spec §27). Mirrors custom_project_progress_for() in SQL. */
+export const CUSTOM_PROJECT_PROGRESS: Record<CustomProjectStatus, number> = {
+  new: 20,
+  in_development: 50,
+  testing: 80,
+  ready: 90,
+  delivered: 100,
+  cancelled: 0,
+};
+
+export const CUSTOM_PLATFORM_LABELS: Record<CustomPlatform, string> = {
+  web: "Web",
+  android: "Android",
+  ios: "iOS",
+  web_android: "Web + Android",
+  web_android_ios: "Web + Android + iOS",
+};
+
+export const CUSTOM_STATUS_LABELS: Record<CustomProjectStatus, string> = {
+  new: "Token Paid / New",
+  in_development: "In Development",
+  testing: "Testing",
+  ready: "Ready",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
+// --- catalog ---------------------------------------------------------------
+
+export interface CustomProjectPricing {
+  projectType: CustomProjectType;
+  projectLevel: CustomProjectLevel;
+  basePrice: number;
+  tokenAmount: number;
+  pricingVersion: number;
+}
+
+export interface CustomPlatformPricing {
+  platform: CustomPlatform;
+  label: string;
+  charge: number;
+  sortOrder: number;
+}
+
+export interface CustomFeature {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  projectTypes: CustomProjectType[];
+  projectLevels: CustomProjectLevel[];
+  price: number;
+  sortOrder: number;
+  /** Optional — populated from the admin Feature Catalog (migration 0034). */
+  level?: CustomFeatureLevel;
+  dependencies?: string[];
+  icon?: string | null;
+  imageUrl?: string | null;
+}
+
+// --- wizard state / draft -----------------------------------------------
+
+export interface CustomRequirement {
+  text: string;
+}
+
+export interface CustomReferenceFileInput {
+  path: string;
+  name: string;
+  sizeMb: number;
+  label?: string;
+}
+
+/** The whole wizard state — also the shape persisted to custom_project_drafts. */
+export interface CustomProjectBuilderConfig {
+  projectType: CustomProjectType | null;
+  projectLevel: CustomProjectLevel | null;
+  platform: CustomPlatform | null;
+  title: string;
+  objective: string;
+  problemStatement: string;
+  description: string;
+  targetUsers: string;
+  technologyPreference: string;
+  featureIds: string[];
+  customRequirements: CustomRequirement[];
+  projectImagePath: string | null;
+  referenceFiles: CustomReferenceFileInput[];
+}
+
+export interface CustomProjectEstimate {
+  basePrice: number;
+  platformCharge: number;
+  featureTotal: number;
+  estimatedTotal: number;
+  tokenAmount: number;
+  selectedFeatures: CustomFeature[];
+}
+
+// --- server records --------------------------------------------------
+
+export interface CustomProjectRequest {
+  id: string;
+  requestCode: string;
+  title: string;
+  projectType: CustomProjectType;
+  projectLevel: CustomProjectLevel;
+  platform: CustomPlatform;
+  technologyPreference: string;
+  basePrice: number;
+  platformCharge: number;
+  featureTotal: number;
+  estimatedTotal: number;
+  tokenAmount: number;
+  tokenPaymentStatus: CustomTokenPaymentStatus;
+  status: CustomProjectStatus;
+  projectImagePath: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomProjectTimelineEntry {
+  oldStatus: CustomProjectStatus | null;
+  newStatus: CustomProjectStatus;
+  createdAt: string;
+}
+
+export interface CustomProjectRequestFeature {
+  featureId: string;
+  featureName: string;
+  featurePrice: number;
+  category: string;
+}
+
+export interface CustomProjectReferenceFile {
+  id: string;
+  label: string;
+  fileName: string;
+  sizeMb: number;
+  storagePath: string;
+}
+
+export interface CustomProjectDeliveryAsset {
+  id: string;
+  kind: "screenshot" | "apk" | "source_code" | "documentation" | "demo" | "other";
+  label: string;
+  storagePath: string;
+  fileName: string;
+  sizeMb: number;
+}
+
+export interface CustomProjectDelivery {
+  demoUrl: string | null;
+  notes: string;
+  deliveredAt: string | null;
+  assets: CustomProjectDeliveryAsset[];
+}
+
+export interface CustomProjectMessage {
+  id: string;
+  senderRole: "student" | "admin";
+  body: string;
+  createdAt: string;
+}
+
+export interface CustomProjectRequestDetail extends CustomProjectRequest {
+  objective: string;
+  problemStatement: string;
+  description: string;
+  targetUsers: string;
+  customRequirements: CustomRequirement[];
+  features: CustomProjectRequestFeature[];
+  referenceFiles: CustomProjectReferenceFile[];
+  timeline: CustomProjectTimelineEntry[];
+  delivery: CustomProjectDelivery | null;
+  messages: CustomProjectMessage[];
+}

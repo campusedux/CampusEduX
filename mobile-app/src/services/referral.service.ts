@@ -1,0 +1,268 @@
+import { supabase } from "@/lib/supabase";
+import { BRAND } from "@/constants";
+import type {
+  ReferralOverview,
+  ReferralRewardRule,
+  ReferralEntry,
+  EarningsSummary,
+  LeaderboardEntry,
+  LeaderboardPeriod,
+  ReferralStatus,
+} from "@/types";
+import {
+  SAMPLE_REFERRAL_OVERVIEW,
+  SAMPLE_REFERRAL_HISTORY,
+  SAMPLE_EARNINGS_SUMMARY,
+  sampleLeaderboard,
+} from "@/data/sampleReferralContent";
+
+/**
+ * Used only when reward_settings can't be read (table not migrated / offline).
+ * Mirrors the column defaults in admin 007_commerce_admin.sql.
+ */
+export const DEFAULT_REWARD_RULE: ReferralRewardRule = {
+  bonusType: "flat",
+  bonusValue: 100,
+  maxPayout: 5000,
+  rewardOnSignup: false,
+  rewardOnFirstPurchase: true,
+};
+
+function mapRewardRule(row: any): ReferralRewardRule {
+  return {
+    bonusType: row?.bonus_type === "percent" ? "percent" : "flat",
+    bonusValue: Number(row?.bonus_value ?? DEFAULT_REWARD_RULE.bonusValue),
+    maxPayout: Number(row?.max_payout ?? DEFAULT_REWARD_RULE.maxPayout),
+    rewardOnSignup: !!row?.reward_on_signup,
+    rewardOnFirstPurchase: row?.reward_on_first_purchase ?? true,
+  };
+}
+
+/**
+ * Plain-language description of what a referral pays, for the referral screens.
+ * "UI must explain the actual rule" — driven entirely by the admin settings.
+ */
+export function describeRewardRule(rule: ReferralRewardRule): string {
+  const earn =
+    rule.bonusType === "flat"
+      ? `₹${rule.bonusValue}`
+      : `${rule.bonusValue}% of their first order` +
+        (rule.maxPayout > 0 ? ` (up to ₹${rule.maxPayout})` : "");
+  if (rule.rewardOnSignup) {
+    return `You earn ${earn} as soon as a friend signs up with your code.`;
+  }
+  if (rule.rewardOnFirstPurchase) {
+    return `A friend signs up with your code (Pending), and you earn ${earn} when they make their first purchase (Successful). The reward is credited to your wallet.`;
+  }
+  return `Referral rewards are currently paused by the CampusEduX team.`;
+}
+
+/** Best-effort ₹ still owed once the given pending referrals convert. */
+function estimatePendingRewards(pendingCount: number, rule: ReferralRewardRule): number {
+  if (pendingCount <= 0 || !rule.rewardOnFirstPurchase) return 0;
+  // Percentage rewards depend on a future order value we can't know yet.
+  return rule.bonusType === "flat" ? pendingCount * rule.bonusValue : 0;
+}
+
+function mapReferralRow(row: any): ReferralEntry {
+  return {
+    id: row.id,
+    referredUserName: row.referred_user?.full_name || "New Member",
+    referredUserEmail: row.referred_user?.email || "",
+    status: row.status,
+    rewardAmount: row.reward_amount ?? 0,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  };
+}
+
+function periodStartDate(period: LeaderboardPeriod): string | null {
+  const now = new Date();
+  if (period === "this_month") return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  if (period === "this_year") return new Date(now.getFullYear(), 0, 1).toISOString();
+  return null;
+}
+
+export const referralService = {
+  /** The admin-configured referral reward rule (falls back to defaults). */
+  async getRewardRule(): Promise<ReferralRewardRule> {
+    try {
+      const { data, error } = await supabase
+        .from("reward_settings")
+        .select("bonus_type, bonus_value, max_payout, reward_on_signup, reward_on_first_purchase")
+        .eq("id", 1)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data ? mapRewardRule(data) : DEFAULT_REWARD_RULE;
+    } catch (error) {
+      console.info(`[referral.service] getRewardRule: using defaults (${(error as Error).message})`);
+      return DEFAULT_REWARD_RULE;
+    }
+  },
+
+  async getOverview(userId: string): Promise<ReferralOverview> {
+    try {
+      const [
+        { data: codeRow, error: codeError },
+        { data: referralRows, error: referralError },
+        rewardRule,
+      ] = await Promise.all([
+        // maybeSingle(): 0 rows -> { data: null, error: null }, NOT an error.
+        supabase.from("referral_codes").select("code, total_referrals, total_earned").eq("user_id", userId).maybeSingle(),
+        supabase.from("referrals").select("status").eq("referrer_id", userId),
+        referralService.getRewardRule(),
+      ]);
+      // Only a genuine query error (table not migrated, network, RLS) falls back
+      // to sample data. A successful query with no rows is a real new user.
+      if (codeError) throw new Error(codeError.message);
+
+      const counts = { successful: 0, pending: 0, cancelled: 0 } as Record<ReferralStatus, number>;
+      if (!referralError) {
+        (referralRows ?? []).forEach((r: any) => {
+          counts[r.status as ReferralStatus] = (counts[r.status as ReferralStatus] ?? 0) + 1;
+        });
+      }
+
+      // codeRow is created by the ensure_referral_code trigger on signup
+      // (migration 0021); the `?? ""` branch is defensive only — never a
+      // borrowed sample code.
+      const code = codeRow?.code ?? "";
+      return {
+        code,
+        shareLink: code ? `${BRAND.referralBaseUrl}/${code}` : "",
+        totalReferrals: codeRow?.total_referrals ?? 0,
+        totalEarned: codeRow?.total_earned ?? 0,
+        successfulReferrals: counts.successful,
+        pendingReferrals: counts.pending,
+        cancelledReferrals: counts.cancelled,
+        pendingRewards: estimatePendingRewards(counts.pending, rewardRule),
+        rewardRule,
+      };
+    } catch (error) {
+      console.info(`[referral.service] getOverview: using sample content (${(error as Error).message})`);
+      return SAMPLE_REFERRAL_OVERVIEW;
+    }
+  },
+
+  async getReferralHistory(userId: string, filter: "all" | ReferralStatus = "all"): Promise<ReferralEntry[]> {
+    try {
+      let query = supabase
+        .from("referrals")
+        .select("*, referred_user:profiles!referrals_referred_user_id_fkey(full_name, email)")
+        .eq("referrer_id", userId)
+        .order("created_at", { ascending: false });
+      if (filter !== "all") query = query.eq("status", filter);
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      // an empty history is real for a student who has not referred anyone yet.
+      return (data ?? []).map(mapReferralRow);
+    } catch (error) {
+      console.info(`[referral.service] getReferralHistory: using sample content (${(error as Error).message})`);
+      return filter === "all"
+        ? SAMPLE_REFERRAL_HISTORY
+        : SAMPLE_REFERRAL_HISTORY.filter((e) => e.status === filter);
+    }
+  },
+
+  async getEarningsSummary(userId: string): Promise<EarningsSummary> {
+    let data: any[] | null = null;
+    let rewardRule: ReferralRewardRule = DEFAULT_REWARD_RULE;
+    try {
+      const [res, rule] = await Promise.all([
+        supabase
+          .from("referrals")
+          .select("*, referred_user:profiles!referrals_referred_user_id_fkey(full_name, email)")
+          .eq("referrer_id", userId)
+          .order("created_at", { ascending: false }),
+        referralService.getRewardRule(),
+      ]);
+      if (res.error) throw new Error(res.error.message);
+      data = res.data ?? [];
+      rewardRule = rule;
+      // empty is real for a new student — the reductions below yield all-zeros.
+    } catch (error) {
+      console.info(`[referral.service] getEarningsSummary: using sample content (${(error as Error).message})`);
+      return SAMPLE_EARNINGS_SUMMARY;
+    }
+
+    const entries = (data ?? []).map(mapReferralRow);
+    const successful = entries.filter((e) => e.status === "successful");
+    const pending = entries.filter((e) => e.status === "pending");
+    const cancelled = entries.filter((e) => e.status === "cancelled");
+
+    const totalEarnings = successful.reduce((sum, e) => sum + e.rewardAmount, 0);
+    // Estimated from the admin's current reward rule, not a hard-coded ₹100.
+    const pendingEarnings = estimatePendingRewards(pending.length, rewardRule);
+
+    const monthBuckets = new Map<string, number>();
+    successful.forEach((e) => {
+      const date = new Date(e.completedAt ?? e.createdAt);
+      const key = date.toLocaleString("en-US", { month: "short" });
+      monthBuckets.set(key, (monthBuckets.get(key) ?? 0) + e.rewardAmount);
+    });
+    const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const currentMonthIndex = new Date().getMonth();
+    const last6Months = Array.from({ length: 6 }, (_, i) => monthOrder[(currentMonthIndex - 5 + i + 12) % 12]);
+    const monthlyTrend = last6Months.map((month) => ({ month, amount: monthBuckets.get(month) ?? 0 }));
+
+    return {
+      totalEarnings,
+      totalReferrals: entries.length,
+      pendingEarnings,
+      successfulReferrals: successful.length,
+      pendingReferrals: pending.length,
+      cancelledReferrals: cancelled.length,
+      monthlyTrend,
+      recentEarnings: entries.slice(0, 5),
+    };
+  },
+
+  async getLeaderboard(period: LeaderboardPeriod, currentUserId: string): Promise<LeaderboardEntry[]> {
+    let data: any[] | null = null;
+    try {
+      const startDate = periodStartDate(period);
+      let query = supabase
+        .from("referrals")
+        .select("referrer_id, reward_amount, created_at, referrer:profiles!referrals_referrer_id_fkey(full_name, email, avatar_url)")
+        .eq("status", "successful");
+      if (startDate) query = query.gte("created_at", startDate);
+
+      const res = await query;
+      if (res.error) throw new Error(res.error.message);
+      data = res.data;
+      if (!data || data.length === 0) throw new Error("no rows");
+    } catch (error) {
+      console.info(`[referral.service] getLeaderboard: using sample content (${(error as Error).message})`);
+      return sampleLeaderboard(period);
+    }
+
+    const byReferrer = new Map<string, { name: string; email: string; avatarUrl: string | null; referrals: number; earned: number }>();
+    (data ?? []).forEach((row: any) => {
+      const existing = byReferrer.get(row.referrer_id) ?? {
+        name: row.referrer?.full_name || "CampusEduX Member",
+        email: row.referrer?.email || "",
+        avatarUrl: row.referrer?.avatar_url ?? null,
+        referrals: 0,
+        earned: 0,
+      };
+      existing.referrals += 1;
+      existing.earned += row.reward_amount ?? 0;
+      byReferrer.set(row.referrer_id, existing);
+    });
+
+    return Array.from(byReferrer.entries())
+      .map(([userId, stats]) => ({
+        rank: 0,
+        userId,
+        userName: stats.name,
+        userEmail: stats.email,
+        avatarUrl: stats.avatarUrl,
+        totalReferrals: stats.referrals,
+        totalEarned: stats.earned,
+        isCurrentUser: userId === currentUserId,
+      }))
+      .sort((a, b) => b.totalEarned - a.totalEarned)
+      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+  },
+};

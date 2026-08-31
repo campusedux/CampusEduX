@@ -1,0 +1,27 @@
+import React from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
+});
+
+/**
+ * Wraps the app with every cross-cutting provider: gesture handler root,
+ * safe-area context, and React Query for server-state (jobs, projects,
+ * placement data, etc. in later modules).
+ */
+export function RootProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+export default RootProvider;

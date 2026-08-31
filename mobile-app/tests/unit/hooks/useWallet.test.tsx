@@ -1,0 +1,67 @@
+import React from "react";
+import TestRenderer, { act } from "react-test-renderer";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+jest.mock("@/store/authStore", () => ({
+  useAuthStore: (selector: (s: unknown) => unknown) =>
+    selector({ user: { id: "u-1", fullName: "Rohan", email: "r@e.com", mobileNumber: "9" } }),
+}));
+
+const mockGetWalletSummary = jest.fn();
+jest.mock("@/services/wallet.service", () => ({
+  walletService: {
+    getWalletSummary: (...args: unknown[]) => mockGetWalletSummary(...args),
+    getAllTransactions: jest.fn(),
+  },
+}));
+
+import { useWalletSummary, walletQueryKeys } from "@/hooks/useWallet";
+
+async function renderHookValue<T>(useHook: () => T): Promise<{ get: () => T }> {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const box: { value?: T } = {};
+  function Probe() {
+    box.value = useHook();
+    return null;
+  }
+  await act(async () => {
+    TestRenderer.create(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    );
+  });
+  for (let i = 0; i < 5; i++) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+  return { get: () => box.value as T };
+}
+
+describe("useWalletSummary", () => {
+  beforeEach(() => mockGetWalletSummary.mockReset());
+
+  it("exposes stable query keys", () => {
+    expect(walletQueryKeys.summary).toEqual(["wallet", "summary"]);
+    expect(walletQueryKeys.transactions).toEqual(["wallet", "transactions"]);
+  });
+
+  it("calls walletService.getWalletSummary with the signed-in user id and returns its data", async () => {
+    const summary = {
+      balance: 750,
+      totalAdded: 500,
+      totalUsed: 0,
+      totalCashback: 50,
+      totalReferralEarnings: 200,
+      recentTransactions: [],
+    };
+    mockGetWalletSummary.mockResolvedValue(summary);
+
+    const hook = await renderHookValue(() => useWalletSummary());
+
+    expect(mockGetWalletSummary).toHaveBeenCalledWith("u-1");
+    expect(hook.get().data).toEqual(summary);
+    expect(hook.get().isSuccess).toBe(true);
+  });
+});

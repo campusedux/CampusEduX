@@ -1,0 +1,134 @@
+jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModule());
+jest.mock("expo-print", () => ({ printToFileAsync: jest.fn(() => Promise.resolve({ uri: "file:///tmp/resume.pdf" })) }));
+
+import { resumeService } from "@/services/resume.service";
+import { resetSupabaseMock, setTableResult, supabase } from "../../mocks/supabase.mock";
+import { SAMPLE_RESUME_LIST } from "@/data/sampleResumeContent";
+
+beforeEach(() => resetSupabaseMock());
+
+const resumeRow = {
+  id: "res-1",
+  title: "Rohan's Resume",
+  template: "modern",
+  personal_details: { fullName: "Rohan Verma", jobTitle: "SDE Intern", email: "r@x.com", phone: "9", location: "Blr" },
+  education: [{ degree: "B.Tech", institution: "IIT", startYear: 2021, endYear: 2025 }],
+  skills: { technical: ["React", "TypeScript", "Node"], soft: ["Communication"] },
+  sections: { summary: "Built and led several production projects with a strong team.", experience: "Developed APIs and improved database performance.", projects: "Implemented a full-stack marketplace." },
+  ats_score: 72,
+  updated_at: "2025-06-01T00:00:00.000Z",
+};
+
+describe("resumeService.getResumes", () => {
+  it("maps the summary rows for a student who has resumes", async () => {
+    setTableResult("resumes_builder", { data: [{ id: "res-1", title: "My CV", template: "modern", ats_score: 80, updated_at: "2025-06-01" }] });
+
+    const list = await resumeService.getResumes("u-1");
+
+    expect(list).toEqual([{ id: "res-1", title: "My CV", template: "modern", atsScore: 80, updatedAt: "2025-06-01" }]);
+  });
+
+  it("returns an empty list (not the sample) for a student with no resumes", async () => {
+    setTableResult("resumes_builder", { data: [] });
+    expect(await resumeService.getResumes("u-1")).toEqual([]);
+  });
+
+  it("falls back to SAMPLE_RESUME_LIST when the query fails", async () => {
+    setTableResult("resumes_builder", { error: { message: "relation does not exist" } });
+    expect(await resumeService.getResumes("u-1")).toEqual(SAMPLE_RESUME_LIST);
+  });
+});
+
+describe("resumeService.createResume", () => {
+  it("returns the new row id on success", async () => {
+    setTableResult("resumes_builder", { data: [{ id: "res-new" }] });
+    expect(await resumeService.createResume("u-1", "professional")).toBe("res-new");
+  });
+
+  it("returns a local id when the insert fails so the builder still works offline", async () => {
+    setTableResult("resumes_builder", { error: { message: "no table" } });
+    const id = await resumeService.createResume("u-1", "modern");
+    expect(id).toMatch(/^res-local-/);
+  });
+});
+
+describe("resumeService.getResumeDetail", () => {
+  it("maps a stored row into a ResumeDocument", async () => {
+    setTableResult("resumes_builder", { data: [resumeRow] });
+
+    const doc = await resumeService.getResumeDetail("res-1");
+
+    expect(doc.title).toBe("Rohan's Resume");
+    expect(doc.personalDetails.fullName).toBe("Rohan Verma");
+    expect(doc.sections.certifications).toBe(""); // freeform keys are backfilled
+    expect(doc.education).toHaveLength(1);
+  });
+
+  it("falls back to sample content when the row is missing", async () => {
+    setTableResult("resumes_builder", { data: [] });
+    const doc = await resumeService.getResumeDetail("missing");
+    expect(doc.id).toBe("missing");
+  });
+});
+
+describe("resumeService write helpers", () => {
+  it("updateTemplate swallows a persistence failure (edits stay local)", async () => {
+    setTableResult("resumes_builder", { error: { message: "no table" } });
+    await expect(resumeService.updateTemplate("res-1", "creative")).resolves.toBeUndefined();
+  });
+
+  it("deleteResume does not throw when the delete fails", async () => {
+    setTableResult("resumes_builder", { error: { message: "no table" } });
+    await expect(resumeService.deleteResume("res-1")).resolves.toBeUndefined();
+  });
+});
+
+describe("resumeService.getATSBreakdown", () => {
+  it("computes a deterministic breakdown from the resume content", async () => {
+    setTableResult("resumes_builder", { data: [resumeRow] });
+
+    const first = await resumeService.getATSBreakdown("res-1");
+    setTableResult("resumes_builder", { data: [resumeRow] });
+    const second = await resumeService.getATSBreakdown("res-1");
+
+    expect(first).toEqual(second); // no randomness
+    expect(first.overall).toBeGreaterThan(0);
+    expect(first.overall).toBeLessThanOrEqual(100);
+    expect(Array.isArray(first.tips)).toBe(true);
+  });
+});
+
+describe("resumeService.generatePdf", () => {
+  it("renders the resume to HTML and returns the generated file uri + title", async () => {
+    setTableResult("resumes_builder", { data: [resumeRow] });
+    const Print = require("expo-print");
+
+    const result = await resumeService.generatePdf("res-1");
+
+    expect(Print.printToFileAsync).toHaveBeenCalledWith(expect.objectContaining({ base64: false }));
+    const html = (Print.printToFileAsync as jest.Mock).mock.calls[0][0].html as string;
+    expect(html).toContain("Rohan Verma");
+    expect(result).toEqual({ uri: "file:///tmp/resume.pdf", title: "Rohan's Resume" });
+  });
+});
+
+describe("resumeService.getDownloadHistory", () => {
+  it("maps download rows", async () => {
+    setTableResult("resume_downloads", { data: [{ id: "d1", resume_id: "res-1", resume_title: "CV", file_url: "u", downloaded_at: "2025-06-01" }] });
+
+    const history = await resumeService.getDownloadHistory("u-1");
+
+    expect(history).toEqual([{ id: "d1", resumeId: "res-1", resumeTitle: "CV", fileUrl: "u", downloadedAt: "2025-06-01" }]);
+  });
+
+  it("falls back to sample download history on error", async () => {
+    setTableResult("resume_downloads", { error: { message: "no table" } });
+    expect((await resumeService.getDownloadHistory("u-1")).length).toBeGreaterThan(0);
+  });
+
+  it("records a download without throwing when the table is absent", async () => {
+    setTableResult("resume_downloads", { error: { message: "no table" } });
+    await expect(resumeService.recordDownload("u-1", "res-1", "CV", "https://f")).resolves.toBeUndefined();
+    expect(supabase.from).toHaveBeenCalledWith("resume_downloads");
+  });
+});
