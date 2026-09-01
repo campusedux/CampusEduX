@@ -20,7 +20,7 @@ const NAV = [
 export function AccountNav() {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 overflow-x-auto pb-1 text-sm md:flex-col md:overflow-visible md:pb-0">
+    <nav className="flex gap-1 overflow-x-auto rounded-xl bg-surface p-1 text-sm md:flex-col md:gap-0.5 md:overflow-visible md:bg-transparent md:p-0">
       {NAV.map((n) => {
         const active = n.href === "/account" ? pathname === "/account" : pathname.startsWith(n.href);
         return (
@@ -29,8 +29,10 @@ export function AccountNav() {
             href={n.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "whitespace-nowrap rounded-lg px-3 py-1.5 font-medium transition",
-              active ? "bg-primary-50 text-primary" : "text-ink-muted hover:bg-surface hover:text-ink",
+              "whitespace-nowrap rounded-lg px-3 py-2 font-medium transition",
+              active
+                ? "bg-white text-primary shadow-sm md:bg-primary-50 md:shadow-none"
+                : "text-ink-muted hover:text-ink md:hover:bg-surface",
             )}
           >
             {n.label}
@@ -39,7 +41,7 @@ export function AccountNav() {
       })}
       <Link
         href="/logout"
-        className="whitespace-nowrap rounded-lg px-3 py-1.5 font-medium text-ink-faint transition hover:bg-surface hover:text-ink md:mt-3"
+        className="whitespace-nowrap rounded-lg px-3 py-2 font-medium text-ink-faint transition hover:text-danger md:mt-2 md:hover:bg-surface"
       >
         Sign out
       </Link>

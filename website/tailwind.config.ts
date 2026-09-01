@@ -81,6 +81,27 @@ const config: Config = {
         card: "0 6px 14px -4px rgba(15,23,42,0.08), 0 2px 6px -2px rgba(15,23,42,0.05)",
         "card-lg": "0 14px 30px -8px rgba(15,23,42,0.12), 0 4px 10px -4px rgba(15,23,42,0.06)",
       },
+      keyframes: {
+        // Subtle, fast entrances (spec §15). All are neutralised by the
+        // reduced-motion guard in globals.css.
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "fade-in-up": {
+          from: { opacity: "0", transform: "translateY(8px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "scale-in": {
+          from: { opacity: "0", transform: "scale(.96)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+      },
+      animation: {
+        "fade-in": "fade-in .2s ease-out both",
+        "fade-in-up": "fade-in-up .22s ease-out both",
+        "scale-in": "scale-in .16s ease-out both",
+      },
     },
   },
   plugins: [],

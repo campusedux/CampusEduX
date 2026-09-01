@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { formatINR } from "@/lib/format";
+import { Button } from "@/components/ui";
 import {
   CP_DOC_TYPES,
   CP_IMAGE_TYPES,
@@ -154,15 +155,18 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
 
       {grouped.map(([category, rows]) => (
         <div key={category}>
-          <h2 className="text-lg text-ink">{category}</h2>
+          <h2 className="text-lg font-bold text-ink">{category}</h2>
           <div className="mt-2 divide-y divide-line border-t border-line">
             {rows.map((f) => (
-              <label key={f.id} className="flex cursor-pointer items-start gap-3 py-3">
+              <label
+                key={f.id}
+                className="flex cursor-pointer items-start gap-3 rounded-lg px-1 py-3 transition hover:bg-surface"
+              >
                 <input
                   type="checkbox"
                   checked={selectedSet.has(f.id)}
                   onChange={() => toggle(f.id)}
-                  className="mt-1"
+                  className="mt-1 accent-primary"
                 />
                 <span className="flex-1">
                   <span className="text-sm text-ink">{f.name}</span>
@@ -183,7 +187,7 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
       </div>
 
       <div>
-        <h2 className="text-lg text-ink">Project image (optional)</h2>
+        <h2 className="text-lg font-bold text-ink">Project image (optional)</h2>
         <input
           type="file"
           accept={CP_IMAGE_TYPES.join(",")}
@@ -195,7 +199,7 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
       </div>
 
       <div>
-        <h2 className="text-lg text-ink">Requirement / reference files (optional)</h2>
+        <h2 className="text-lg font-bold text-ink">Requirement / reference files (optional)</h2>
         <p className="text-xs text-ink-muted">PDF, DOC, DOCX, images or ZIP · up to {CP_MAX_FILE_MB} MB each.</p>
         <input
           type="file"
@@ -227,17 +231,12 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
       </div>
 
       <div className="flex items-center justify-between border-t border-line pt-6">
-        <Link href="/custom-projects/start" className="text-sm text-ink underline">
+        <Link href="/custom-projects/start" className="text-sm font-medium text-ink-muted underline hover:text-ink">
           Back
         </Link>
-        <button
-          type="button"
-          onClick={handleContinue}
-          disabled={going}
-          className="rounded-lg bg-primary px-6 py-2.5 text-sm text-white hover:bg-primary/90 disabled:opacity-50"
-        >
+        <Button type="button" onClick={handleContinue} disabled={going} loading={going}>
           {going ? "Saving…" : "Continue to estimate"}
-        </button>
+        </Button>
       </div>
     </div>
   );

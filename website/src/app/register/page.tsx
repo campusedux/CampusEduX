@@ -4,6 +4,25 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { Field, Input } from "@/components/ui";
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-12 sm:px-6">
+      <div className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+        <Link href="/" className="flex items-center gap-2" aria-label="CampusEduX home">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary text-base font-black text-white">
+            C
+          </span>
+          <span className="text-[15px] font-bold tracking-tight text-ink">
+            Campus<span className="text-primary">EduX</span>
+          </span>
+        </Link>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function RegisterForm() {
   const router = useRouter();
@@ -56,51 +75,82 @@ function RegisterForm() {
 
   if (checkEmail) {
     return (
-      <div className="mx-auto max-w-sm px-6 py-16 text-center">
-        <h1 className="text-2xl text-ink">Check your email</h1>
-        <p className="mt-3 text-sm text-ink-muted">Confirm your email address to finish creating your account, then sign in.</p>
-        <Link href="/login" className="mt-6 inline-block rounded-lg border border-line px-5 py-2.5 text-sm text-ink hover:bg-primary hover:text-white">
+      <Shell>
+        <h1 className="mt-5 text-2xl font-bold text-ink">Check your email</h1>
+        <p className="mt-2 text-sm text-ink-muted">
+          Confirm your email address to finish creating your account, then sign in.
+        </p>
+        <Link href="/login" className="btn-ghost mt-5 w-full">
           Go to sign in
         </Link>
-      </div>
+      </Shell>
     );
   }
 
   return (
-    <div className="mx-auto max-w-sm px-6 py-16">
-      <h1 className="text-3xl font-bold text-ink">Create an account</h1>
-      <p className="mt-2 text-sm text-ink-muted">Same account works in the CampusEduX app.</p>
+    <Shell>
+      <h1 className="mt-5 text-2xl font-bold text-ink">Create an account</h1>
+      <p className="mt-1 text-sm text-ink-muted">Same account works in the CampusEduX app.</p>
 
-      <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
-        <div>
-          <label className="text-sm text-ink">Full name</label>
-          <input required value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="text-sm text-ink">Email</label>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="text-sm text-ink">Mobile number</label>
-          <input required value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="text-sm text-ink">Password</label>
-          <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm" />
-        </div>
+      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+        <Field label="Full name" htmlFor="fullName">
+          <Input
+            id="fullName"
+            required
+            autoComplete="name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+          />
+        </Field>
+        <Field label="Email" htmlFor="email">
+          <Input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+        <Field label="Mobile number" htmlFor="mobileNumber">
+          <Input
+            id="mobileNumber"
+            required
+            inputMode="tel"
+            autoComplete="tel"
+            value={mobileNumber}
+            onChange={(e) => setMobileNumber(e.target.value)}
+          />
+        </Field>
+        <Field label="Password" htmlFor="password" hint="At least 6 characters.">
+          <Input
+            id="password"
+            type="password"
+            required
+            minLength={6}
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </Field>
         {referralCode && (
           <p className="text-xs text-success">Referral code &quot;{referralCode}&quot; will be applied.</p>
         )}
-        {error && <p className="text-sm text-danger">{error}</p>}
-        <button type="submit" disabled={loading} className="w-full rounded-lg bg-primary py-2.5 text-sm text-white hover:bg-primary/90 disabled:opacity-60">
+        {error && (
+          <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{error}</p>
+        )}
+        <button type="submit" disabled={loading} className="btn-primary w-full">
           {loading ? "Creating account…" : "Create account"}
         </button>
       </form>
 
       <p className="mt-6 text-sm text-ink-muted">
-        Already have an account? <Link href="/login" className="text-ink underline">Sign in</Link>
+        Already have an account?{" "}
+        <Link href="/login" className="font-semibold text-primary hover:underline">
+          Sign in
+        </Link>
       </p>
-    </div>
+    </Shell>
   );
 }
 
@@ -108,10 +158,10 @@ export default function RegisterPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-sm px-6 py-16">
-          <h1 className="text-3xl font-bold text-ink">Create an account</h1>
-          <p className="mt-2 text-sm text-ink-muted">Loading…</p>
-        </div>
+        <Shell>
+          <h1 className="mt-5 text-2xl font-bold text-ink">Create an account</h1>
+          <p className="mt-1 text-sm text-ink-muted">Loading…</p>
+        </Shell>
       }
     >
       <RegisterForm />

@@ -28,11 +28,14 @@ export function CategoryCard({
     <Link
       href={href}
       className={cn(
-        "flex flex-col items-center rounded-2xl border border-line bg-white p-4 text-center shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg",
+        "group flex flex-col items-center rounded-2xl border border-line bg-white p-4 text-center shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.98] motion-reduce:transform-none",
         className,
       )}
     >
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundColor: bg }}>
+      <span
+        className="flex h-14 w-14 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-110 motion-reduce:transform-none"
+        style={{ backgroundColor: bg }}
+      >
         <Icon className="h-6 w-6" style={{ color: tint }} aria-hidden />
       </span>
       <span className="mt-2 line-clamp-2 text-[0.8rem] font-semibold text-ink">{label}</span>

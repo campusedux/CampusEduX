@@ -4,7 +4,6 @@ import {
   LayoutGrid,
   Briefcase,
   GraduationCap,
-  BookOpen,
   FileText,
   Wrench,
   Boxes,
@@ -36,10 +35,8 @@ export interface NavItem {
 export const HEADER_LINKS: NavItem[] = [
   { label: "Projects", href: "/projects", icon: LayoutGrid, tint: "#4F39F6", bg: "#EEF0FF" },
   { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
-  { label: "Placement", href: "/placement", icon: GraduationCap, tint: "#EF4444", bg: "#FEE2E2" },
+  { label: "Learning", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
   { label: "Resume", href: "/resume", icon: FileText, tint: "#16A34A", bg: "#DCFCE7" },
-  { label: "Custom Projects", href: "/custom-projects", icon: Wrench, tint: "#4F39F6", bg: "#EEF0FF" },
-  { label: "Premium", href: "/premium", icon: Star, tint: "#F59E0B", bg: "#FEF3C7" },
 ];
 
 /** Full destination list for the mobile drawer — mirrors the app's DrawerContent. */
@@ -50,8 +47,7 @@ export const DRAWER_LINKS: NavItem[] = [
   { label: "Custom Project Builder", href: "/custom-projects", icon: Wrench, tint: "#4F39F6", bg: "#EEF0FF" },
   { label: "My Custom Projects", href: "/custom-projects/my-projects", icon: Boxes, tint: "#0D9488", bg: "#CCFBF1", authOnly: true },
   { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
-  { label: "Placement Preparation", href: "/placement", icon: GraduationCap, tint: "#EF4444", bg: "#FEE2E2" },
-  { label: "Study Notes", href: "/placement/notes", icon: BookOpen, tint: "#16A34A", bg: "#DCFCE7" },
+  { label: "Learning", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
   { label: "Resume Builder", href: "/resume", icon: FileText, tint: "#16A34A", bg: "#DCFCE7" },
   { label: "Companies", href: "/jobs/companies", icon: Building2, tint: "#0D9488", bg: "#CCFBF1" },
   { label: "Referral & Earn", href: "/referral", icon: Gift, tint: "#EC4899", bg: "#FCE7F3" },
@@ -65,11 +61,11 @@ export const DRAWER_LINKS: NavItem[] = [
   { label: "About", href: "/about", icon: Info, tint: "#2563EB", bg: "#DBEAFE" },
 ];
 
-/** Bottom navigation on mobile — mirrors the app's 5-tab bar (Prep → "Learn"). */
+/** Bottom navigation on mobile — mirrors the app's 5-tab bar. */
 export const BOTTOM_TABS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Home", href: "/", icon: Home },
   { label: "Projects", href: "/projects", icon: LayoutGrid },
   { label: "Jobs", href: "/jobs", icon: Briefcase },
-  { label: "Learn", href: "/placement", icon: GraduationCap },
+  { label: "Learning", href: "/learning", icon: GraduationCap },
   { label: "Account", href: "/account", icon: User },
 ];

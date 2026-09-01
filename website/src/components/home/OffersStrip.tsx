@@ -13,11 +13,11 @@ export function OffersStrip({ offers }: { offers: OfferBanner[] }) {
   if (offers.length === 0) return null;
   return (
     <section className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {offers.map((o) => (
           <div
             key={o.id}
-            className="flex min-w-[240px] max-w-xs flex-1 items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4"
+            className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4"
           >
             <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-warning/20">
               <Tag className="h-4 w-4 text-warning" aria-hidden />

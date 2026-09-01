@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { X } from "lucide-react";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import { SearchBar, FilterSheet, Pagination, EmptyState } from "@/components/ui";
@@ -77,6 +79,37 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
   const activeCount = [searchParams.category, searchParams.min, searchParams.max, flag, searchParams.sort && searchParams.sort !== "newest" ? "1" : ""].filter(Boolean).length;
   const carried = cleanParams({ ...filterState, page: undefined });
 
+  // Active-filter summary chips — each removes one filter, keeping the rest.
+  const chipParams = cleanParams({ ...filterState });
+  const without = (drop: string | string[]) => {
+    const keys = Array.isArray(drop) ? drop : [drop];
+    const next = { ...chipParams };
+    keys.forEach((k) => delete next[k]);
+    const qs = new URLSearchParams(next).toString();
+    return qs ? `/projects?${qs}` : "/projects";
+  };
+  const catName = searchParams.category
+    ? categories.find((c) => c.id === searchParams.category)?.name
+    : undefined;
+  const priceLabel =
+    min !== undefined && max !== undefined
+      ? `₹${min}–₹${max}`
+      : min !== undefined
+        ? `From ₹${min}`
+        : max !== undefined
+          ? `Up to ₹${max}`
+          : undefined;
+  const sortLabel =
+    searchParams.sort && searchParams.sort !== "newest" ? PROJECT_SORTS[sort]?.label : undefined;
+  const flagLabel = flag === "premium" ? "Premium" : flag === "bestseller" ? "Best sellers" : undefined;
+  const chips = [
+    catName ? { label: catName, href: without("category") } : null,
+    priceLabel ? { label: priceLabel, href: without(["min", "max"]) } : null,
+    flagLabel ? { label: flagLabel, href: without("flag") } : null,
+    sortLabel ? { label: `Sorted: ${sortLabel}`, href: without("sort") } : null,
+  ].filter((c): c is { label: string; href: string } => c !== null);
+  const clearAllHref = searchParams.q ? `/projects?q=${encodeURIComponent(searchParams.q)}` : "/projects";
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <h1 className="text-3xl font-bold text-ink">Project Marketplace</h1>
@@ -95,6 +128,23 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
         </FilterSheet>
 
         <div>
+          {chips.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {chips.map((c) => (
+                <Link
+                  key={c.label}
+                  href={c.href}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
+                >
+                  {c.label}
+                  <X className="h-3 w-3" aria-hidden />
+                </Link>
+              ))}
+              <Link href={clearAllHref} className="text-xs font-semibold text-primary hover:underline">
+                Clear all
+              </Link>
+            </div>
+          )}
           <div className="mb-4 text-sm text-ink-muted">
             {count ?? 0} project{(count ?? 0) === 1 ? "" : "s"}
             {page > 1 ? ` · page ${page} of ${pages}` : ""}

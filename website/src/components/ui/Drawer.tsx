@@ -48,7 +48,10 @@ export function Drawer({
       aria-hidden={!open}
     >
       <div
-        className={cn("absolute inset-0 bg-ink/40 transition-opacity", open ? "opacity-100" : "opacity-0")}
+        className={cn(
+          "absolute inset-0 bg-ink/40 transition-opacity motion-reduce:transition-none",
+          open ? "opacity-100" : "opacity-0",
+        )}
         onClick={onClose}
       />
       <div
@@ -56,7 +59,7 @@ export function Drawer({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "absolute flex flex-col bg-white shadow-card-lg transition-transform duration-200 ease-out",
+          "absolute flex flex-col bg-white shadow-card-lg transition-transform duration-200 ease-out motion-reduce:transition-none",
           panelPos,
           className,
         )}

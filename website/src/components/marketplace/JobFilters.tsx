@@ -1,4 +1,5 @@
 import { JOB_SORTS, JOB_TYPES } from "@/lib/marketplace";
+import { Input, Select } from "@/components/ui";
 
 export interface JobFilterState {
   q?: string;
@@ -10,58 +11,47 @@ export interface JobFilterState {
 /** GET `<form>` — mirrors ProjectFilters. Submitting navigates to `/jobs?…`. */
 export function JobFilters({ state }: { state: JobFilterState }) {
   return (
-    <form action="/jobs" method="get" className="space-y-4 text-sm">
+    <form action="/jobs" method="get" className="space-y-5 text-sm">
       {state.q ? <input type="hidden" name="q" value={state.q} /> : null}
 
       <div>
-        <label className="mb-1 block font-medium text-ink" htmlFor="j-location">
+        <label className="mb-1.5 block font-semibold text-ink" htmlFor="j-location">
           Location
         </label>
-        <input
+        <Input
           id="j-location"
           type="text"
           name="location"
           placeholder="Any location"
           defaultValue={state.location ?? ""}
-          className="w-full rounded-lg border border-line bg-white px-3 py-2"
         />
       </div>
 
       <div>
-        <label className="mb-1 block font-medium text-ink" htmlFor="j-type">
+        <label className="mb-1.5 block font-semibold text-ink" htmlFor="j-type">
           Job type
         </label>
-        <select
-          id="j-type"
-          name="type"
-          defaultValue={state.type ?? ""}
-          className="w-full rounded-lg border border-line bg-white px-3 py-2"
-        >
+        <Select id="j-type" name="type" defaultValue={state.type ?? ""}>
           <option value="">All types</option>
           {JOB_TYPES.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div>
-        <label className="mb-1 block font-medium text-ink" htmlFor="j-sort">
+        <label className="mb-1.5 block font-semibold text-ink" htmlFor="j-sort">
           Sort by
         </label>
-        <select
-          id="j-sort"
-          name="sort"
-          defaultValue={state.sort ?? "newest"}
-          className="w-full rounded-lg border border-line bg-white px-3 py-2"
-        >
+        <Select id="j-sort" name="sort" defaultValue={state.sort ?? "newest"}>
           {Object.entries(JOB_SORTS).map(([key, s]) => (
             <option key={key} value={key}>
               {s.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="flex gap-2 pt-1">

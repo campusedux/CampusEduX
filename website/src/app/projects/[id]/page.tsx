@@ -1,7 +1,6 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import Image from "next/image";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import JsonLd from "@/components/JsonLd";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
@@ -9,6 +8,7 @@ import { Badge, Rating, PriceDisplay, TagPill, ReviewCard, SectionHeader, EmptyS
 import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import ProjectPurchasePanel from "./ProjectPurchasePanel";
+import Gallery from "./Gallery";
 
 export const revalidate = 300;
 
@@ -107,29 +107,12 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
         ])}
       />
 
-      <div className="grid gap-8 lg:grid-cols-[1.15fr_1fr]">
+      <div className="grid gap-8 lg:grid-cols-[1.15fr_1fr] lg:items-start">
         {/* Gallery */}
-        <div>
-          <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border border-line bg-primary-50">
-            {gallery[0] ? (
-              <Image src={gallery[0]} alt={project.title} fill className="object-cover" priority sizes="(max-width:1024px) 100vw, 55vw" />
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-ink-faint">No preview image</div>
-            )}
-          </div>
-          {gallery.length > 1 && (
-            <div className="mt-3 grid grid-cols-4 gap-3">
-              {gallery.slice(0, 8).map((src) => (
-                <div key={src} className="relative aspect-[4/3] overflow-hidden rounded-lg border border-line bg-surface">
-                  <Image src={src} alt="" fill className="object-cover" sizes="20vw" />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <Gallery images={gallery} title={project.title} />
 
-        {/* Buy box */}
-        <div>
+        {/* Buy box — sticks alongside the gallery on desktop */}
+        <div className="lg:sticky lg:top-24">
           <div className="text-sm text-ink-muted">{project.category_name || "Uncategorised"}</div>
           <h1 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">{project.title}</h1>
 

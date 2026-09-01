@@ -93,13 +93,13 @@ export default async function Page() {
             </p>
 
             <div className="mt-6 flex items-center justify-between border-t border-line pt-6">
-              <Link href="/custom-projects/features" className="text-sm text-ink underline">
+              <Link
+                href="/custom-projects/features"
+                className="text-sm font-medium text-ink-muted underline hover:text-ink"
+              >
                 Back
               </Link>
-              <Link
-                href="/custom-projects/checkout"
-                className="rounded-lg bg-primary px-6 py-2.5 text-sm text-white hover:bg-primary/90"
-              >
+              <Link href="/custom-projects/checkout" className="btn-primary">
                 Proceed to payment
               </Link>
             </div>

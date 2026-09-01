@@ -32,7 +32,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
     <Link
       href={`/jobs/${job.id}`}
       className={cn(
-        "block rounded-2xl border border-line bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg",
+        "group block rounded-2xl border border-line bg-white p-4 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none",
         className,
       )}
     >
@@ -45,7 +45,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-bold text-ink">{job.title}</h3>
+          <h3 className="truncate font-bold text-ink group-hover:text-primary">{job.title}</h3>
           <p className="truncate text-sm text-ink-muted">{job.company_name || "Company"}</p>
         </div>
       </div>

@@ -33,17 +33,17 @@ export function ProjectCard({ project, rank, className }: { project: ProjectCard
     <Link
       href={`/projects/${project.id}`}
       className={cn(
-        "group block overflow-hidden rounded-2xl border border-line bg-white shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg",
+        "group block overflow-hidden rounded-2xl border border-line bg-white shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none",
         className,
       )}
     >
-      <div className="relative flex aspect-[16/10] items-center justify-center bg-primary-50">
+      <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden bg-primary-50">
         {project.thumbnail_url ? (
           <Image
             src={project.thumbnail_url}
             alt={project.title}
             fill
-            className="object-cover"
+            className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04] motion-reduce:transform-none"
             sizes="(max-width: 768px) 100vw, 25vw"
           />
         ) : project.is_premium ? (

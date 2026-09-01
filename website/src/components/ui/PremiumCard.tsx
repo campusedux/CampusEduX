@@ -1,7 +1,6 @@
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { formatINR } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { Badge } from "./Badge";
 
 export type PremiumPlanData = {
   id: string;
@@ -34,17 +33,22 @@ export function PremiumCard({
   return (
     <div
       className={cn(
-        "flex flex-col rounded-2xl border bg-white p-6 shadow-card",
-        popular ? "border-primary ring-1 ring-primary" : "border-line",
+        "relative flex flex-col rounded-2xl border bg-white p-6 shadow-card transition",
+        popular
+          ? "border-primary shadow-card-lg ring-2 ring-primary lg:-translate-y-1"
+          : "border-line hover:-translate-y-0.5 hover:shadow-card-lg motion-reduce:transform-none",
         className,
       )}
     >
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-ink">{plan.name}</h3>
-        {popular && <Badge tone="primary">Popular</Badge>}
-      </div>
+      {popular && (
+        <span className="absolute -top-3 left-6 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-[0.7rem] font-bold uppercase tracking-wide text-white shadow-sm">
+          <Sparkles className="h-3 w-3" aria-hidden />
+          Most popular
+        </span>
+      )}
+      <h3 className="text-lg font-bold text-ink">{plan.name}</h3>
       <div className="mt-3 flex items-baseline gap-1.5">
-        <span className="text-2xl font-bold text-ink">{plan.price > 0 ? formatINR(plan.price) : "Free"}</span>
+        <span className="text-3xl font-bold text-ink">{plan.price > 0 ? formatINR(plan.price) : "Free"}</span>
         {plan.period_label && <span className="text-sm text-ink-muted">{plan.period_label}</span>}
       </div>
       {typeof plan.original_price === "number" && plan.original_price > plan.price && (

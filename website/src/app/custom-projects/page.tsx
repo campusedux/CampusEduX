@@ -73,25 +73,28 @@ export default async function CustomProjectsPage() {
       </div>
 
       <h2 className="mt-12 text-xl font-bold text-ink">How it works</h2>
-      <ol className="mt-4 space-y-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {STEPS.map((s, i) => (
-          <li key={s} className="flex gap-3 text-ink-muted">
-            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-bold text-primary">
+          <div key={s} className="flex items-start gap-3 rounded-2xl border border-line bg-white p-4 shadow-card">
+            <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
               {i + 1}
             </span>
-            <span>{s}</span>
-          </li>
+            <span className="text-sm text-ink-muted">{s}</span>
+          </div>
         ))}
-      </ol>
+      </div>
 
       {typeStarting.length > 0 && (
         <>
           <h2 className="mt-12 text-xl font-bold text-ink">Starting price by project type</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {typeStarting.map((t) => (
-              <div key={t.type} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+              <div
+                key={t.type}
+                className="rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+              >
                 <div className="font-semibold text-ink">{TYPE_LABEL[t.type] ?? t.type}</div>
-                <div className="mt-1 text-sm text-ink-muted">from {formatINR(t.from)}</div>
+                <div className="mt-1 text-lg font-bold text-ink">from {formatINR(t.from)}</div>
                 <div className="mt-1 text-xs text-ink-faint">{formatINR(t.token)} token to begin</div>
               </div>
             ))}
@@ -104,7 +107,10 @@ export default async function CustomProjectsPage() {
           <h2 className="mt-12 text-xl font-bold text-ink">Platform options</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {platforms.map((p: { platform: string; label: string; charge: number }) => (
-              <div key={p.platform} className="rounded-2xl border border-line bg-white p-4 text-center shadow-card">
+              <div
+                key={p.platform}
+                className="rounded-2xl border border-line bg-white p-5 text-center shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+              >
                 <div className="text-sm text-ink-muted">{p.label}</div>
                 <div className="mt-1 font-semibold text-ink">{Number(p.charge) > 0 ? `+${formatINR(p.charge)}` : "Included"}</div>
               </div>

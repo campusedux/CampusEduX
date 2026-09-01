@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { X } from "lucide-react";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import { SearchBar, FilterSheet, Pagination, EmptyState } from "@/components/ui";
@@ -42,6 +44,23 @@ export default async function JobsPage({ searchParams }: { searchParams: SP }) {
   const activeCount = [searchParams.location, searchParams.type, searchParams.sort && searchParams.sort !== "newest" ? "1" : ""].filter(Boolean).length;
   const carried = cleanParams({ ...filterState, page: undefined });
 
+  // Active-filter summary chips — each removes one filter, keeping the rest.
+  const chipParams = cleanParams({ ...filterState });
+  const without = (drop: string) => {
+    const next = { ...chipParams };
+    delete next[drop];
+    const qs = new URLSearchParams(next).toString();
+    return qs ? `/jobs?${qs}` : "/jobs";
+  };
+  const sortLabel =
+    searchParams.sort && searchParams.sort !== "newest" ? JOB_SORTS[sort]?.label : undefined;
+  const chips = [
+    searchParams.location ? { label: searchParams.location, href: without("location") } : null,
+    searchParams.type ? { label: searchParams.type, href: without("type") } : null,
+    sortLabel ? { label: `Sorted: ${sortLabel}`, href: without("sort") } : null,
+  ].filter((c): c is { label: string; href: string } => c !== null);
+  const clearAllHref = searchParams.q ? `/jobs?q=${encodeURIComponent(searchParams.q)}` : "/jobs";
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <h1 className="text-3xl font-bold text-ink">Jobs &amp; Internships</h1>
@@ -60,6 +79,23 @@ export default async function JobsPage({ searchParams }: { searchParams: SP }) {
         </FilterSheet>
 
         <div>
+          {chips.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {chips.map((c) => (
+                <Link
+                  key={c.label}
+                  href={c.href}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
+                >
+                  {c.label}
+                  <X className="h-3 w-3" aria-hidden />
+                </Link>
+              ))}
+              <Link href={clearAllHref} className="text-xs font-semibold text-primary hover:underline">
+                Clear all
+              </Link>
+            </div>
+          )}
           <div className="mb-4 text-sm text-ink-muted">
             {count ?? 0} role{(count ?? 0) === 1 ? "" : "s"}
             {page > 1 ? ` · page ${page} of ${pages}` : ""}

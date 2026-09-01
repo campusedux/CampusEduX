@@ -9,7 +9,10 @@ import { useSessionProfile } from "@/lib/useSessionProfile";
 import { DRAWER_LINKS } from "./navConfig";
 import { cn } from "@/lib/cn";
 
-/** Hamburger + slide-in drawer — mirrors `mobile-app/src/navigation/DrawerContent.tsx`. */
+/**
+ * Hamburger + slide-in drawer — mirrors `mobile-app/src/navigation/DrawerContent.tsx`.
+ * Visible below `lg`; on `lg+` the horizontal `<HeaderLinks>` takes over.
+ */
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -29,7 +32,7 @@ export function MobileNav() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink hover:bg-surface md:hidden"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink transition hover:bg-surface lg:hidden"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -104,12 +107,20 @@ export function MobileNav() {
               <span className="text-[15px] font-semibold text-danger">Logout</span>
             </Link>
           ) : (
-            <Link href="/login" className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-surface">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50">
-                <ChevronRight className="h-[18px] w-[18px] text-primary" aria-hidden />
-              </span>
-              <span className="text-[15px] font-semibold text-primary">Sign in</span>
-            </Link>
+            <div className="flex flex-col gap-2 px-1 pb-1 pt-1">
+              <Link
+                href="/login"
+                className="flex h-11 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white transition hover:bg-primary-600 active:scale-[.98] motion-reduce:active:scale-100"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/register"
+                className="flex h-11 items-center justify-center rounded-xl border border-line text-[15px] font-semibold text-ink transition hover:bg-surface active:scale-[.98] motion-reduce:active:scale-100"
+              >
+                Create account
+              </Link>
+            </div>
           )}
         </nav>
       </Drawer>

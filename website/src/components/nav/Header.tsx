@@ -1,40 +1,50 @@
 import Link from "next/link";
 import { BRAND } from "@/lib/brand";
-import { HEADER_LINKS } from "./navConfig";
 import { MobileNav } from "./MobileNav";
+import { HeaderLinks } from "./HeaderLinks";
+import { HeaderSearch } from "./HeaderSearch";
+import { HeaderSearchButton } from "./HeaderSearchButton";
+import { NotificationBell } from "./NotificationBell";
 import { AuthMenu } from "./AuthMenu";
 
 /**
- * Site header. Desktop: wordmark + primary module links + auth menu.
- * Mobile (`md:` down): wordmark + hamburger (opens the drawer) + auth menu.
- * A separate fixed bottom tab bar (`<BottomNav>`) handles primary mobile
- * navigation, mirroring the app.
+ * Site header — a compact three-zone grid.
+ * - `lg+`: wordmark (left) · centred module nav with an active underline
+ *   (centre) · compact search + notifications + auth (right).
+ * - `< lg`: wordmark (left) · search + notifications + hamburger drawer (right).
+ *   Auth and the full destination list live inside the drawer; a fixed bottom
+ *   tab bar (`<BottomNav>`) covers primary navigation on phones.
  */
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 border-b border-line bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
-        <MobileNav />
-
-        <Link href="/" className="flex items-center gap-2.5" aria-label={`${BRAND.name} home`}>
+    <header className="sticky top-0 z-50 border-b border-line bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/75">
+      <div className="mx-auto grid h-16 max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 sm:px-6 lg:grid-cols-[1fr_auto_1fr]">
+        {/* Left — brand */}
+        <Link
+          href="/"
+          className="flex items-center gap-2.5 rounded-lg transition-opacity hover:opacity-90"
+          aria-label={`${BRAND.name} home`}
+        >
           <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-primary text-base font-black text-white">
             C
           </span>
-          <span className="text-[15px] font-bold tracking-tight text-ink">
+          <span className="hidden text-[15px] font-bold tracking-tight text-ink min-[360px]:inline">
             Campus<span className="text-primary">EduX</span>
           </span>
         </Link>
 
-        <nav className="ml-4 hidden flex-1 items-center gap-6 text-sm md:flex">
-          {HEADER_LINKS.map((l) => (
-            <Link key={l.href} href={l.href} className="font-medium text-ink-muted hover:text-primary">
-              {l.label}
-            </Link>
-          ))}
-        </nav>
+        {/* Centre — primary nav (lg+) */}
+        <div className="flex min-w-0 justify-center">
+          <HeaderLinks />
+        </div>
 
-        <div className="ml-auto md:ml-0">
+        {/* Right — actions */}
+        <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+          <HeaderSearch />
+          <HeaderSearchButton />
+          <NotificationBell />
           <AuthMenu />
+          <MobileNav />
         </div>
       </div>
     </header>

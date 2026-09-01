@@ -14,14 +14,19 @@ export type ResumeTemplateData = {
 /** Resume template preview tile. */
 export function ResumeTemplateCard({ template, className }: { template: ResumeTemplateData; className?: string }) {
   return (
-    <div className={cn("overflow-hidden rounded-2xl border border-line bg-white shadow-card", className)}>
-      <div className="relative flex aspect-[3/4] items-center justify-center bg-surface">
+    <div
+      className={cn(
+        "group overflow-hidden rounded-2xl border border-line bg-white shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none",
+        className,
+      )}
+    >
+      <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-surface">
         {template.preview_url ? (
           <Image
             src={template.preview_url}
             alt={template.name}
             fill
-            className="object-cover"
+            className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04] motion-reduce:transform-none"
             sizes="(max-width: 768px) 50vw, 25vw"
           />
         ) : (

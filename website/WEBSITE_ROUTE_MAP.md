@@ -10,7 +10,10 @@
 | `/jobs` | Job catalog + search | `jobs` | Public | Indexed |
 | `/jobs/[id]` | Job detail | `jobs`, `companies` | Public | Indexed, dynamic metadata |
 | `/jobs/companies` `/jobs/companies/[id]` | Company directory + detail | `companies`, `jobs` | Public | Indexed |
-| `/placement` | Prep track overview | `companies` | Public | Indexed |
+| `/learning` | Unified Learning hub — grid cards (Aptitude / DSA / Mock Test / HR Interview / Company-Specific + course/branch grids) | `learning_grids`, `learning_grid_companies` | Public | Indexed |
+| `/learning/[gridSlug]` | Grid detail — sections + topics (typed grids render `dsa_topics` / `hr_questions` / `practice_tests`) | `learning_grids`, `learning_sections`, `learning_topics`, `dsa_topics`, `hr_questions`, `practice_tests` | Public | Indexed, dynamic metadata |
+| `/learning/[gridSlug]/[topicSlug]` | Topic content (Markdown); premium topics gated | `learning_topics`, `learning_content`, `learning_bookmarks` | Public (premium body gated) | Indexed, dynamic metadata |
+| `/placement`, `/placement/notes`, `/placement/notes/[id]` | Legacy Placement / Study-Notes URLs — **308 → `/learning`** (`/placement/notes/[id]` resolves the old `prep_notes` id to its canonical Learning topic) | — | Public | 308 redirect (SEO equity preserved) |
 | `/resume` `/resume/templates` | Resume builder overview + templates | `resume_templates` | Public | Indexed |
 | `/custom-projects` | Builder explainer + live pricing | `custom_project_pricing`, `custom_project_platform_pricing`, `custom_project_features` | Public | Indexed |
 | `/custom-projects/start` `/features` `/estimate` `/checkout` | Request wizard (draft-backed; server-computed estimate) | `custom_project_drafts`, catalog tables, `create/verify-custom-project-payment` Edge Functions | Auth-only | `noindex` |

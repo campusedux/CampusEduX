@@ -7,8 +7,9 @@ import { Button } from "@/components/ui";
 
 type Phase = "loading" | "anon" | "ready";
 
-/** Toggle a `prep_note_bookmarks` row for the signed-in student (RLS: own rows). */
-export default function BookmarkButton({ noteId }: { noteId: string }) {
+/** Toggle a `learning_bookmarks` row for the signed-in student (RLS: own rows).
+ *  Independent of the prep_notes bookmark system — it targets the new tree. */
+export function LearningBookmarkButton({ topicId, slugPath }: { topicId: string; slugPath: string }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [bookmarked, setBookmarked] = useState(false);
   const [pending, setPending] = useState(false);
@@ -24,14 +25,14 @@ export default function BookmarkButton({ noteId }: { noteId: string }) {
       return;
     }
     const { data } = await supabase
-      .from("prep_note_bookmarks")
-      .select("note_id")
+      .from("learning_bookmarks")
+      .select("topic_id")
       .eq("user_id", user.id)
-      .eq("note_id", noteId)
+      .eq("topic_id", topicId)
       .maybeSingle();
     setBookmarked(!!data);
     setPhase("ready");
-  }, [noteId]);
+  }, [topicId]);
 
   useEffect(() => {
     load();
@@ -51,8 +52,10 @@ export default function BookmarkButton({ noteId }: { noteId: string }) {
     }
     const next = !bookmarked;
     const res = next
-      ? await supabase.from("prep_note_bookmarks").upsert({ user_id: user.id, note_id: noteId }, { onConflict: "user_id,note_id" })
-      : await supabase.from("prep_note_bookmarks").delete().eq("user_id", user.id).eq("note_id", noteId);
+      ? await supabase
+          .from("learning_bookmarks")
+          .upsert({ user_id: user.id, topic_id: topicId }, { onConflict: "user_id,topic_id" })
+      : await supabase.from("learning_bookmarks").delete().eq("user_id", user.id).eq("topic_id", topicId);
     setPending(false);
     if (res.error) {
       setError("Couldn't update the bookmark. Try again.");
@@ -61,10 +64,10 @@ export default function BookmarkButton({ noteId }: { noteId: string }) {
     setBookmarked(next);
   }
 
-  if (phase === "loading") return <div className="h-11 w-40 animate-pulse rounded-xl bg-line/70" />;
+  if (phase === "loading") return <div className="h-9 w-32 animate-pulse rounded-xl bg-line/70" />;
   if (phase === "anon") {
     return (
-      <Button href={`/login?next=${encodeURIComponent(`/placement/notes/${noteId}`)}`} variant="ghost" leftIcon={Bookmark}>
+      <Button href={`/login?next=${encodeURIComponent(slugPath)}`} variant="ghost" size="sm" leftIcon={Bookmark}>
         Sign in to bookmark
       </Button>
     );
@@ -74,6 +77,7 @@ export default function BookmarkButton({ noteId }: { noteId: string }) {
     <div>
       <Button
         variant={bookmarked ? "secondary" : "ghost"}
+        size="sm"
         onClick={toggle}
         loading={pending}
         leftIcon={bookmarked ? BookmarkCheck : Bookmark}
@@ -84,3 +88,5 @@ export default function BookmarkButton({ noteId }: { noteId: string }) {
     </div>
   );
 }
+
+export default LearningBookmarkButton;

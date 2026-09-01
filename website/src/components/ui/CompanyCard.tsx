@@ -18,7 +18,7 @@ export function CompanyCard({ company, className }: { company: CompanyCardData; 
     <Link
       href={`/jobs/companies/${company.id}`}
       className={cn(
-        "flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg",
+        "group flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none",
         className,
       )}
     >
@@ -30,7 +30,7 @@ export function CompanyCard({ company, className }: { company: CompanyCardData; 
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-semibold text-ink">{company.name}</span>
+        <span className="block truncate font-semibold text-ink group-hover:text-primary">{company.name}</span>
         <span className="block truncate text-xs text-ink-muted">
           {roles > 0 ? `${roles} open role${roles > 1 ? "s" : ""}` : company.location || "View company"}
         </span>

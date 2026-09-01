@@ -85,13 +85,9 @@ export default function MessageThread({
           onChange={(e) => setBody(e.target.value)}
           maxLength={4000}
           placeholder="Write a message…"
-          className="flex-1 border border-line bg-white px-3 py-2 text-sm"
+          className="h-11 flex-1 rounded-xl border border-line bg-white px-3.5 text-sm text-ink shadow-sm outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
-        <button
-          type="submit"
-          disabled={sending || !body.trim()}
-          className="rounded-lg bg-primary px-5 py-2 text-sm text-white hover:bg-primary/90 disabled:opacity-50"
-        >
+        <button type="submit" disabled={sending || !body.trim()} className="btn-primary">
           {sending ? "Sending…" : "Send"}
         </button>
       </form>
