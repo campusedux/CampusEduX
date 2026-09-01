@@ -3,16 +3,13 @@
 import { useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import type { AccountUser } from "@/lib/auth";
-import { Button } from "@/components/ui";
+import { Button, Field, Input, Select } from "@/components/ui";
 
 interface Catalog {
   courses: { id: string; name: string }[];
   branches: { id: string; name: string; course_id: string | null }[];
   years: string[];
 }
-
-const inputCls = "mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm";
-const disabledCls = "mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink-muted";
 
 export default function ProfileForm({ initial, catalog }: { initial: AccountUser; catalog: Catalog }) {
   const [fullName, setFullName] = useState(initial.fullName);
@@ -52,30 +49,26 @@ export default function ProfileForm({ initial, catalog }: { initial: AccountUser
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
-      <div>
-        <label className="text-sm font-medium text-ink">Full name</label>
-        <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} />
-      </div>
-      <div>
-        <label className="text-sm font-medium text-ink">Email</label>
-        <input value={initial.email} disabled className={disabledCls} />
-      </div>
-      <div>
-        <label className="text-sm font-medium text-ink">Mobile number</label>
-        <input value={initial.mobileNumber} disabled className={disabledCls} />
-      </div>
+      <Field label="Full name" htmlFor="pf-full-name">
+        <Input id="pf-full-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+      </Field>
+      <Field label="Email" htmlFor="pf-email">
+        <Input id="pf-email" value={initial.email} disabled />
+      </Field>
+      <Field label="Mobile number" htmlFor="pf-mobile">
+        <Input id="pf-mobile" value={initial.mobileNumber} disabled />
+      </Field>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div>
-          <label className="text-sm font-medium text-ink">Course</label>
+        <Field label="Course" htmlFor="pf-course">
           {hasCatalog ? (
-            <select
+            <Select
+              id="pf-course"
               value={course}
               onChange={(e) => {
                 setCourse(e.target.value);
                 setBranch("");
               }}
-              className={inputCls}
             >
               <option value="">Select…</option>
               {catalog.courses.map((c) => (
@@ -83,45 +76,45 @@ export default function ProfileForm({ initial, catalog }: { initial: AccountUser
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
-            <input value={course} onChange={(e) => setCourse(e.target.value)} className={inputCls} />
+            <Input id="pf-course" value={course} onChange={(e) => setCourse(e.target.value)} />
           )}
-        </div>
-        <div>
-          <label className="text-sm font-medium text-ink">Branch</label>
+        </Field>
+        <Field label="Branch" htmlFor="pf-branch">
           {hasCatalog ? (
-            <select value={branch} onChange={(e) => setBranch(e.target.value)} className={inputCls}>
+            <Select id="pf-branch" value={branch} onChange={(e) => setBranch(e.target.value)}>
               <option value="">Select…</option>
               {branchOptions.map((b) => (
                 <option key={b.id} value={b.name}>
                   {b.name}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
-            <input value={branch} onChange={(e) => setBranch(e.target.value)} className={inputCls} />
+            <Input id="pf-branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
           )}
-        </div>
-        <div>
-          <label className="text-sm font-medium text-ink">Year</label>
+        </Field>
+        <Field label="Year" htmlFor="pf-year">
           {hasCatalog ? (
-            <select value={year} onChange={(e) => setYear(e.target.value)} className={inputCls}>
+            <Select id="pf-year" value={year} onChange={(e) => setYear(e.target.value)}>
               <option value="">Select…</option>
               {catalog.years.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
-            <input value={year} onChange={(e) => setYear(e.target.value)} className={inputCls} />
+            <Input id="pf-year" value={year} onChange={(e) => setYear(e.target.value)} />
           )}
-        </div>
+        </Field>
       </div>
 
-      {error && <p className="text-sm text-danger">{error}</p>}
-      {saved && <p className="text-sm text-success">Saved.</p>}
+      {error && (
+        <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{error}</p>
+      )}
+      {saved && <p className="text-sm font-medium text-success">Saved.</p>}
       <Button type="submit" loading={saving}>
         {saving ? "Saving…" : "Save changes"}
       </Button>
