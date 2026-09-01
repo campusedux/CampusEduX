@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, ChevronRight, Lock } from "lucide-react";
 import { getLearningTree, getLearningGridBrief, firstTopicOf, isContentGrid } from "@/lib/learning";
+import { Button } from "@/components/ui";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { DocsShell } from "../_components/DocsShell";
@@ -103,13 +104,13 @@ export default async function GridOverviewPage({ params }: { params: { gridSlug:
         {grid.description ? <p className="mt-3 max-w-2xl text-ink-muted">{grid.description}</p> : null}
 
         {start ? (
-          <Link
+          <Button
             href={`/learning/${grid.slug}/${start.topic.slug}`}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-600"
+            rightIcon={ArrowRight}
+            className="mt-5"
           >
             Start reading: {start.topic.title}
-            <ArrowRight className="h-4 w-4" aria-hidden />
-          </Link>
+          </Button>
         ) : null}
 
         <p className="mt-6 text-xs font-medium uppercase tracking-wide text-ink-faint">
