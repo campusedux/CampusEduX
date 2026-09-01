@@ -24,7 +24,7 @@ export default async function CmsLegalPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-14">
-      <h1 className="text-3xl text-ink">{title}</h1>
+      <h1 className="text-3xl font-bold text-ink">{title}</h1>
       {page?.updated_at && (
         <p className="mt-1 text-xs text-ink-muted">Last updated {new Date(page.updated_at).toLocaleDateString("en-IN")}</p>
       )}

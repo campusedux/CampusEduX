@@ -6,7 +6,7 @@ export default function ContactPage() {
   const email = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
   return (
     <div className="mx-auto max-w-2xl px-6 py-14">
-      <h1 className="text-3xl text-ink">Contact</h1>
+      <h1 className="text-3xl font-bold text-ink">Contact</h1>
       <p className="mt-4 text-ink-muted">
         {email ? (
           <>

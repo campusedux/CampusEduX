@@ -104,7 +104,7 @@ export default async function Page({ params }: Params) {
 
       <div className="mt-4 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl text-ink">{request.title}</h1>
+          <h1 className="text-3xl font-bold text-ink">{request.title}</h1>
           <div className="text-xs text-ink-muted">
             {request.request_code} · {request.project_type}/{request.project_level} ·{" "}
             {PLATFORM_LABELS[request.platform as Platform] ?? request.platform} · created {timeAgo(request.created_at)}
@@ -150,7 +150,7 @@ export default async function Page({ params }: Params) {
 
       {customRequirements.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-lg text-ink">Custom requirements</h2>
+          <h2 className="text-lg font-bold text-ink">Custom requirements</h2>
           <ul className="mt-2 list-disc pl-5 text-sm text-ink-muted">
             {customRequirements.map((r, i) => (
               <li key={i}>{r.text}</li>
@@ -161,7 +161,7 @@ export default async function Page({ params }: Params) {
 
       {(features ?? []).length > 0 && (
         <div className="mt-6">
-          <h2 className="text-lg text-ink">Selected features</h2>
+          <h2 className="text-lg font-bold text-ink">Selected features</h2>
           <ul className="mt-2 space-y-1 text-sm text-ink-muted">
             {(features ?? []).map((f) => (
               <li key={f.feature_id} className="flex justify-between">
@@ -175,7 +175,7 @@ export default async function Page({ params }: Params) {
 
       {fileLinks.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-lg text-ink">Reference files</h2>
+          <h2 className="text-lg font-bold text-ink">Reference files</h2>
           <ul className="mt-2 space-y-1 text-sm">
             {fileLinks.map((f) => (
               <li key={f.id} className="flex justify-between">
@@ -198,7 +198,7 @@ export default async function Page({ params }: Params) {
       {/* timeline */}
       {(history ?? []).length > 0 && (
         <div className="mt-6">
-          <h2 className="text-lg text-ink">Status history</h2>
+          <h2 className="text-lg font-bold text-ink">Status history</h2>
           <ul className="mt-2 space-y-1 text-sm text-ink-muted">
             {(history ?? []).map((h, i) => (
               <li key={i}>
@@ -214,7 +214,7 @@ export default async function Page({ params }: Params) {
       {/* delivery — only visible once status = delivered (RLS) */}
       {delivery && (
         <div className="mt-6 border border-success/40 bg-white p-5">
-          <h2 className="text-lg text-ink">Delivery</h2>
+          <h2 className="text-lg font-bold text-ink">Delivery</h2>
           {delivery.delivered_at && <p className="text-xs text-ink-muted">Delivered {timeAgo(delivery.delivered_at)}</p>}
           {delivery.notes && <p className="mt-2 whitespace-pre-line text-sm text-ink">{delivery.notes}</p>}
           {delivery.demo_url && (
@@ -247,7 +247,7 @@ export default async function Page({ params }: Params) {
 
       {/* messages */}
       <div className="mt-8">
-        <h2 className="text-lg text-ink">Messages</h2>
+        <h2 className="text-lg font-bold text-ink">Messages</h2>
         <MessageThread
           requestId={request.id}
           initialMessages={(messages ?? []).map((m) => ({

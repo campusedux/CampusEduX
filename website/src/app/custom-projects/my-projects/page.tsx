@@ -30,7 +30,7 @@ export default async function Page() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl text-ink">My custom projects</h1>
+        <h1 className="text-3xl font-bold text-ink">My custom projects</h1>
         <Link
           href="/custom-projects/start"
           className="rounded-lg border border-line px-4 py-2 text-sm text-ink hover:bg-primary hover:text-white"

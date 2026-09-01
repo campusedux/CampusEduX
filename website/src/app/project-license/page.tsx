@@ -3,7 +3,7 @@ export const metadata = { title: "Project License" };
 export default function ProjectLicensePage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-14">
-      <h1 className="text-3xl text-ink">Project License</h1>
+      <h1 className="text-3xl font-bold text-ink">Project License</h1>
       <div className="empty-state mt-6">
         MANUAL IMPLEMENTATION / BUSINESS DECISION REQUIRED — the mobile app stores a per-project <code>license</code> value
         (e.g. &quot;Regular License&quot;, seen on project detail pages) but the exact terms of that license — what a buyer may

@@ -12,7 +12,7 @@ export default async function Page() {
   await requireUser();
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl text-ink">Custom project request</h1>
+      <h1 className="text-3xl font-bold text-ink">Custom project request</h1>
       <p className="mt-2 text-sm text-ink-muted">
         Tell us what you need. Your progress saves automatically — you can leave and come back.
       </p>

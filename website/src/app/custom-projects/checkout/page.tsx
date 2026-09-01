@@ -17,7 +17,7 @@ export default async function Page() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl text-ink">Payment</h1>
+      <h1 className="text-3xl font-bold text-ink">Payment</h1>
       <p className="mt-2 text-sm text-ink-muted">
         Pay the token to submit your request. It&apos;s picked up by the CampusEduX team only after the payment is verified.
       </p>

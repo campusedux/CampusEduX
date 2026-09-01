@@ -23,7 +23,7 @@ export default async function Page() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl text-ink">Estimate</h1>
+      <h1 className="text-3xl font-bold text-ink">Estimate</h1>
       <p className="mt-2 text-sm text-ink-muted">
         Calculated from the current CampusEduX pricing. The amount you pay now is a fixed token; the balance is handled later
         with the team.
