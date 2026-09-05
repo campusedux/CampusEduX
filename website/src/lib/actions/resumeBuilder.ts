@@ -429,3 +429,80 @@ export async function deleteResumeShareAction(rawShareId: string): Promise<OkRes
   if (error) return { error: "Could not delete the share link." };
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// Phase 10 — version history. Snapshots are immutable from the client's
+// side (no update/delete action exists here at all — migration 0061 gives
+// resume_versions select/insert RLS only); pruning to the most recent 20 is
+// enforced server-side by a trigger, not by anything in this file.
+// ---------------------------------------------------------------------------
+
+export interface ResumeVersion {
+  id: string;
+  label: string;
+  createdAt: string;
+}
+
+const labelSchema = z.string().trim().max(200);
+
+export async function createResumeVersionAction(rawResumeId: string, rawLabel: string): Promise<OkResult> {
+  const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  const labelParsed = labelSchema.safeParse(rawLabel);
+  if (!resumeParsed.success || !labelParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { data: resume } = await supabase
+    .from("resumes_builder")
+    .select("title, template, personal_details, education, skills, sections, layout")
+    .eq("id", resumeParsed.data)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!resume) return { error: "That resume could not be found." };
+
+  const { error } = await supabase.from("resume_versions").insert({
+    user_id: user.id,
+    resume_id: resumeParsed.data,
+    label: labelParsed.data,
+    snapshot: resume,
+  });
+  if (error) return { error: "Could not save a version. Please try again." };
+  return { ok: true };
+}
+
+export async function listResumeVersionsAction(rawResumeId: string): Promise<ResumeVersion[] | ActionError> {
+  const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!resumeParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { data, error } = await supabase
+    .from("resume_versions")
+    .select("id, label, created_at")
+    .eq("resume_id", resumeParsed.data)
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+  if (error) return { error: "Could not load version history." };
+
+  return (data ?? []).map((row) => ({ id: row.id, label: row.label, createdAt: row.created_at }));
+}
+
+const versionIdSchema = z.string().uuid();
+
+/** Delegates to restore_resume_version() — SECURITY INVOKER, so it only ever succeeds for a version/resume the caller already owns per normal RLS. */
+export async function restoreResumeVersionAction(rawVersionId: string): Promise<OkResult> {
+  const versionParsed = versionIdSchema.safeParse(rawVersionId);
+  if (!versionParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { error } = await supabase.rpc("restore_resume_version", { p_version_id: versionParsed.data });
+  if (error) return { error: "Could not restore that version. Please try again." };
+  return { ok: true };
+}

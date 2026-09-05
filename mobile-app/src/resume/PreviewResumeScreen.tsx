@@ -5,11 +5,66 @@ import { Ionicons } from "@expo/vector-icons";
 import { notify } from "@/lib/notify";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
 import { useResumeDetail, useTemplateCatalog, useCreateResumeShare } from "@/hooks/useResume";
-import type { ResumeStackParamList } from "@/types";
+import type { ResumeStackParamList, ResumeDocument, ResumeFreeformSectionKey, ManageableResumeSectionKey } from "@/types";
 
 type Rte = RouteProp<ResumeStackParamList, "PreviewResume">;
 
 const FALLBACK_ACCENT = "#4F39F6";
+
+const SECTION_HEADINGS: Record<ManageableResumeSectionKey, string> = {
+  summary: "Summary",
+  education: "Education",
+  skills: "Skills",
+  experience: "Experience",
+  projects: "Projects",
+  certifications: "Certifications",
+  achievements: "Achievements",
+  languages: "Languages",
+  references: "References",
+};
+
+/** Renders one section in the same order/visibility saved from the website editor (resumes_builder.layout) — mirrors website's ResumePreview.tsx. */
+function PreviewSection({ sectionKey, resume, accent }: { sectionKey: ManageableResumeSectionKey; resume: ResumeDocument; accent: string }) {
+  const heading = (
+    <Text style={{ color: accent }} className="font-bold text-sm mb-1 uppercase">
+      {SECTION_HEADINGS[sectionKey]}
+    </Text>
+  );
+
+  if (sectionKey === "education") {
+    if (resume.education.length === 0) return null;
+    return (
+      <View className="mb-3">
+        {heading}
+        {resume.education.map((e) => (
+          <Text key={e.id} className="text-gray-600 text-sm mb-1">
+            {e.degree} — {e.institution} ({e.startYear}-{e.endYear})
+          </Text>
+        ))}
+      </View>
+    );
+  }
+
+  if (sectionKey === "skills") {
+    const all = [...resume.skills.technical, ...resume.skills.soft];
+    if (all.length === 0) return null;
+    return (
+      <View className="mb-3">
+        {heading}
+        <Text className="text-gray-600 text-sm">{all.join(", ")}</Text>
+      </View>
+    );
+  }
+
+  const content = resume.sections[sectionKey as ResumeFreeformSectionKey];
+  if (!content?.trim()) return null;
+  return (
+    <View className="mb-3">
+      {heading}
+      <Text className="text-gray-600 text-sm">{content}</Text>
+    </View>
+  );
+}
 
 export function PreviewResumeScreen() {
   const navigation = useNavigation();
@@ -60,38 +115,11 @@ export function PreviewResumeScreen() {
           {p.jobTitle ? <Text style={{ color: accent }} className="font-medium mb-2">{p.jobTitle}</Text> : null}
           {contactLine ? <Text className="text-gray-400 text-xs mb-3">{contactLine}</Text> : null}
 
-          {resume.sections.summary ? (
-            <>
-              <Text className="font-bold text-gray-900 text-sm mb-1">Summary</Text>
-              <Text className="text-gray-600 text-sm mb-3">{resume.sections.summary}</Text>
-            </>
-          ) : null}
-
-          {resume.sections.experience ? (
-            <>
-              <Text className="font-bold text-gray-900 text-sm mb-1">Experience</Text>
-              <Text className="text-gray-600 text-sm mb-3">{resume.sections.experience}</Text>
-            </>
-          ) : null}
-
-          {resume.education.length > 0 && (
-            <>
-              <Text className="font-bold text-gray-900 text-sm mb-1">Education</Text>
-              {resume.education.map((e) => (
-                <Text key={e.id} className="text-gray-600 text-sm mb-1">
-                  {e.degree} — {e.institution} ({e.startYear}-{e.endYear})
-                </Text>
-              ))}
-              <View className="mb-2" />
-            </>
-          )}
-
-          {(resume.skills.technical.length > 0 || resume.skills.soft.length > 0) && (
-            <>
-              <Text className="font-bold text-gray-900 text-sm mb-1">Skills</Text>
-              <Text className="text-gray-600 text-sm">{[...resume.skills.technical, ...resume.skills.soft].join(", ")}</Text>
-            </>
-          )}
+          {resume.layout.order
+            .filter((key) => !resume.layout.hidden.includes(key))
+            .map((key) => (
+              <PreviewSection key={key} sectionKey={key} resume={resume} accent={accent} />
+            ))}
         </View>
       </ScrollView>
 

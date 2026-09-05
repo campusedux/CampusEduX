@@ -1,7 +1,7 @@
 jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModule());
 jest.mock("expo-print", () => ({ printToFileAsync: jest.fn(() => Promise.resolve({ uri: "file:///tmp/resume.pdf" })) }));
 
-import { resumeService, formatProjectSnippet, appendToFreeformContent } from "@/services/resume.service";
+import { resumeService, formatProjectSnippet, appendToFreeformContent, normalizeResumeLayout } from "@/services/resume.service";
 import { resetSupabaseMock, setTableResult, setRpcResult, supabase } from "../../mocks/supabase.mock";
 import { SAMPLE_RESUME_LIST } from "@/data/sampleResumeContent";
 
@@ -234,5 +234,33 @@ describe("resumeService.createShareLink", () => {
   it("throws a clear error when the insert fails", async () => {
     setTableResult("resume_shares", { error: { message: "network down" } });
     await expect(resumeService.createShareLink("u-1", "res-1")).rejects.toThrow("network down");
+  });
+});
+
+describe("normalizeResumeLayout", () => {
+  it("returns the full default order for an empty/missing layout", () => {
+    const result = normalizeResumeLayout({});
+    expect(result.order).toEqual(["summary", "education", "skills", "experience", "projects", "certifications", "achievements", "languages", "references"]);
+    expect(result.hidden).toEqual([]);
+  });
+
+  it("preserves a stored order and appends any section missing from it", () => {
+    const result = normalizeResumeLayout({ order: ["skills", "summary"], hidden: ["skills"] });
+    expect(result.order.slice(0, 2)).toEqual(["skills", "summary"]);
+    expect(result.order).toHaveLength(9);
+    expect(result.hidden).toEqual(["skills"]);
+  });
+
+  it("drops unrecognised keys instead of trusting arbitrary stored strings", () => {
+    const result = normalizeResumeLayout({ order: ["summary", "not-a-real-section"], hidden: ["also-fake"] });
+    expect(result.order).not.toContain("not-a-real-section");
+    expect(result.hidden).toEqual([]);
+  });
+
+  it("maps a stored resumes_builder row's layout into the returned ResumeDocument", async () => {
+    setTableResult("resumes_builder", { data: [{ id: "res-1", title: "t", template: "modern", layout: { order: ["skills"], hidden: [] } }] });
+    const doc = await resumeService.getResumeDetail("res-1");
+    expect(doc.layout.order[0]).toBe("skills");
+    expect(doc.layout.order).toHaveLength(9);
   });
 });

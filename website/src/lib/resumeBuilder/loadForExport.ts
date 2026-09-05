@@ -29,3 +29,22 @@ export async function recordResumeDownload(userId: string, resume: ResumeDocumen
   const supabase = createAuthedServerSupabase();
   await supabase.from("resume_downloads").insert({ user_id: userId, resume_id: resume.id, resume_title: resume.title, file_url: fileName });
 }
+
+/** Best-effort version checkpoint before a download — never blocks the export if it fails. */
+export async function snapshotBeforeExport(userId: string, resume: ResumeDocument): Promise<void> {
+  const supabase = createAuthedServerSupabase();
+  await supabase.from("resume_versions").insert({
+    user_id: userId,
+    resume_id: resume.id,
+    label: "Before download",
+    snapshot: {
+      title: resume.title,
+      template: resume.template,
+      personal_details: resume.personalDetails,
+      education: resume.education,
+      skills: resume.skills,
+      sections: resume.sections,
+      layout: resume.layout,
+    },
+  });
+}

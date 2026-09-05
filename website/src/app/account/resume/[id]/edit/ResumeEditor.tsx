@@ -103,6 +103,9 @@ export default function ResumeEditor({
           <Link href={`/account/resume/${resume.id}/jd-match`} className="text-sm font-semibold text-primary hover:underline">
             Job Match
           </Link>
+          <Link href={`/account/resume/${resume.id}/versions`} className="text-sm font-semibold text-primary hover:underline">
+            History
+          </Link>
           <a href={`/api/resume/export/pdf?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
             Download PDF
           </a>

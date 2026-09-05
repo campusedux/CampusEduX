@@ -50,6 +50,30 @@ export const RESUME_FREEFORM_SECTIONS = [
 ] as const;
 export type ResumeFreeformSectionKey = (typeof RESUME_FREEFORM_SECTIONS)[number];
 
+/**
+ * The 9 sections a user can reorder/hide (matches website's
+ * lib/resumeBuilder/sections.ts MANAGEABLE_SECTIONS exactly) — Personal
+ * Details isn't part of this list on either platform; it's always shown
+ * first and isn't reorderable/hideable.
+ */
+export const MANAGEABLE_RESUME_SECTIONS = [
+  "summary",
+  "education",
+  "skills",
+  "experience",
+  "projects",
+  "certifications",
+  "achievements",
+  "languages",
+  "references",
+] as const;
+export type ManageableResumeSectionKey = (typeof MANAGEABLE_RESUME_SECTIONS)[number];
+
+export interface ResumeLayout {
+  order: ManageableResumeSectionKey[];
+  hidden: ManageableResumeSectionKey[];
+}
+
 export interface ResumeSummary {
   id: string;
   title: string;
@@ -67,6 +91,7 @@ export interface ResumeDocument {
   skills: ResumeSkills;
   sections: Record<ResumeFreeformSectionKey, string>;
   atsScore: number;
+  layout: ResumeLayout;
   updatedAt: string;
 }
 

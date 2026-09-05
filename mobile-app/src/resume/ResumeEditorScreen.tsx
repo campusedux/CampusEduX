@@ -31,18 +31,18 @@ type Rte = RouteProp<ResumeStackParamList, "ResumeEditor">;
 
 type SectionKey = "personal" | "education" | ResumeFreeformSectionKey | "skills";
 
-const NAV_ITEMS: { key: SectionKey; label: string }[] = [
-  { key: "personal", label: "Personal" },
-  { key: "education", label: "Education" },
-  { key: "experience", label: "Experience" },
-  { key: "skills", label: "Skills" },
-  { key: "projects", label: "Projects" },
-  { key: "certifications", label: "Certifications" },
-  { key: "achievements", label: "Achievements" },
-  { key: "languages", label: "Languages" },
-  { key: "references", label: "References" },
-  { key: "summary", label: "Summary" },
-];
+/** Matches website's lib/resumeBuilder/sections.ts SECTION_LABELS exactly. */
+const SECTION_LABELS: Record<Exclude<SectionKey, "personal">, string> = {
+  summary: "Summary",
+  education: "Education",
+  skills: "Skills",
+  experience: "Experience",
+  projects: "Projects",
+  certifications: "Certifications",
+  achievements: "Achievements",
+  languages: "Languages",
+  references: "References",
+};
 
 const FREEFORM_PLACEHOLDERS: Record<string, string> = {
   experience: "e.g. Frontend Intern at Acme Corp (Jun 2025 - Aug 2025)\n- Built responsive UI components with React\n- Improved page load time by 30%",
@@ -98,6 +98,16 @@ export function ResumeEditorScreen() {
 
   const isFreeform = FREEFORM_PLACEHOLDERS[activeKey] !== undefined;
 
+  // Respects the section order/visibility saved from the website editor
+  // (resumes_builder.layout) instead of a fixed order — a section hidden or
+  // reordered on the website now shows up the same way here.
+  const navItems: { key: SectionKey; label: string }[] = [
+    { key: "personal", label: "Personal" },
+    ...resume.layout.order
+      .filter((key) => !resume.layout.hidden.includes(key))
+      .map((key) => ({ key: key as SectionKey, label: SECTION_LABELS[key] })),
+  ];
+
   return (
     <Screen className="px-6">
       <View className="flex-row items-center justify-between mt-2 mb-4">
@@ -116,7 +126,7 @@ export function ResumeEditorScreen() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 44 }} className="mb-4">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive = activeKey === item.key;
           return (
             <Pressable

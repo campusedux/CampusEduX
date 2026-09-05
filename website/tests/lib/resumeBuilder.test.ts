@@ -19,6 +19,9 @@ import {
   listResumeSharesAction,
   toggleResumeShareAction,
   deleteResumeShareAction,
+  createResumeVersionAction,
+  listResumeVersionsAction,
+  restoreResumeVersionAction,
 } from "@/lib/actions/resumeBuilder";
 
 const USER = { id: "user-1", email: "s@campusedux.app" };
@@ -361,5 +364,53 @@ describe("resume share-link actions", () => {
     expect(result).toEqual({ ok: true });
     const eqArgs = callsFor("resume_shares").filter((c) => c.verb === "eq").map((c) => c.args);
     expect(eqArgs).toEqual(expect.arrayContaining([["user_id", "user-1"]]));
+  });
+});
+
+describe("resume version-history actions", () => {
+  beforeEach(() => setUser(USER));
+
+  it("createResumeVersionAction rejects when the resume isn't the caller's own", async () => {
+    setTableResult("resumes_builder", { data: null });
+    const result = await createResumeVersionAction(RESUME_ID, "Manual save");
+    expect(result).toEqual({ error: "That resume could not be found." });
+  });
+
+  it("createResumeVersionAction snapshots the current resume content", async () => {
+    setTableResult("resumes_builder", { data: { title: "My Resume", sections: { summary: "x" } } });
+    setTableResult("resume_versions", { error: null });
+
+    const result = await createResumeVersionAction(RESUME_ID, "Manual save");
+
+    expect(result).toEqual({ ok: true });
+    const insert = callsFor("resume_versions").find((c) => c.verb === "insert");
+    expect(insert?.args[0]).toMatchObject({ user_id: "user-1", resume_id: RESUME_ID, label: "Manual save" });
+  });
+
+  it("listResumeVersionsAction scopes to the caller's own resume", async () => {
+    setTableResult("resume_versions", { data: [{ id: "v1", label: "Manual save", created_at: "2026-01-01" }] });
+    const result = await listResumeVersionsAction(RESUME_ID);
+    expect(result).toEqual([{ id: "v1", label: "Manual save", createdAt: "2026-01-01" }]);
+    const eqArgs = callsFor("resume_versions").filter((c) => c.verb === "eq").map((c) => c.args);
+    expect(eqArgs).toEqual(expect.arrayContaining([["resume_id", RESUME_ID], ["user_id", "user-1"]]));
+  });
+
+  it("restoreResumeVersionAction rejects an invalid version id", async () => {
+    const result = await restoreResumeVersionAction("not-a-uuid");
+    expect(result).toEqual({ error: "Invalid request." });
+  });
+
+  it("restoreResumeVersionAction delegates to the restore_resume_version RPC", async () => {
+    setRpcResult("restore_resume_version", { error: null });
+    const versionId = "11111111-1111-1111-1111-111111111113";
+    const result = await restoreResumeVersionAction(versionId);
+    expect(result).toEqual({ ok: true });
+    expect(rpcCall("restore_resume_version")?.args[0]).toEqual({ p_version_id: versionId });
+  });
+
+  it("restoreResumeVersionAction surfaces a friendly error when the RPC fails", async () => {
+    setRpcResult("restore_resume_version", { error: { message: "version not found or not accessible" } });
+    const result = await restoreResumeVersionAction("11111111-1111-1111-1111-111111111113");
+    expect(result).toEqual({ error: expect.stringMatching(/could not restore/i) });
   });
 });

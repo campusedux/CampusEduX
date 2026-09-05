@@ -5,7 +5,7 @@ import type {
   ATSBreakdown,
   ResumeDownloadRecord,
 } from "@/types";
-import { RESUME_FREEFORM_SECTIONS } from "@/types";
+import { RESUME_FREEFORM_SECTIONS, MANAGEABLE_RESUME_SECTIONS } from "@/types";
 
 /**
  * Sample content for Module 6 (Resume Builder). Each resume service read
@@ -81,6 +81,7 @@ export function sampleResumeDetail(resumeId: string): ResumeDocument {
       languages: "English (Fluent), Hindi (Native)",
     },
     atsScore: summary?.atsScore ?? 85,
+    layout: { order: [...MANAGEABLE_RESUME_SECTIONS], hidden: [] },
     updatedAt: summary?.updatedAt ?? daysAgo(2),
   };
 }

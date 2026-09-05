@@ -13,8 +13,10 @@ import type {
   ATSBreakdown,
   ResumeDownloadRecord,
   ResumeProjectCandidate,
+  ResumeLayout,
+  ManageableResumeSectionKey,
 } from "@/types";
-import { RESUME_FREEFORM_SECTIONS } from "@/types";
+import { RESUME_FREEFORM_SECTIONS, MANAGEABLE_RESUME_SECTIONS } from "@/types";
 import {
   SAMPLE_RESUME_LIST,
   sampleResumeDetail,
@@ -45,6 +47,25 @@ const DEFAULT_TEMPLATE_CATALOG: ResumeTemplateCatalogEntry[] = [
   { id: "creative", name: "Creative", accentColor: "#DB2777" },
 ];
 
+/**
+ * Turns whatever is stored in resumes_builder.layout (`{}` for a resume
+ * created before this column existed, or missing a section added to
+ * MANAGEABLE_RESUME_SECTIONS since the resume was last saved) into a
+ * complete, valid layout. Mirrors website's lib/resumeBuilder/sections.ts
+ * normalizeLayout() exactly, so both platforms agree on the default order.
+ * Exported for unit testing.
+ */
+export function normalizeResumeLayout(raw: unknown): ResumeLayout {
+  const isManageable = (key: unknown): key is ManageableResumeSectionKey =>
+    typeof key === "string" && (MANAGEABLE_RESUME_SECTIONS as readonly string[]).includes(key);
+
+  const source = (raw ?? {}) as { order?: unknown; hidden?: unknown };
+  const rawOrder = Array.isArray(source.order) ? source.order.filter(isManageable) : [];
+  const order = [...rawOrder, ...MANAGEABLE_RESUME_SECTIONS.filter((key) => !rawOrder.includes(key))];
+  const hidden = Array.isArray(source.hidden) ? source.hidden.filter(isManageable) : [];
+  return { order, hidden };
+}
+
 function mapRow(row: any): ResumeDocument {
   const sections = RESUME_FREEFORM_SECTIONS.reduce((acc, key) => {
     acc[key] = row.sections?.[key] ?? "";
@@ -60,6 +81,7 @@ function mapRow(row: any): ResumeDocument {
     skills: row.skills ?? { technical: [], soft: [] },
     sections,
     atsScore: row.ats_score ?? 0,
+    layout: normalizeResumeLayout(row.layout),
     updatedAt: row.updated_at,
   };
 }

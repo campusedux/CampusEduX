@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { loadOwnResumeForExport, recordResumeDownload } from "@/lib/resumeBuilder/loadForExport";
+import { loadOwnResumeForExport, recordResumeDownload, snapshotBeforeExport } from "@/lib/resumeBuilder/loadForExport";
 import { renderResumePdfBuffer } from "@/lib/resumeBuilder/pdfDocument";
 import { slugifyFileName } from "@/lib/resumeBuilder/formatting";
 
@@ -25,6 +25,7 @@ export async function GET(req: Request) {
   const buffer = await renderResumePdfBuffer(result.resume, result.accentColor);
   const fileName = `${slugifyFileName(result.resume.title)}.pdf`;
   await recordResumeDownload(result.userId, result.resume, fileName);
+  await snapshotBeforeExport(result.userId, result.resume);
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
