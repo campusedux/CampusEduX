@@ -88,6 +88,12 @@ export default function ResumeEditor({ resume: initialResume, templates }: { res
               ))}
             </Select>
           )}
+          <Link href={`/account/resume/${resume.id}/ats`} className="text-sm font-semibold text-primary hover:underline">
+            ATS Score
+          </Link>
+          <Link href={`/account/resume/${resume.id}/jd-match`} className="text-sm font-semibold text-primary hover:underline">
+            Job Match
+          </Link>
           <a href={`/api/resume/export/pdf?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
             Download PDF
           </a>

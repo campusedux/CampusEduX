@@ -32,7 +32,11 @@ export default async function AccountResumePage() {
             <div key={r.id} className="rounded-2xl border border-line bg-white p-4 shadow-card">
               <div className="flex items-center justify-between gap-2">
                 <div className="font-semibold text-ink">{r.title}</div>
-                {typeof r.ats_score === "number" && <Badge tone={r.ats_score >= 70 ? "success" : "neutral"}>ATS {r.ats_score}</Badge>}
+                {typeof r.ats_score === "number" && (
+                  <Link href={`/account/resume/${r.id}/ats`}>
+                    <Badge tone={r.ats_score >= 70 ? "success" : "neutral"}>ATS {r.ats_score}</Badge>
+                  </Link>
+                )}
               </div>
               <div className="mt-1 text-xs text-ink-faint">Template: {r.template} · updated {timeAgo(r.updated_at)}</div>
               <div className="mt-3 flex flex-wrap items-center gap-4">
@@ -41,6 +45,9 @@ export default async function AccountResumePage() {
                 </Link>
                 <Link href={`/account/resume/${r.id}/projects`} className="text-xs font-semibold text-primary hover:underline">
                   + Add a project
+                </Link>
+                <Link href={`/account/resume/${r.id}/jd-match`} className="text-xs font-semibold text-primary hover:underline">
+                  Job match
                 </Link>
                 <a href={`/api/resume/export/pdf?resumeId=${r.id}`} className="text-xs font-semibold text-primary hover:underline">
                   Download PDF

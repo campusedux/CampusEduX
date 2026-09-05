@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import { supabase, resetSupabaseMock, setUser, setTableResult, callsFor } from "../helpers/supabase.mock";
+import { supabase, resetSupabaseMock, setUser, setTableResult, setRpcResult, callsFor, rpcCall } from "../helpers/supabase.mock";
 vi.mock("@/lib/supabase/authed-server", () => ({ createAuthedServerSupabase: () => supabase }));
 
 import { formatProjectSnippet, appendToFreeformContent } from "@/lib/resumeBuilder/formatting";
@@ -13,6 +13,7 @@ import {
   updateResumeSkillsAction,
   updateResumeFreeformSectionAction,
   updateResumeLayoutAction,
+  matchResumeToJdAction,
 } from "@/lib/actions/resumeBuilder";
 
 const USER = { id: "user-1", email: "s@campusedux.app" };
@@ -211,5 +212,41 @@ describe("Phase 4 editor actions", () => {
     expect(savedLayout.order.slice(0, 2)).toEqual(["skills", "summary"]);
     expect(savedLayout.order).toHaveLength(9);
     expect(savedLayout.hidden).toEqual(["skills"]);
+  });
+});
+
+describe("matchResumeToJdAction", () => {
+  beforeEach(() => setUser(USER));
+
+  it("rejects when signed out", async () => {
+    setUser(null);
+    const result = await matchResumeToJdAction(RESUME_ID, "some JD text");
+    expect(result).toEqual({ error: expect.stringMatching(/sign in/i) });
+  });
+
+  it("rejects a blank job description", async () => {
+    const result = await matchResumeToJdAction(RESUME_ID, "   ");
+    expect(result).toEqual({ error: "Paste a job description first." });
+  });
+
+  it("rejects an invalid resume id", async () => {
+    const result = await matchResumeToJdAction("not-a-uuid", "some JD text");
+    expect(result).toEqual({ error: "Invalid request." });
+  });
+
+  it("delegates to the match_resume_to_jd RPC and returns its result", async () => {
+    const rpcResult = { matchPercent: 60, matched: ["react", "node"], missing: ["docker"], jdKeywordCount: 3 };
+    setRpcResult("match_resume_to_jd", { data: rpcResult, error: null });
+
+    const result = await matchResumeToJdAction(RESUME_ID, "Looking for a React and Node.js developer with Docker experience.");
+
+    expect(result).toEqual(rpcResult);
+    expect(rpcCall("match_resume_to_jd")?.args[0]).toMatchObject({ p_resume_id: RESUME_ID });
+  });
+
+  it("surfaces a friendly error when the RPC fails", async () => {
+    setRpcResult("match_resume_to_jd", { data: null, error: { message: "resume not found" } });
+    const result = await matchResumeToJdAction(RESUME_ID, "some JD text");
+    expect(result).toEqual({ error: expect.stringMatching(/could not match/i) });
   });
 });

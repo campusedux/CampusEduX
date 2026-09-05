@@ -235,3 +235,38 @@ export async function updateResumeLayoutAction(rawResumeId: string, rawLayout: u
   const normalized: ResumeLayout = normalizeLayout(layoutParsed.data);
   return updateOwnResume(resumeParsed.data, { layout: normalized });
 }
+
+// ---------------------------------------------------------------------------
+// Phase 6 — deterministic job-description matching, delegating to the
+// match_resume_to_jd() Postgres function (mobile-app migration
+// 0058_resume_jd_match.sql), built on Phase 1's shared tokenize_keywords()
+// so ATS scoring and JD matching never disagree on what counts as a keyword.
+// ---------------------------------------------------------------------------
+
+export interface JdMatchResult {
+  matchPercent: number;
+  matched: string[];
+  missing: string[];
+  jdKeywordCount: number;
+}
+
+const jdTextSchema = z.string().trim().min(1, "Paste a job description first.").max(20_000);
+
+export async function matchResumeToJdAction(rawResumeId: string, rawJdText: string): Promise<JdMatchResult | ActionError> {
+  const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  const jdParsed = jdTextSchema.safeParse(rawJdText);
+  if (!resumeParsed.success) return { error: "Invalid request." };
+  if (!jdParsed.success) return { error: jdParsed.error.issues[0]?.message ?? "Invalid job description." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { data, error } = await supabase.rpc("match_resume_to_jd", {
+    p_resume_id: resumeParsed.data,
+    p_jd_text: jdParsed.data,
+  });
+  if (error || !data) return { error: "Could not match this resume against that job description. Please try again." };
+
+  return data as JdMatchResult;
+}
