@@ -20,8 +20,12 @@ create table if not exists public.resume_shares (
   id         uuid        primary key default gen_random_uuid(),
   user_id    uuid        not null references public.profiles (id) on delete cascade,
   resume_id  uuid        not null references public.resumes_builder (id) on delete cascade,
-  -- 128 bits of randomness — brute-forcing a valid token is not a realistic attack.
-  token      text        not null unique default encode(gen_random_bytes(16), 'hex'),
+  -- 128 bits of randomness (same entropy as gen_random_bytes(16)) via
+  -- gen_random_uuid() — that's core Postgres 13+, no pgcrypto dependency,
+  -- unlike gen_random_bytes() which needs the extension in the search_path
+  -- (it isn't, on this project — encode(gen_random_bytes(16),'hex') failed
+  -- with "function gen_random_bytes(integer) does not exist" on apply).
+  token      text        not null unique default replace(gen_random_uuid()::text, '-', ''),
   is_active  boolean     not null default true,
   expires_at timestamptz,
   view_count integer     not null default 0,
