@@ -83,6 +83,7 @@ export async function setTemplatePreview(id: string, files: UploadedFile[]): Pro
   const supabase = createClient();
   const { error } = await supabase.from('resume_templates').update({ preview_image_url: files[0].url }).eq('id', id);
   if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.template.preview_updated', module: 'resume', resourceType: 'resume_templates', resourceId: id });
   revalidatePath(`/resume/templates/${id}/edit`);
   revalidatePath('/resume/templates');
   return { ok: true };
@@ -103,6 +104,7 @@ export async function createTemplateCategory(_p: Result, fd: FormData): Promise<
     sort_order: n(fd, 'sort_order'),
   });
   if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.template_category.create', module: 'resume', resourceType: 'resume_template_categories', resourceId: sl });
   revalidatePath('/resume/templates/categories');
   return { ok: true };
 }
@@ -114,6 +116,7 @@ export async function updateTemplateCategory(id: string, _p: Result, fd: FormDat
     .update({ name: s(fd, 'name'), status: s(fd, 'status') || 'active', sort_order: n(fd, 'sort_order') })
     .eq('id', id);
   if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.template_category.update', module: 'resume', resourceType: 'resume_template_categories', resourceId: id });
   revalidatePath('/resume/templates/categories');
   return { ok: true };
 }
@@ -122,6 +125,7 @@ export async function deleteTemplateCategory(id: string): Promise<Result> {
   const supabase = createClient();
   const { error } = await supabase.from('resume_template_categories').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.template_category.delete', module: 'resume', resourceType: 'resume_template_categories', resourceId: id });
   revalidatePath('/resume/templates/categories');
   return { ok: true };
 }
@@ -132,8 +136,9 @@ export async function createAtsRule(_p: Result, fd: FormData): Promise<Result> {
   const supabase = createClient();
   const rule = s(fd, 'rule');
   if (!rule) return { ok: false, error: 'Rule text is required.' };
+  const id = `ats-${Math.random().toString(36).slice(2, 9)}`;
   const { error } = await supabase.from('ats_rules').insert({
-    id: `ats-${Math.random().toString(36).slice(2, 9)}`,
+    id,
     section: s(fd, 'section') || 'general',
     rule,
     guideline: s(fd, 'guideline'),
@@ -142,6 +147,7 @@ export async function createAtsRule(_p: Result, fd: FormData): Promise<Result> {
     sort_order: n(fd, 'sort_order'),
   });
   if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.ats_rule.create', module: 'resume', resourceType: 'ats_rules', resourceId: id });
   revalidatePath('/resume/ats-rules');
   return { ok: true };
 }
@@ -159,6 +165,7 @@ export async function updateAtsRule(id: string, _p: Result, fd: FormData): Promi
     })
     .eq('id', id);
   if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.ats_rule.update', module: 'resume', resourceType: 'ats_rules', resourceId: id });
   revalidatePath('/resume/ats-rules');
   return { ok: true };
 }
@@ -167,6 +174,7 @@ export async function toggleAtsRule(id: string, next: boolean): Promise<Result> 
   const supabase = createClient();
   const { error } = await supabase.from('ats_rules').update({ is_active: next }).eq('id', id);
   if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.ats_rule.toggle', module: 'resume', resourceType: 'ats_rules', resourceId: id, details: { next } });
   revalidatePath('/resume/ats-rules');
   return { ok: true };
 }
@@ -175,6 +183,7 @@ export async function deleteAtsRule(id: string): Promise<Result> {
   const supabase = createClient();
   const { error } = await supabase.from('ats_rules').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.ats_rule.delete', module: 'resume', resourceType: 'ats_rules', resourceId: id });
   revalidatePath('/resume/ats-rules');
   return { ok: true };
 }
