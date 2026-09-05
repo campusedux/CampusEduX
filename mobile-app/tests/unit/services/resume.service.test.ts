@@ -2,7 +2,7 @@ jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModul
 jest.mock("expo-print", () => ({ printToFileAsync: jest.fn(() => Promise.resolve({ uri: "file:///tmp/resume.pdf" })) }));
 
 import { resumeService, formatProjectSnippet, appendToFreeformContent } from "@/services/resume.service";
-import { resetSupabaseMock, setTableResult, supabase } from "../../mocks/supabase.mock";
+import { resetSupabaseMock, setTableResult, setRpcResult, supabase } from "../../mocks/supabase.mock";
 import { SAMPLE_RESUME_LIST } from "@/data/sampleResumeContent";
 
 beforeEach(() => resetSupabaseMock());
@@ -50,6 +50,20 @@ describe("resumeService.createResume", () => {
     const id = await resumeService.createResume("u-1", "modern");
     expect(id).toMatch(/^res-local-/);
   });
+
+  it("prefills LinkedIn/website from the user's profile", async () => {
+    setTableResult("profiles", { data: [{ linkedin_url: "linkedin.com/in/rohan", portfolio_url: "rohan.dev" }] });
+    setTableResult("resumes_builder", { data: [{ id: "res-new" }] });
+
+    await resumeService.createResume("u-1", "modern");
+
+    const fromMock = supabase.from as jest.Mock;
+    const resumesBuilderIndex = fromMock.mock.calls.findIndex((c) => c[0] === "resumes_builder");
+    const builder = fromMock.mock.results[resumesBuilderIndex].value;
+    const insertPayload = (builder.insert as jest.Mock).mock.calls[0][0];
+
+    expect(insertPayload.personal_details).toMatchObject({ linkedin: "linkedin.com/in/rohan", website: "rohan.dev" });
+  });
 });
 
 describe("resumeService.getResumeDetail", () => {
@@ -84,17 +98,42 @@ describe("resumeService write helpers", () => {
 });
 
 describe("resumeService.getATSBreakdown", () => {
-  it("computes a deterministic breakdown from the resume content", async () => {
-    setTableResult("resumes_builder", { data: [resumeRow] });
+  const rpcBreakdown = {
+    overall: 82,
+    content: 90,
+    formatting: 80,
+    skills: 70,
+    keywords: 85,
+    tips: [{ ruleId: "gen-1", section: "general", problem: "Match keywords from the job description", why: "Mirror the exact phrasing.", importance: "high", checked: false }],
+  };
 
-    const first = await resumeService.getATSBreakdown("res-1");
-    setTableResult("resumes_builder", { data: [resumeRow] });
-    const second = await resumeService.getATSBreakdown("res-1");
+  it("delegates to the shared compute_ats_breakdown RPC", async () => {
+    setRpcResult("compute_ats_breakdown", { data: rpcBreakdown, error: null });
 
-    expect(first).toEqual(second); // no randomness
-    expect(first.overall).toBeGreaterThan(0);
-    expect(first.overall).toBeLessThanOrEqual(100);
-    expect(Array.isArray(first.tips)).toBe(true);
+    const result = await resumeService.getATSBreakdown("res-1");
+
+    expect(supabase.rpc).toHaveBeenCalledWith("compute_ats_breakdown", { p_resume_id: "res-1" });
+    expect(result).toEqual(rpcBreakdown);
+  });
+
+  it("falls back to sample content when the RPC is unavailable", async () => {
+    setRpcResult("compute_ats_breakdown", { data: null, error: { message: "function does not exist" } });
+    const result = await resumeService.getATSBreakdown("res-1");
+    expect(result.tips.length).toBeGreaterThan(0);
+  });
+});
+
+describe("resumeService.getTemplateCatalog", () => {
+  it("maps the admin-managed catalog", async () => {
+    setTableResult("resume_templates", { data: [{ id: "fresher-blue", name: "Fresher Blue", accent_color: "#2563EB" }] });
+    const catalog = await resumeService.getTemplateCatalog();
+    expect(catalog).toEqual([{ id: "fresher-blue", name: "Fresher Blue", accentColor: "#2563EB" }]);
+  });
+
+  it("falls back to the built-in defaults when the catalog is empty or unmigrated", async () => {
+    setTableResult("resume_templates", { data: [] });
+    const catalog = await resumeService.getTemplateCatalog();
+    expect(catalog.map((t) => t.id)).toEqual(["modern", "professional", "minimal", "creative"]);
   });
 });
 

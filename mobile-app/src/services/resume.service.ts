@@ -8,6 +8,7 @@ import type {
   ResumeSkills,
   ResumeFreeformSectionKey,
   ResumeTemplate,
+  ResumeTemplateCatalogEntry,
   ATSBreakdown,
   ResumeDownloadRecord,
   ResumeProjectCandidate,
@@ -31,12 +32,17 @@ const EMPTY_PERSONAL: ResumePersonalDetails = {
   photoUrl: null,
 };
 
-const TEMPLATE_ACCENTS: Record<ResumeTemplate, string> = {
-  modern: "#4F39F6",
-  professional: "#1E3A8A",
-  minimal: "#374151",
-  creative: "#DB2777",
-};
+/**
+ * Used only when resume_templates hasn't been migrated/seeded yet — the
+ * real, admin-editable catalog (see getTemplateCatalog()) is otherwise the
+ * single source of truth for template names/colours.
+ */
+const DEFAULT_TEMPLATE_CATALOG: ResumeTemplateCatalogEntry[] = [
+  { id: "modern", name: "Modern", accentColor: "#4F39F6" },
+  { id: "professional", name: "Professional", accentColor: "#1E3A8A" },
+  { id: "minimal", name: "Minimal", accentColor: "#374151" },
+  { id: "creative", name: "Creative", accentColor: "#DB2777" },
+];
 
 function mapRow(row: any): ResumeDocument {
   const sections = RESUME_FREEFORM_SECTIONS.reduce((acc, key) => {
@@ -70,43 +76,7 @@ export function appendToFreeformContent(current: string, snippet: string): strin
   return trimmed ? `${trimmed}\n\n${snippet}` : snippet;
 }
 
-/**
- * Deterministic ATS-style scoring based on how complete/keyword-rich the
- * resume actually is — no external service, no randomness, fully
- * recomputed from the resume's real content every time it's requested.
- */
-function computeATSBreakdown(doc: ResumeDocument): ATSBreakdown {
-  const p = doc.personalDetails;
-  const filledPersonalFields = [p.fullName, p.jobTitle, p.email, p.phone, p.location].filter(Boolean).length;
-  const contentSections = [doc.sections.summary, doc.sections.experience, doc.sections.projects].filter(
-    (s) => s.trim().length > 20
-  ).length;
-  const content = Math.round((filledPersonalFields / 5) * 40 + (contentSections / 3) * 60);
-
-  const formatting = doc.template ? 80 : 60;
-
-  const totalSkills = doc.skills.technical.length + doc.skills.soft.length;
-  const skills = Math.min(100, Math.round((totalSkills / 10) * 100));
-
-  const combinedText = `${doc.sections.summary} ${doc.sections.experience} ${doc.sections.projects}`.toLowerCase();
-  const KEYWORDS = ["developed", "built", "led", "designed", "implemented", "improved", "team", "project", "api", "database"];
-  const keywordHits = KEYWORDS.filter((k) => combinedText.includes(k)).length;
-  const keywords = Math.min(100, Math.round((keywordHits / KEYWORDS.length) * 100) + (doc.education.length > 0 ? 10 : 0));
-
-  const overall = Math.round(content * 0.35 + formatting * 0.15 + skills * 0.25 + keywords * 0.25);
-
-  const tips: string[] = [];
-  if (filledPersonalFields < 5) tips.push("Complete all personal detail fields (LinkedIn and website help too).");
-  if (contentSections < 3) tips.push("Add a summary, work experience, and at least one project.");
-  if (totalSkills < 6) tips.push("List at least 6-8 relevant technical and soft skills.");
-  if (keywordHits < 4) tips.push("Use action verbs like 'developed', 'led', or 'implemented' in your descriptions.");
-  if (tips.length === 0) tips.push("Great! Your resume has a high chance of passing ATS screening.");
-
-  return { overall: Math.min(100, overall), content, formatting, skills, keywords, tips };
-}
-
-function renderResumeHtml(doc: ResumeDocument): string {
-  const accent = TEMPLATE_ACCENTS[doc.template] ?? "#4F39F6";
+function renderResumeHtml(doc: ResumeDocument, accent: string): string {
   const p = doc.personalDetails;
   const section = (title: string, body: string) =>
     body?.trim() ? `<h3 style="color:${accent};margin:18px 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;">${title}</h3><p style="margin:0;white-space:pre-wrap;font-size:13px;line-height:1.5;">${body}</p>` : "";
@@ -188,10 +158,30 @@ export const resumeService = {
   },
 
   async createResume(userId: string, template: ResumeTemplate): Promise<string> {
+    // Best-effort prefill from the user's profile — a lookup failure here
+    // should never block resume creation, so it's isolated from the insert.
+    let linkedin = "";
+    let website = "";
+    try {
+      const { data: profile } = await supabase.from("profiles").select("linkedin_url, portfolio_url").eq("id", userId).maybeSingle();
+      linkedin = profile?.linkedin_url ?? "";
+      website = profile?.portfolio_url ?? "";
+    } catch {
+      // no profile data to prefill with — the form simply starts blank for these fields
+    }
+
     try {
       const { data, error } = await supabase
         .from("resumes_builder")
-        .insert({ user_id: userId, title: "Untitled Resume", template, personal_details: EMPTY_PERSONAL, education: [], skills: { technical: [], soft: [] }, sections: {} })
+        .insert({
+          user_id: userId,
+          title: "Untitled Resume",
+          template,
+          personal_details: { ...EMPTY_PERSONAL, linkedin, website },
+          education: [],
+          skills: { technical: [], soft: [] },
+          sections: {},
+        })
         .select("id")
         .single();
       if (error || !data) throw new Error(error?.message ?? "Could not create resume.");
@@ -199,6 +189,19 @@ export const resumeService = {
     } catch (error) {
       console.info(`[resume.service] createResume: not persisted (${(error as Error).message})`);
       return `res-local-${Date.now()}`;
+    }
+  },
+
+  /** The admin-managed template catalog (resume_templates) — falls back to the 4 built-in defaults if unmigrated/empty. */
+  async getTemplateCatalog(): Promise<ResumeTemplateCatalogEntry[]> {
+    try {
+      const { data, error } = await supabase.from("resume_templates").select("id, name, accent_color").order("sort_order", { ascending: true });
+      if (error) throw new Error(error.message);
+      if (!data || data.length === 0) return DEFAULT_TEMPLATE_CATALOG;
+      return data.map((row: any) => ({ id: row.id, name: row.name, accentColor: row.accent_color }));
+    } catch (error) {
+      console.info(`[resume.service] getTemplateCatalog: using default catalog (${(error as Error).message})`);
+      return DEFAULT_TEMPLATE_CATALOG;
     }
   },
 
@@ -286,12 +289,12 @@ export const resumeService = {
     return nextContent;
   },
 
+  /** Delegates to the shared compute_ats_breakdown() Postgres function (see migration 0057) so scoring and its admin-configured guidance are identical across every client. */
   async getATSBreakdown(resumeId: string): Promise<ATSBreakdown> {
     try {
-      const doc = await resumeService.getResumeDetail(resumeId);
-      const breakdown = computeATSBreakdown(doc);
-      await supabase.from("resumes_builder").update({ ats_score: breakdown.overall }).eq("id", resumeId);
-      return breakdown;
+      const { data, error } = await supabase.rpc("compute_ats_breakdown", { p_resume_id: resumeId });
+      if (error || !data) throw new Error(error?.message ?? "Could not analyze this resume.");
+      return data as ATSBreakdown;
     } catch (error) {
       console.info(`[resume.service] getATSBreakdown: using sample content (${(error as Error).message})`);
       return sampleATSBreakdown(resumeId);
@@ -301,7 +304,9 @@ export const resumeService = {
   /** Renders the resume as real HTML and generates an actual PDF file on-device via expo-print. */
   async generatePdf(resumeId: string): Promise<{ uri: string; title: string }> {
     const doc = await resumeService.getResumeDetail(resumeId);
-    const html = renderResumeHtml(doc);
+    const catalog = await resumeService.getTemplateCatalog();
+    const accent = catalog.find((t) => t.id === doc.template)?.accentColor ?? DEFAULT_TEMPLATE_CATALOG[0].accentColor;
+    const html = renderResumeHtml(doc, accent);
     const { uri } = await Print.printToFileAsync({ html, base64: false });
     return { uri, title: doc.title };
   },

@@ -11,7 +11,12 @@ export const resumeQueryKeys = {
   atsScore: (id: string) => ["resumes-builder", "ats", id] as const,
   downloadHistory: ["resumes-builder", "downloads"] as const,
   myCustomProjects: ["resumes-builder", "my-custom-projects"] as const,
+  templateCatalog: ["resumes-builder", "templates"] as const,
 };
+
+/** The admin-managed template catalog — same source of truth the admin panel and website read. */
+export const useTemplateCatalog = () =>
+  useQuery({ queryKey: resumeQueryKeys.templateCatalog, queryFn: () => resumeService.getTemplateCatalog(), staleTime: 5 * 60 * 1000 });
 
 export const useResumeList = () => {
   const userId = useAuthStore((s) => s.user?.id);

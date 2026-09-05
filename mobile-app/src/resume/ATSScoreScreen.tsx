@@ -44,10 +44,18 @@ export function ATSScoreScreen() {
       <ScoreBar label="Keywords" value={breakdown.keywords} />
 
       <View className="bg-green-50 rounded-2xl p-4 mt-4 mb-6">
-        {breakdown.tips.map((tip) => (
-          <View key={tip} className="flex-row items-start mb-1.5">
-            <Ionicons name="star" size={14} color="#16A34A" style={{ marginTop: 2 }} />
-            <Text className="text-green-800 text-sm ml-2 flex-1">{tip}</Text>
+        {breakdown.tips.map((tip, index) => (
+          <View key={tip.ruleId ?? `tip-${index}`} className="flex-row items-start mb-2.5">
+            <Ionicons
+              name={tip.ruleId === null ? "star" : "alert-circle"}
+              size={14}
+              color={tip.ruleId === null ? "#16A34A" : "#D97706"}
+              style={{ marginTop: 2 }}
+            />
+            <View className="ml-2 flex-1">
+              <Text className="text-green-800 text-sm font-medium">{tip.problem}</Text>
+              {!!tip.why && <Text className="text-green-700 text-xs mt-0.5">{tip.why}</Text>}
+            </View>
           </View>
         ))}
       </View>

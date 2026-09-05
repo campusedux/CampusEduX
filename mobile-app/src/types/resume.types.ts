@@ -1,4 +1,17 @@
-export type ResumeTemplate = "modern" | "professional" | "minimal" | "creative";
+/**
+ * A resume_templates.id — admin-managed since migration 006_resume_admin.sql
+ * dropped the fixed-id CHECK constraint, so this is intentionally `string`
+ * rather than a closed union: admins can add templates beyond the 4 seeded
+ * defaults (modern/professional/minimal/creative) and mobile must render
+ * whatever the catalog actually contains.
+ */
+export type ResumeTemplate = string;
+
+export interface ResumeTemplateCatalogEntry {
+  id: ResumeTemplate;
+  name: string;
+  accentColor: string;
+}
 
 export interface ResumePersonalDetails {
   fullName: string;
@@ -57,13 +70,24 @@ export interface ResumeDocument {
   updatedAt: string;
 }
 
+/** One admin-configured ATS guideline, evaluated against the resume's real content by compute_ats_breakdown(). */
+export interface ATSTip {
+  ruleId: string | null;
+  section: string;
+  problem: string;
+  why: string;
+  importance: "low" | "medium" | "high" | "critical";
+  /** true when this rule was mechanically checked against the resume; false means it's general, unautomatable guidance. */
+  checked: boolean;
+}
+
 export interface ATSBreakdown {
   overall: number;
   content: number;
   formatting: number;
   skills: number;
   keywords: number;
-  tips: string[];
+  tips: ATSTip[];
 }
 
 export interface ResumeDownloadRecord {

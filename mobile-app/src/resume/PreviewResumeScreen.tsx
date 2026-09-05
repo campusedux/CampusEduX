@@ -3,33 +3,25 @@ import { View, Text, Pressable, ScrollView } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
-import { useResumeDetail } from "@/hooks/useResume";
-import type { ResumeStackParamList, ResumeTemplate } from "@/types";
+import { useResumeDetail, useTemplateCatalog } from "@/hooks/useResume";
+import type { ResumeStackParamList } from "@/types";
 
 type Rte = RouteProp<ResumeStackParamList, "PreviewResume">;
 
-const TEMPLATE_ACCENTS: Record<ResumeTemplate, string> = {
-  modern: "#4F39F6",
-  professional: "#1E3A8A",
-  minimal: "#374151",
-  creative: "#DB2777",
-};
-const TEMPLATE_LABELS: Record<ResumeTemplate, string> = {
-  modern: "Modern",
-  professional: "Professional",
-  minimal: "Minimal",
-  creative: "Creative",
-};
+const FALLBACK_ACCENT = "#4F39F6";
 
 export function PreviewResumeScreen() {
   const navigation = useNavigation();
   const { params } = useRoute<Rte>();
   const { data: resume, isLoading, isError, refetch } = useResumeDetail(params.resumeId);
+  const { data: templates } = useTemplateCatalog();
 
   if (isLoading) return <Screen className="items-center justify-center"><LoadingState label="Loading preview..." /></Screen>;
   if (isError || !resume) return <Screen className="items-center justify-center px-6"><ErrorState message="Couldn't load this resume." onRetry={refetch} /></Screen>;
 
-  const accent = TEMPLATE_ACCENTS[resume.template];
+  const templateEntry = templates?.find((t) => t.id === resume.template);
+  const accent = templateEntry?.accentColor ?? FALLBACK_ACCENT;
+  const templateLabel = templateEntry?.name ?? resume.template;
   const p = resume.personalDetails;
   const contactLine = [p.email, p.phone, p.location].filter(Boolean).join(" · ");
 
@@ -95,7 +87,7 @@ export function PreviewResumeScreen() {
             onPress={() => (navigation as any).navigate("Templates", { resumeId: params.resumeId })}
             className="flex-row items-center"
           >
-            <Text className="text-primary font-medium mr-1">{TEMPLATE_LABELS[resume.template]}</Text>
+            <Text className="text-primary font-medium mr-1">{templateLabel}</Text>
             <Ionicons name="chevron-down" size={14} color="#4F39F6" />
           </Pressable>
         </View>

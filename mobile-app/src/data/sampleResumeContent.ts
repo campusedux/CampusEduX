@@ -93,7 +93,16 @@ export function sampleATSBreakdown(resumeId: string): ATSBreakdown {
     formatting: 80,
     skills: 85,
     keywords: 85,
-    tips: ["Great! Your resume has a high chance of passing ATS screening."],
+    tips: [
+      {
+        ruleId: null,
+        section: "general",
+        problem: "Great! Your resume has a high chance of passing ATS screening.",
+        why: "",
+        importance: "low",
+        checked: true,
+      },
+    ],
   };
 }
 
