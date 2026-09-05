@@ -16,6 +16,9 @@ export default function ProfileForm({ initial, catalog }: { initial: AccountUser
   const [course, setCourse] = useState(initial.course ?? "");
   const [branch, setBranch] = useState(initial.branch ?? "");
   const [year, setYear] = useState(initial.year ?? "");
+  const [linkedinUrl, setLinkedinUrl] = useState(initial.linkedinUrl ?? "");
+  const [githubUrl, setGithubUrl] = useState(initial.githubUrl ?? "");
+  const [portfolioUrl, setPortfolioUrl] = useState(initial.portfolioUrl ?? "");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +43,15 @@ export default function ProfileForm({ initial, catalog }: { initial: AccountUser
     const supabase = createBrowserSupabase();
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ full_name: fullName, course, branch, year })
+      .update({
+        full_name: fullName,
+        course,
+        branch,
+        year,
+        linkedin_url: linkedinUrl.trim() || null,
+        github_url: githubUrl.trim() || null,
+        portfolio_url: portfolioUrl.trim() || null,
+      })
       .eq("id", initial.id);
     setSaving(false);
     if (updateError) setError(updateError.message);
@@ -108,6 +119,18 @@ export default function ProfileForm({ initial, catalog }: { initial: AccountUser
           ) : (
             <Input id="pf-year" value={year} onChange={(e) => setYear(e.target.value)} />
           )}
+        </Field>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="LinkedIn URL" htmlFor="pf-linkedin">
+          <Input id="pf-linkedin" placeholder="https://linkedin.com/in/…" value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)} />
+        </Field>
+        <Field label="GitHub URL" htmlFor="pf-github">
+          <Input id="pf-github" placeholder="https://github.com/…" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} />
+        </Field>
+        <Field label="Portfolio / website URL" htmlFor="pf-portfolio">
+          <Input id="pf-portfolio" placeholder="https://…" value={portfolioUrl} onChange={(e) => setPortfolioUrl(e.target.value)} />
         </Field>
       </div>
 

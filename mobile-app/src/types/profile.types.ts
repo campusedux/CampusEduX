@@ -5,6 +5,9 @@ export interface ProfileEditableFields {
   gender: string | null;
   location: string | null;
   avatarUrl: string | null;
+  linkedinUrl: string | null;
+  githubUrl: string | null;
+  portfolioUrl: string | null;
 }
 
 export type WalletTransactionCategory =

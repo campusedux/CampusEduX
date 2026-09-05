@@ -4,7 +4,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
-import { useResumeDetail, useUpdateFreeformSection } from "@/hooks/useResume";
+import { useResumeDetail, useUpdateFreeformSection, useMyCustomProjectsForResume, useAppendProjectToResume } from "@/hooks/useResume";
 import type { ResumeStackParamList, ResumeFreeformSectionKey } from "@/types";
 
 type Nav = NativeStackNavigationProp<ResumeStackParamList, "ResumeEditor">;
@@ -40,10 +40,13 @@ export function ResumeEditorScreen() {
   const { params } = useRoute<Rte>();
   const { data: resume, isLoading, isError, refetch } = useResumeDetail(params.resumeId);
   const updateSection = useUpdateFreeformSection(params.resumeId);
+  const appendProject = useAppendProjectToResume(params.resumeId);
+  const { data: myProjects } = useMyCustomProjectsForResume();
 
   const [activeKey, setActiveKey] = useState<SectionKey>("personal");
   const [draft, setDraft] = useState("");
   const [savedRecently, setSavedRecently] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
 
   useEffect(() => {
     if (resume && FREEFORM_PLACEHOLDERS[activeKey] !== undefined) {
@@ -66,6 +69,12 @@ export function ResumeEditorScreen() {
     await updateSection.mutateAsync({ key: activeKey as ResumeFreeformSectionKey, content: draft, currentSections: resume.sections });
     setSavedRecently(true);
     setTimeout(() => setSavedRecently(false), 2000);
+  };
+
+  const handleAddProject = async (project: NonNullable<typeof myProjects>[number]) => {
+    const nextContent = await appendProject.mutateAsync({ project, currentSections: resume.sections });
+    setDraft(nextContent);
+    setShowProjectPicker(false);
   };
 
   const isFreeform = FREEFORM_PLACEHOLDERS[activeKey] !== undefined;
@@ -105,7 +114,48 @@ export function ResumeEditorScreen() {
 
       {isFreeform ? (
         <>
-          <Text className="font-bold text-gray-900 mb-2 capitalize">{activeKey}</Text>
+          <View className="flex-row items-center justify-between mb-2">
+            <Text className="font-bold text-gray-900 capitalize">{activeKey}</Text>
+            {activeKey === "projects" && (
+              <Pressable onPress={() => setShowProjectPicker((v) => !v)}>
+                <Text className="text-primary text-sm font-medium">
+                  {showProjectPicker ? "Close" : "+ Add from My Projects"}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+
+          {activeKey === "projects" && showProjectPicker && (
+            <View className="border border-gray-200 rounded-xl mb-4 overflow-hidden">
+              {!myProjects || myProjects.length === 0 ? (
+                <Text className="text-gray-500 text-sm px-4 py-3">
+                  No finished custom projects yet — completed Custom Project Builder requests show up here.
+                </Text>
+              ) : (
+                myProjects.map((project, index) => (
+                  <View
+                    key={project.id}
+                    className={`flex-row items-center justify-between px-4 py-3 ${index < myProjects.length - 1 ? "border-b border-gray-100" : ""}`}
+                  >
+                    <View className="flex-1 mr-3">
+                      <Text className="text-gray-900 font-medium" numberOfLines={1}>{project.title}</Text>
+                      {!!project.technologyPreference && (
+                        <Text className="text-gray-500 text-xs" numberOfLines={1}>{project.technologyPreference}</Text>
+                      )}
+                    </View>
+                    <Pressable
+                      onPress={() => handleAddProject(project)}
+                      disabled={appendProject.isPending}
+                      className="px-3 py-1.5 rounded-full bg-primary"
+                    >
+                      <Text className="text-white text-xs font-semibold">Add</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
           <TextInput
             value={draft}
             onChangeText={setDraft}

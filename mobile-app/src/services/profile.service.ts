@@ -12,6 +12,9 @@ export const profileService = {
         gender: fields.gender,
         location: fields.location,
         avatar_url: fields.avatarUrl,
+        linkedin_url: fields.linkedinUrl,
+        github_url: fields.githubUrl,
+        portfolio_url: fields.portfolioUrl,
       })
       .eq("id", userId);
     if (error) throw new Error(`Couldn't save your profile: ${error.message}`);

@@ -1,7 +1,7 @@
 jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModule());
 jest.mock("expo-print", () => ({ printToFileAsync: jest.fn(() => Promise.resolve({ uri: "file:///tmp/resume.pdf" })) }));
 
-import { resumeService } from "@/services/resume.service";
+import { resumeService, formatProjectSnippet, appendToFreeformContent } from "@/services/resume.service";
 import { resetSupabaseMock, setTableResult, supabase } from "../../mocks/supabase.mock";
 import { SAMPLE_RESUME_LIST } from "@/data/sampleResumeContent";
 
@@ -109,6 +109,55 @@ describe("resumeService.generatePdf", () => {
     const html = (Print.printToFileAsync as jest.Mock).mock.calls[0][0].html as string;
     expect(html).toContain("Rohan Verma");
     expect(result).toEqual({ uri: "file:///tmp/resume.pdf", title: "Rohan's Resume" });
+  });
+});
+
+describe("formatProjectSnippet", () => {
+  it("includes the tech line and description when both are present", () => {
+    const snippet = formatProjectSnippet({ title: "Campus Marketplace", description: "A full-stack store for student sellers.", technologyPreference: "React, Node.js" });
+    expect(snippet).toBe("Campus Marketplace — React, Node.js\nA full-stack store for student sellers.");
+  });
+
+  it("omits the tech suffix and description line when they're blank", () => {
+    expect(formatProjectSnippet({ title: "Portfolio Site", description: "  ", technologyPreference: "" })).toBe("Portfolio Site");
+  });
+});
+
+describe("appendToFreeformContent", () => {
+  it("appends with a blank-line separator when there is existing content", () => {
+    expect(appendToFreeformContent("Existing project one.", "New Project — React")).toBe("Existing project one.\n\nNew Project — React");
+  });
+
+  it("returns just the snippet when the section was empty", () => {
+    expect(appendToFreeformContent("   ", "New Project — React")).toBe("New Project — React");
+  });
+});
+
+describe("resumeService.listMyCustomProjects", () => {
+  it("maps ready/delivered custom projects into resume-ready candidates", async () => {
+    setTableResult("custom_project_requests", {
+      data: [{ id: "cp-1", title: "Campus Marketplace", description: "A store for student sellers.", technology_preference: "React, Node.js", status: "delivered" }],
+    });
+    const projects = await resumeService.listMyCustomProjects("u-1");
+    expect(projects).toEqual([{ id: "cp-1", title: "Campus Marketplace", description: "A store for student sellers.", technologyPreference: "React, Node.js" }]);
+  });
+
+  it("returns an empty list (not a throw) when the query fails", async () => {
+    setTableResult("custom_project_requests", { error: { message: "no table" } });
+    expect(await resumeService.listMyCustomProjects("u-1")).toEqual([]);
+  });
+});
+
+describe("resumeService.appendProjectToResume", () => {
+  it("appends a formatted project snippet to the projects section without touching other sections", async () => {
+    setTableResult("resumes_builder", { error: null });
+    const currentSections = { summary: "My summary.", experience: "My experience.", projects: "Old Project — Python" };
+    const project = { id: "cp-1", title: "Campus Marketplace", description: "A store for student sellers.", technologyPreference: "React, Node.js" };
+
+    const result = await resumeService.appendProjectToResume("res-1", project, currentSections);
+
+    expect(result).toBe("Old Project — Python\n\nCampus Marketplace — React, Node.js\nA store for student sellers.");
+    expect(supabase.from).toHaveBeenCalledWith("resumes_builder");
   });
 });
 

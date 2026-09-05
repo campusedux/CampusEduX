@@ -36,6 +36,9 @@ function mapProfileRow(row: any, email: string): UserProfile {
     dateOfBirth: row.date_of_birth ?? null,
     gender: row.gender ?? null,
     location: row.location ?? null,
+    linkedinUrl: row.linkedin_url ?? null,
+    githubUrl: row.github_url ?? null,
+    portfolioUrl: row.portfolio_url ?? null,
     isPremium: row.is_premium ?? false,
     createdAt: row.created_at,
   };

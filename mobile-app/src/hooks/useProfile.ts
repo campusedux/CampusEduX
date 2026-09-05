@@ -16,7 +16,14 @@ export const useUpdateProfile = () => {
   return useMutation({
     mutationFn: (fields: ProfileEditableFields) => profileService.updateProfile(userId as string, fields),
     onSuccess: (_data, fields) => {
-      updateUserFields({ fullName: fields.fullName, mobileNumber: fields.mobileNumber, avatarUrl: fields.avatarUrl });
+      updateUserFields({
+        fullName: fields.fullName,
+        mobileNumber: fields.mobileNumber,
+        avatarUrl: fields.avatarUrl,
+        linkedinUrl: fields.linkedinUrl,
+        githubUrl: fields.githubUrl,
+        portfolioUrl: fields.portfolioUrl,
+      });
       queryClient.invalidateQueries();
     },
   });

@@ -21,6 +21,9 @@ export function EditProfileScreen() {
   const [gender, setGender] = useState(user?.gender ?? "");
   const [location, setLocation] = useState(user?.location ?? "");
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? null);
+  const [linkedinUrl, setLinkedinUrl] = useState(user?.linkedinUrl ?? "");
+  const [githubUrl, setGithubUrl] = useState(user?.githubUrl ?? "");
+  const [portfolioUrl, setPortfolioUrl] = useState(user?.portfolioUrl ?? "");
 
   const handlePickPhoto = async () => {
     const uploadedUrl = await pickAndUpload();
@@ -33,7 +36,17 @@ export function EditProfileScreen() {
       return;
     }
     try {
-      await updateProfile.mutateAsync({ fullName, mobileNumber, dateOfBirth: dateOfBirth || null, gender: gender || null, location: location || null, avatarUrl });
+      await updateProfile.mutateAsync({
+        fullName,
+        mobileNumber,
+        dateOfBirth: dateOfBirth || null,
+        gender: gender || null,
+        location: location || null,
+        avatarUrl,
+        linkedinUrl: linkedinUrl.trim() || null,
+        githubUrl: githubUrl.trim() || null,
+        portfolioUrl: portfolioUrl.trim() || null,
+      });
       navigation.goBack();
     } catch (error: any) {
       notify("Couldn't save", error.message ?? "Please try again.");
@@ -71,6 +84,11 @@ export function EditProfileScreen() {
       </View>
 
       <Input icon="location-outline" placeholder="Location" value={location} onChangeText={setLocation} />
+
+      <Text className="font-semibold text-gray-900 mb-2 mt-2">Career links (shown on your resume)</Text>
+      <Input icon="logo-linkedin" placeholder="LinkedIn URL" autoCapitalize="none" value={linkedinUrl} onChangeText={setLinkedinUrl} />
+      <Input icon="logo-github" placeholder="GitHub URL" autoCapitalize="none" value={githubUrl} onChangeText={setGithubUrl} />
+      <Input icon="globe-outline" placeholder="Portfolio / website URL" autoCapitalize="none" value={portfolioUrl} onChangeText={setPortfolioUrl} />
 
       <Button label="Save Changes" loading={updateProfile.isPending} onPress={handleSave} className="mt-2 mb-6" />
     </Screen>

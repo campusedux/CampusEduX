@@ -10,6 +10,7 @@ import type {
   ResumeTemplate,
   ATSBreakdown,
   ResumeDownloadRecord,
+  ResumeProjectCandidate,
 } from "@/types";
 import { RESUME_FREEFORM_SECTIONS } from "@/types";
 import {
@@ -54,6 +55,19 @@ function mapRow(row: any): ResumeDocument {
     atsScore: row.ats_score ?? 0,
     updatedAt: row.updated_at,
   };
+}
+
+/** Formats a finished custom project as a resume-ready snippet. Exported for unit testing. */
+export function formatProjectSnippet(project: Pick<ResumeProjectCandidate, "title" | "description" | "technologyPreference">): string {
+  const techSuffix = project.technologyPreference.trim() ? ` — ${project.technologyPreference.trim()}` : "";
+  const description = project.description.trim();
+  return `${project.title}${techSuffix}${description ? `\n${description}` : ""}`;
+}
+
+/** Appends a snippet to a freeform section's existing content, never replacing it. Exported for unit testing. */
+export function appendToFreeformContent(current: string, snippet: string): string {
+  const trimmed = current.trim();
+  return trimmed ? `${trimmed}\n\n${snippet}` : snippet;
 }
 
 /**
@@ -237,6 +251,39 @@ export const resumeService = {
 
   async deleteResume(resumeId: string): Promise<void> {
     await persist("deleteResume", () => supabase.from("resumes_builder").delete().eq("id", resumeId));
+  },
+
+  /** Finished (ready/delivered) Custom Project Builder requests the user can add to a resume. */
+  async listMyCustomProjects(userId: string): Promise<ResumeProjectCandidate[]> {
+    try {
+      const { data, error } = await supabase
+        .from("custom_project_requests")
+        .select("id, title, description, technology_preference, status")
+        .eq("user_id", userId)
+        .in("status", ["ready", "delivered"])
+        .order("updated_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row: any) => ({
+        id: row.id,
+        title: row.title ?? "Untitled project",
+        description: row.description ?? "",
+        technologyPreference: row.technology_preference ?? "",
+      }));
+    } catch (error) {
+      console.info(`[resume.service] listMyCustomProjects: unavailable (${(error as Error).message})`);
+      return [];
+    }
+  },
+
+  /** Appends a finished project as a formatted snippet to the resume's Projects section — never replaces existing content. */
+  async appendProjectToResume(
+    resumeId: string,
+    project: ResumeProjectCandidate,
+    currentSections: Record<string, string>
+  ): Promise<string> {
+    const nextContent = appendToFreeformContent(currentSections.projects ?? "", formatProjectSnippet(project));
+    await resumeService.updateFreeformSection(resumeId, "projects", nextContent, currentSections);
+    return nextContent;
   },
 
   async getATSBreakdown(resumeId: string): Promise<ATSBreakdown> {

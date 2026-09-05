@@ -12,6 +12,9 @@ export interface AccountUser {
   year: string | null;
   isPremium: boolean;
   referralCode: string | null;
+  linkedinUrl: string | null;
+  githubUrl: string | null;
+  portfolioUrl: string | null;
 }
 
 /**
@@ -31,7 +34,9 @@ export async function requireUser(): Promise<AccountUser> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, email, full_name, mobile_number, avatar_url, course, branch, year, is_premium, referral_code")
+    .select(
+      "id, email, full_name, mobile_number, avatar_url, course, branch, year, is_premium, referral_code, linkedin_url, github_url, portfolio_url",
+    )
     .eq("id", user.id)
     .maybeSingle();
 
@@ -46,6 +51,9 @@ export async function requireUser(): Promise<AccountUser> {
     year: profile?.year ?? null,
     isPremium: profile?.is_premium ?? false,
     referralCode: profile?.referral_code ?? null,
+    linkedinUrl: profile?.linkedin_url ?? null,
+    githubUrl: profile?.github_url ?? null,
+    portfolioUrl: profile?.portfolio_url ?? null,
   };
 }
 

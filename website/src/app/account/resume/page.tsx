@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { timeAgo } from "@/lib/format";
 import { Badge, EmptyState, Button } from "@/components/ui";
+import Link from "next/link";
 
 export default async function AccountResumePage() {
   const user = await requireUser();
@@ -35,6 +36,9 @@ export default async function AccountResumePage() {
                 {typeof r.ats_score === "number" && <Badge tone={r.ats_score >= 70 ? "success" : "neutral"}>ATS {r.ats_score}</Badge>}
               </div>
               <div className="mt-1 text-xs text-ink-faint">Template: {r.template} · updated {timeAgo(r.updated_at)}</div>
+              <Link href={`/account/resume/${r.id}/projects`} className="mt-3 inline-block text-xs font-semibold text-primary hover:underline">
+                + Add a project
+              </Link>
             </div>
           ))}
         </div>

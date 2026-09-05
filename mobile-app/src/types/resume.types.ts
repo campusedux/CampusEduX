@@ -73,3 +73,11 @@ export interface ResumeDownloadRecord {
   fileUrl: string;
   downloadedAt: string;
 }
+
+/** A finished Custom Project Builder request the user can add to a resume's Projects section. */
+export interface ResumeProjectCandidate {
+  id: string;
+  title: string;
+  description: string;
+  technologyPreference: string;
+}

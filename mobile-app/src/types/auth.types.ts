@@ -10,6 +10,9 @@ export interface UserProfile {
   dateOfBirth?: string | null;
   gender?: string | null;
   location?: string | null;
+  linkedinUrl?: string | null;
+  githubUrl?: string | null;
+  portfolioUrl?: string | null;
   isPremium: boolean;
   createdAt: string;
 }
