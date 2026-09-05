@@ -17,8 +17,7 @@ export default async function AccountResumePage() {
     <div>
       <h1 className="text-2xl font-bold text-ink">Your resumes</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        Editing sections, choosing templates and exporting a PDF happen in the CampusEduX app — this is a read-only
-        overview of what&apos;s saved to your account.
+        Edit any resume here or in the CampusEduX app — both stay in sync automatically.
       </p>
 
       {!resumes || resumes.length === 0 ? (
@@ -36,9 +35,14 @@ export default async function AccountResumePage() {
                 {typeof r.ats_score === "number" && <Badge tone={r.ats_score >= 70 ? "success" : "neutral"}>ATS {r.ats_score}</Badge>}
               </div>
               <div className="mt-1 text-xs text-ink-faint">Template: {r.template} · updated {timeAgo(r.updated_at)}</div>
-              <Link href={`/account/resume/${r.id}/projects`} className="mt-3 inline-block text-xs font-semibold text-primary hover:underline">
-                + Add a project
-              </Link>
+              <div className="mt-3 flex items-center gap-4">
+                <Link href={`/account/resume/${r.id}/edit`} className="text-xs font-semibold text-primary hover:underline">
+                  Edit resume
+                </Link>
+                <Link href={`/account/resume/${r.id}/projects`} className="text-xs font-semibold text-primary hover:underline">
+                  + Add a project
+                </Link>
+              </div>
             </div>
           ))}
         </div>
