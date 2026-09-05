@@ -28,6 +28,8 @@ import {
   deleteAtsRule,
   updateAiPrompt,
   toggleAiPrompt,
+  revokeResumeShare,
+  setShareReportStatus,
 } from '@/app/(panel)/resume/actions';
 
 beforeEach(() => {
@@ -161,6 +163,30 @@ describe('ai prompts', () => {
     expect(res).toEqual({ ok: true });
     expect(logActivity).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'resume.ai_prompt.toggle', resourceId: 'summary', details: { next: false } }),
+    );
+  });
+});
+
+describe('share moderation', () => {
+  it('revokeResumeShare disables the share and logs it', async () => {
+    setTableResult('resume_shares', { error: null });
+    const res = await revokeResumeShare('share-1');
+    expect(res).toEqual({ ok: true });
+    const update = callsFor('resume_shares').find((c) => c.verb === 'update');
+    expect(update?.args[0]).toEqual({ is_active: false });
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'resume.share.revoke', resourceType: 'resume_shares', resourceId: 'share-1' }),
+    );
+  });
+
+  it('setShareReportStatus updates status + resolved_at and logs it', async () => {
+    setTableResult('resume_share_reports', { error: null });
+    const res = await setShareReportStatus('report-1', 'resolved');
+    expect(res).toEqual({ ok: true });
+    const update = callsFor('resume_share_reports').find((c) => c.verb === 'update');
+    expect(update?.args[0]).toMatchObject({ status: 'resolved' });
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'resume.share_report.status', resourceId: 'report-1', details: { status: 'resolved' } }),
     );
   });
 });

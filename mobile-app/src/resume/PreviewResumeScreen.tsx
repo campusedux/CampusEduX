@@ -1,9 +1,10 @@
-import React from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import React, { useState } from "react";
+import { View, Text, Pressable, ScrollView, Share } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { notify } from "@/lib/notify";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
-import { useResumeDetail, useTemplateCatalog } from "@/hooks/useResume";
+import { useResumeDetail, useTemplateCatalog, useCreateResumeShare } from "@/hooks/useResume";
 import type { ResumeStackParamList } from "@/types";
 
 type Rte = RouteProp<ResumeStackParamList, "PreviewResume">;
@@ -15,6 +16,8 @@ export function PreviewResumeScreen() {
   const { params } = useRoute<Rte>();
   const { data: resume, isLoading, isError, refetch } = useResumeDetail(params.resumeId);
   const { data: templates } = useTemplateCatalog();
+  const createShare = useCreateResumeShare();
+  const [sharing, setSharing] = useState(false);
 
   if (isLoading) return <Screen className="items-center justify-center"><LoadingState label="Loading preview..." /></Screen>;
   if (isError || !resume) return <Screen className="items-center justify-center px-6"><ErrorState message="Couldn't load this resume." onRetry={refetch} /></Screen>;
@@ -24,6 +27,18 @@ export function PreviewResumeScreen() {
   const templateLabel = templateEntry?.name ?? resume.template;
   const p = resume.personalDetails;
   const contactLine = [p.email, p.phone, p.location].filter(Boolean).join(" · ");
+
+  const handleShareLink = async () => {
+    setSharing(true);
+    try {
+      const url = await createShare.mutateAsync(params.resumeId);
+      await Share.share({ message: url });
+    } catch (error: any) {
+      notify("Couldn't create a share link", error.message ?? "Please try again.");
+    } finally {
+      setSharing(false);
+    }
+  };
 
   return (
     <Screen>
@@ -91,6 +106,13 @@ export function PreviewResumeScreen() {
             <Ionicons name="chevron-down" size={14} color="#4F39F6" />
           </Pressable>
         </View>
+        <Button
+          label="Get a public share link"
+          variant="outline"
+          loading={sharing}
+          onPress={handleShareLink}
+          className="mb-3"
+        />
         <View className="flex-row" style={{ gap: 10 }}>
           <Button label="Previous" variant="outline" className="flex-1" onPress={() => navigation.goBack()} />
           <Button

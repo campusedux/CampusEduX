@@ -220,3 +220,19 @@ describe("resumeService.getDownloadHistory", () => {
     expect(supabase.from).toHaveBeenCalledWith("resume_downloads");
   });
 });
+
+describe("resumeService.createShareLink", () => {
+  it("returns the full public share URL from the created token", async () => {
+    setTableResult("resume_shares", { data: [{ token: "abc123" }] });
+    const url = await resumeService.createShareLink("u-1", "res-1");
+    expect(url).toBe("https://campusedux.app/r/abc123");
+    const insertCall = (supabase.from as jest.Mock).mock.calls.findIndex((c) => c[0] === "resume_shares");
+    const builder = (supabase.from as jest.Mock).mock.results[insertCall].value;
+    expect((builder.insert as jest.Mock).mock.calls[0][0]).toEqual({ user_id: "u-1", resume_id: "res-1" });
+  });
+
+  it("throws a clear error when the insert fails", async () => {
+    setTableResult("resume_shares", { error: { message: "network down" } });
+    await expect(resumeService.createShareLink("u-1", "res-1")).rejects.toThrow("network down");
+  });
+});

@@ -95,6 +95,19 @@ export async function getAiPrompts() {
   );
 }
 
+export async function getShareReports() {
+  const supabase = createClient();
+  return safe(
+    supabase
+      .from('resume_share_reports')
+      .select(
+        'id, reason, status, created_at, resolved_at, share:resume_shares(id, token, is_active, resume:resumes_builder(title))',
+      )
+      .order('created_at', { ascending: false }),
+    [] as any[],
+  );
+}
+
 export async function listResumeDownloads(opts: { page: number; q?: string }) {
   const supabase = createClient();
   const from = (opts.page - 1) * RESUME_PAGE_SIZE;

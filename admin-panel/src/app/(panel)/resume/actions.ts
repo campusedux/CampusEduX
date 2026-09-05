@@ -215,3 +215,27 @@ export async function toggleAiPrompt(id: string, next: boolean): Promise<Result>
   revalidatePath('/resume/ai-config');
   return { ok: true };
 }
+
+// --- share-link moderation (Phase 9) --------------------------------
+export async function revokeResumeShare(shareId: string): Promise<Result> {
+  await requirePermission('resume', 'edit');
+  const supabase = createClient();
+  const { error } = await supabase.from('resume_shares').update({ is_active: false }).eq('id', shareId);
+  if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.share.revoke', module: 'resume', resourceType: 'resume_shares', resourceId: shareId });
+  revalidatePath('/resume/shares');
+  return { ok: true };
+}
+
+export async function setShareReportStatus(reportId: string, status: 'resolved' | 'dismissed'): Promise<Result> {
+  await requirePermission('resume', 'edit');
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('resume_share_reports')
+    .update({ status, resolved_at: new Date().toISOString() })
+    .eq('id', reportId);
+  if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.share_report.status', module: 'resume', resourceType: 'resume_share_reports', resourceId: reportId, details: { status } });
+  revalidatePath('/resume/shares');
+  return { ok: true };
+}

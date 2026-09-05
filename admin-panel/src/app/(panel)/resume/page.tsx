@@ -16,6 +16,7 @@ const LINKS = [
   { href: '/resume/templates/categories', label: 'Template Categories' },
   { href: '/resume/ats-rules', label: 'ATS Rules & Guidelines' },
   { href: '/resume/ai-config', label: 'AI Assist Config' },
+  { href: '/resume/shares', label: 'Share Reports' },
   { href: '/resume/downloads', label: 'Resume Downloads' },
   { href: '/resume/analytics', label: 'Analytics' },
 ];

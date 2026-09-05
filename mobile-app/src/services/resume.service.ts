@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import * as Print from "expo-print";
+import { BRAND } from "@/constants/brand";
 import type {
   ResumeSummary,
   ResumeDocument,
@@ -338,5 +339,16 @@ export const resumeService = {
       console.info(`[resume.service] getDownloadHistory: using sample content (${(error as Error).message})`);
       return sampleResumeDownloadHistory();
     }
+  },
+
+  /** Creates a new public share link (owner-RLS insert — resume_shares.token defaults server-side) and returns its full public URL. */
+  async createShareLink(userId: string, resumeId: string): Promise<string> {
+    const { data, error } = await supabase
+      .from("resume_shares")
+      .insert({ user_id: userId, resume_id: resumeId })
+      .select("token")
+      .single();
+    if (error || !data) throw new Error(error?.message ?? "Could not create a share link.");
+    return `${BRAND.website.replace(/\/$/, "")}/r/${data.token}`;
   },
 };

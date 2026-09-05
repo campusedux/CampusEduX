@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Check, AlertTriangle } from "lucide-react";
 import { Select } from "@/components/ui";
-import { updateResumeTemplateAction, updateResumeLayoutAction } from "@/lib/actions/resumeBuilder";
+import { updateResumeTemplateAction, updateResumeLayoutAction, type ResumeShare } from "@/lib/actions/resumeBuilder";
 import { normalizeLayout, moveSection, toggleHidden, type ManageableSectionKey, type ResumeLayout } from "@/lib/resumeBuilder/sections";
 import type { ResumeDocument, ResumeFreeformSectionKey } from "@/lib/resumeBuilder/types";
 import { RESUME_FREEFORM_SECTIONS } from "@/lib/resumeBuilder/types";
@@ -14,6 +14,7 @@ import PersonalDetailsForm from "./PersonalDetailsForm";
 import EducationEditor from "./EducationEditor";
 import SkillsEditor from "./SkillsEditor";
 import FreeformSectionEditor from "./FreeformSectionEditor";
+import ShareModal from "@/components/resumeBuilder/ShareModal";
 import type { SaveStatus } from "./useAutosaveField";
 
 type ActiveSection = "personal" | ManageableSectionKey;
@@ -44,7 +45,15 @@ function SaveStatusBadge({ status }: { status: SaveStatus }) {
   );
 }
 
-export default function ResumeEditor({ resume: initialResume, templates }: { resume: ResumeDocument; templates: TemplateOption[] }) {
+export default function ResumeEditor({
+  resume: initialResume,
+  templates,
+  shares,
+}: {
+  resume: ResumeDocument;
+  templates: TemplateOption[];
+  shares: ResumeShare[];
+}) {
   const [resume, setResume] = useState(initialResume);
   const [layout, setLayout] = useState<ResumeLayout>(() => normalizeLayout(initialResume.layout));
   const [active, setActive] = useState<ActiveSection>("personal");
@@ -100,6 +109,7 @@ export default function ResumeEditor({ resume: initialResume, templates }: { res
           <a href={`/api/resume/export/docx?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
             Download DOCX
           </a>
+          <ShareModal resumeId={resume.id} initialShares={shares} />
         </div>
       </div>
 

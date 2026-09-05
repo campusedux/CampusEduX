@@ -339,3 +339,93 @@ export async function createResumeFromImportAction(rawInput: unknown): Promise<{
 
   return { resumeId: data.id };
 }
+
+// ---------------------------------------------------------------------------
+// Phase 9 — share-link management. resume_shares stays owner-RLS the whole
+// way through; the public/anon read path (get_shared_resume) is a separate,
+// narrowly-scoped SECURITY DEFINER function these actions never touch.
+// ---------------------------------------------------------------------------
+
+export interface ResumeShare {
+  id: string;
+  token: string;
+  isActive: boolean;
+  viewCount: number;
+  createdAt: string;
+}
+
+export async function createResumeShareAction(rawResumeId: string): Promise<ResumeShare | ActionError> {
+  const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!resumeParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  // Confirm ownership before creating a share for it — same re-check pattern as the rest of this file.
+  const { data: resume } = await supabase.from("resumes_builder").select("id").eq("id", resumeParsed.data).eq("user_id", user.id).maybeSingle();
+  if (!resume) return { error: "That resume could not be found." };
+
+  const { data, error } = await supabase
+    .from("resume_shares")
+    .insert({ user_id: user.id, resume_id: resumeParsed.data })
+    .select("id, token, is_active, view_count, created_at")
+    .single();
+  if (error || !data) return { error: "Could not create a share link. Please try again." };
+
+  return { id: data.id, token: data.token, isActive: data.is_active, viewCount: data.view_count, createdAt: data.created_at };
+}
+
+export async function listResumeSharesAction(rawResumeId: string): Promise<ResumeShare[] | ActionError> {
+  const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!resumeParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { data, error } = await supabase
+    .from("resume_shares")
+    .select("id, token, is_active, view_count, created_at")
+    .eq("resume_id", resumeParsed.data)
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+  if (error) return { error: "Could not load share links." };
+
+  return (data ?? []).map((row) => ({ id: row.id, token: row.token, isActive: row.is_active, viewCount: row.view_count, createdAt: row.created_at }));
+}
+
+const shareIdSchema = z.string().uuid();
+
+export async function toggleResumeShareAction(rawShareId: string, next: boolean): Promise<OkResult> {
+  const shareParsed = shareIdSchema.safeParse(rawShareId);
+  if (!shareParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { data, error } = await supabase
+    .from("resume_shares")
+    .update({ is_active: next })
+    .eq("id", shareParsed.data)
+    .eq("user_id", user.id)
+    .select("id")
+    .maybeSingle();
+  if (error) return { error: "Could not update the share link." };
+  if (!data) return { error: "That share link could not be found." };
+  return { ok: true };
+}
+
+export async function deleteResumeShareAction(rawShareId: string): Promise<OkResult> {
+  const shareParsed = shareIdSchema.safeParse(rawShareId);
+  if (!shareParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { error } = await supabase.from("resume_shares").delete().eq("id", shareParsed.data).eq("user_id", user.id);
+  if (error) return { error: "Could not delete the share link." };
+  return { ok: true };
+}

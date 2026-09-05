@@ -15,6 +15,10 @@ import {
   updateResumeLayoutAction,
   matchResumeToJdAction,
   createResumeFromImportAction,
+  createResumeShareAction,
+  listResumeSharesAction,
+  toggleResumeShareAction,
+  deleteResumeShareAction,
 } from "@/lib/actions/resumeBuilder";
 
 const USER = { id: "user-1", email: "s@campusedux.app" };
@@ -300,5 +304,62 @@ describe("createResumeFromImportAction", () => {
     await createResumeFromImportAction({ ...VALID_IMPORT, fullName: "" });
     const insert = callsFor("resumes_builder").find((c) => c.verb === "insert");
     expect((insert?.args[0] as Record<string, unknown>).title).toBe("Imported Resume");
+  });
+});
+
+describe("resume share-link actions", () => {
+  beforeEach(() => setUser(USER));
+
+  it("createResumeShareAction rejects when signed out", async () => {
+    setUser(null);
+    const result = await createResumeShareAction(RESUME_ID);
+    expect(result).toEqual({ error: expect.stringMatching(/sign in/i) });
+  });
+
+  it("createResumeShareAction rejects a resume that isn't the caller's own", async () => {
+    setTableResult("resumes_builder", { data: null });
+    const result = await createResumeShareAction(RESUME_ID);
+    expect(result).toEqual({ error: "That resume could not be found." });
+  });
+
+  it("createResumeShareAction creates a share scoped to the caller", async () => {
+    setTableResult("resumes_builder", { data: { id: RESUME_ID } });
+    setTableResult("resume_shares", { data: { id: "share-1", token: "abc123", is_active: true, view_count: 0, created_at: "2026-01-01" } });
+
+    const result = await createResumeShareAction(RESUME_ID);
+
+    expect(result).toEqual({ id: "share-1", token: "abc123", isActive: true, viewCount: 0, createdAt: "2026-01-01" });
+    const insert = callsFor("resume_shares").find((c) => c.verb === "insert");
+    expect(insert?.args[0]).toMatchObject({ user_id: "user-1", resume_id: RESUME_ID });
+  });
+
+  it("listResumeSharesAction scopes the query to the caller's own resume and user", async () => {
+    setTableResult("resume_shares", { data: [{ id: "share-1", token: "abc123", is_active: true, view_count: 3, created_at: "2026-01-01" }] });
+    const result = await listResumeSharesAction(RESUME_ID);
+    expect(result).toEqual([{ id: "share-1", token: "abc123", isActive: true, viewCount: 3, createdAt: "2026-01-01" }]);
+    const eqArgs = callsFor("resume_shares").filter((c) => c.verb === "eq").map((c) => c.args);
+    expect(eqArgs).toEqual(expect.arrayContaining([["resume_id", RESUME_ID], ["user_id", "user-1"]]));
+  });
+
+  it("toggleResumeShareAction reports not-found when 0 rows match", async () => {
+    setTableResult("resume_shares", { data: null });
+    const result = await toggleResumeShareAction("11111111-1111-1111-1111-111111111112", false);
+    expect(result).toEqual({ error: "That share link could not be found." });
+  });
+
+  it("toggleResumeShareAction updates is_active scoped to the caller", async () => {
+    setTableResult("resume_shares", { data: { id: "share-1" } });
+    const result = await toggleResumeShareAction("11111111-1111-1111-1111-111111111112", false);
+    expect(result).toEqual({ ok: true });
+    const update = callsFor("resume_shares").find((c) => c.verb === "update");
+    expect(update?.args[0]).toEqual({ is_active: false });
+  });
+
+  it("deleteResumeShareAction scopes the delete to the caller", async () => {
+    setTableResult("resume_shares", { error: null });
+    const result = await deleteResumeShareAction("11111111-1111-1111-1111-111111111112");
+    expect(result).toEqual({ ok: true });
+    const eqArgs = callsFor("resume_shares").filter((c) => c.verb === "eq").map((c) => c.args);
+    expect(eqArgs).toEqual(expect.arrayContaining([["user_id", "user-1"]]));
   });
 });

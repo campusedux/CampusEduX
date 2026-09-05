@@ -140,6 +140,12 @@ export function useDownloadResumePdf(resumeId: string, resumeTitle: string) {
 /** AI writing-assist — calls the website's /api/resume/assist. Never writes to the resume itself; the caller decides whether to accept the suggestion. */
 export const useResumeAssist = () => useMutation({ mutationFn: (input: AssistRequestInput) => resumeAssistService.requestSuggestion(input) });
 
+/** Creates a public share link for a resume; resolves to the full campusedux.app/r/<token> URL. */
+export const useCreateResumeShare = () => {
+  const userId = useAuthStore((s) => s.user?.id);
+  return useMutation({ mutationFn: (resumeId: string) => resumeService.createShareLink(userId as string, resumeId) });
+};
+
 export const useResumeDownloadHistory = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({

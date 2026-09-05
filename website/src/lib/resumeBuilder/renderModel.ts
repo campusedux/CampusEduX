@@ -1,6 +1,9 @@
 import { SECTION_LABELS, normalizeLayout, type ManageableSectionKey, type ResumeLayout } from "./sections";
 import type { ResumeDocument, ResumeFreeformSectionKey } from "./types";
 
+/** The subset of ResumeDocument this model actually reads — lets the public share page (which only ever gets this projection back from get_shared_resume(), never a full row with id/atsScore) build the same model without a fake full ResumeDocument. */
+export type ResumeRenderInput = Pick<ResumeDocument, "personalDetails" | "education" | "skills" | "sections" | "layout">;
+
 export interface ResumeRenderBlock {
   key: ManageableSectionKey;
   heading: string;
@@ -26,7 +29,7 @@ export interface ResumeRenderModel {
  * exports and any other read-only consumer just omit it and get the
  * persisted layout normalized automatically.
  */
-export function buildResumeRenderModel(resume: ResumeDocument, layoutOverride?: ResumeLayout): ResumeRenderModel {
+export function buildResumeRenderModel(resume: ResumeRenderInput, layoutOverride?: ResumeLayout): ResumeRenderModel {
   const p = resume.personalDetails;
   const contactLine = [p.email, p.phone, p.location, p.linkedin, p.website].filter(Boolean).join(" · ");
   const layout = layoutOverride ?? normalizeLayout(resume.layout);
