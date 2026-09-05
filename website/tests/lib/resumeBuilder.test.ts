@@ -14,6 +14,7 @@ import {
   updateResumeFreeformSectionAction,
   updateResumeLayoutAction,
   matchResumeToJdAction,
+  createResumeFromImportAction,
 } from "@/lib/actions/resumeBuilder";
 
 const USER = { id: "user-1", email: "s@campusedux.app" };
@@ -248,5 +249,56 @@ describe("matchResumeToJdAction", () => {
     setRpcResult("match_resume_to_jd", { data: null, error: { message: "resume not found" } });
     const result = await matchResumeToJdAction(RESUME_ID, "some JD text");
     expect(result).toEqual({ error: expect.stringMatching(/could not match/i) });
+  });
+});
+
+const VALID_IMPORT = {
+  fullName: "Rohan Verma",
+  jobTitle: "SDE Intern",
+  email: "rohan@x.com",
+  phone: "9999999999",
+  location: "Bengaluru",
+  linkedin: "linkedin.com/in/rohan",
+  website: "rohan.dev",
+  education: [{ id: "e1", degree: "B.Tech", institution: "IIT", startYear: "2020", endYear: "2024", percentage: "85" }],
+  technicalSkills: ["React", "Node.js"],
+  sections: { summary: "A short pitch." },
+};
+
+describe("createResumeFromImportAction", () => {
+  beforeEach(() => setUser(USER));
+
+  it("rejects when signed out", async () => {
+    setUser(null);
+    const result = await createResumeFromImportAction(VALID_IMPORT);
+    expect(result).toEqual({ error: expect.stringMatching(/sign in/i) });
+  });
+
+  it("rejects a malformed payload", async () => {
+    const result = await createResumeFromImportAction({ fullName: "x" });
+    expect(result).toEqual({ error: "Invalid request." });
+  });
+
+  it("always inserts a brand-new resume row — never updates an existing one", async () => {
+    setTableResult("resumes_builder", { data: { id: "res-imported" }, error: null });
+    const result = await createResumeFromImportAction(VALID_IMPORT);
+    expect(result).toEqual({ resumeId: "res-imported" });
+
+    expect(callsFor("resumes_builder").some((c) => c.verb === "update")).toBe(false);
+    const insert = callsFor("resumes_builder").find((c) => c.verb === "insert");
+    const row = insert?.args[0] as Record<string, unknown>;
+    expect(row.user_id).toBe("user-1");
+    expect(row.title).toBe("Rohan Verma's Resume");
+    expect(row.template).toBe("modern");
+    expect(row.education).toEqual(VALID_IMPORT.education);
+    expect(row.skills).toEqual({ technical: ["React", "Node.js"], soft: [] });
+    expect(row.sections).toEqual({ summary: "A short pitch." });
+  });
+
+  it("falls back to a generic title when no name was parsed", async () => {
+    setTableResult("resumes_builder", { data: { id: "res-imported" }, error: null });
+    await createResumeFromImportAction({ ...VALID_IMPORT, fullName: "" });
+    const insert = callsFor("resumes_builder").find((c) => c.verb === "insert");
+    expect((insert?.args[0] as Record<string, unknown>).title).toBe("Imported Resume");
   });
 });

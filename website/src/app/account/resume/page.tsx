@@ -15,10 +15,17 @@ export default async function AccountResumePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-ink">Your resumes</h1>
-      <p className="mt-1 text-sm text-ink-muted">
-        Edit any resume here or in the CampusEduX app — both stay in sync automatically.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-ink">Your resumes</h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            Edit any resume here or in the CampusEduX app — both stay in sync automatically.
+          </p>
+        </div>
+        <Link href="/account/resume/import" className="text-sm font-semibold text-primary hover:underline">
+          Import an existing resume
+        </Link>
+      </div>
 
       {!resumes || resumes.length === 0 ? (
         <EmptyState

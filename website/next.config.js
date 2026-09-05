@@ -31,6 +31,16 @@ const nextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**.supabase.co" }],
   },
+  // pdf-parse's pdfjs-dist dependency ships a Node/legacy build that
+  // webpack's RSC bundling layer can't evaluate (crashes with
+  // "Object.defineProperty called on non-object" at module load) —
+  // excluding it from bundling lets Node's own require() load it directly
+  // at runtime instead, which works correctly. @napi-rs/canvas is
+  // pdf-parse's native optional dependency for the screenshot/table
+  // features (unused here, but still resolved at import time).
+  experimental: {
+    serverComponentsExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
+  },
   // Placement / Placement Prep / Placement Preparation are consolidated into the
   // single "Learning" system. Permanent (308) redirects preserve SEO equity.
   // `/placement/notes` + `/placement/notes/:id` keep their own route files

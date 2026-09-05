@@ -270,3 +270,72 @@ export async function matchResumeToJdAction(rawResumeId: string, rawJdText: stri
 
   return data as JdMatchResult;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 7 — importing a reviewed/edited parse result. This ALWAYS creates a
+// brand-new resume — it never writes into an existing one — so "Never
+// overwrite an existing resume without confirmation" holds by construction,
+// not by a runtime check that could be bypassed by a bad request.
+// ---------------------------------------------------------------------------
+
+const importEducationSchema = z
+  .array(
+    z.object({
+      id: z.string().trim().min(1).max(100),
+      degree: z.string().trim().max(200),
+      institution: z.string().trim().max(200),
+      startYear: z.string().trim().max(20),
+      endYear: z.string().trim().max(20),
+      percentage: z.string().trim().max(20),
+    }),
+  )
+  .max(20);
+
+const importSchema = z.object({
+  fullName: z.string().trim().max(200),
+  jobTitle: z.string().trim().max(200),
+  email: z.string().trim().max(200),
+  phone: z.string().trim().max(50),
+  location: z.string().trim().max(200),
+  linkedin: z.string().trim().max(300),
+  website: z.string().trim().max(300),
+  education: importEducationSchema,
+  technicalSkills: z.array(z.string().trim().max(100)).max(50),
+  sections: z.record(z.string().max(20_000)),
+});
+
+export async function createResumeFromImportAction(rawInput: unknown): Promise<{ resumeId: string } | ActionError> {
+  const parsed = importSchema.safeParse(rawInput);
+  if (!parsed.success) return { error: "Invalid request." };
+  const input = parsed.data;
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { data, error } = await supabase
+    .from("resumes_builder")
+    .insert({
+      user_id: user.id,
+      title: input.fullName ? `${input.fullName}'s Resume` : "Imported Resume",
+      template: "modern",
+      personal_details: {
+        fullName: input.fullName,
+        jobTitle: input.jobTitle,
+        email: input.email,
+        phone: input.phone,
+        location: input.location,
+        linkedin: input.linkedin,
+        website: input.website,
+        photoUrl: null,
+      },
+      education: input.education,
+      skills: { technical: input.technicalSkills, soft: [] },
+      sections: input.sections,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { error: "Could not create the resume. Please try again." };
+
+  return { resumeId: data.id };
+}
