@@ -35,13 +35,19 @@ export default async function AccountResumePage() {
                 {typeof r.ats_score === "number" && <Badge tone={r.ats_score >= 70 ? "success" : "neutral"}>ATS {r.ats_score}</Badge>}
               </div>
               <div className="mt-1 text-xs text-ink-faint">Template: {r.template} · updated {timeAgo(r.updated_at)}</div>
-              <div className="mt-3 flex items-center gap-4">
+              <div className="mt-3 flex flex-wrap items-center gap-4">
                 <Link href={`/account/resume/${r.id}/edit`} className="text-xs font-semibold text-primary hover:underline">
                   Edit resume
                 </Link>
                 <Link href={`/account/resume/${r.id}/projects`} className="text-xs font-semibold text-primary hover:underline">
                   + Add a project
                 </Link>
+                <a href={`/api/resume/export/pdf?resumeId=${r.id}`} className="text-xs font-semibold text-primary hover:underline">
+                  Download PDF
+                </a>
+                <a href={`/api/resume/export/docx?resumeId=${r.id}`} className="text-xs font-semibold text-primary hover:underline">
+                  Download DOCX
+                </a>
               </div>
             </div>
           ))}

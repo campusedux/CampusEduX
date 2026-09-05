@@ -20,3 +20,13 @@ export function appendToFreeformContent(current: string, snippet: string): strin
   const trimmed = current.trim();
   return trimmed ? `${trimmed}\n\n${snippet}` : snippet;
 }
+
+/** A safe, lowercase-hyphenated download filename stem (no extension) from a resume title. */
+export function slugifyFileName(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return slug || "resume";
+}

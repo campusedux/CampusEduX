@@ -88,6 +88,12 @@ export default function ResumeEditor({ resume: initialResume, templates }: { res
               ))}
             </Select>
           )}
+          <a href={`/api/resume/export/pdf?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
+            Download PDF
+          </a>
+          <a href={`/api/resume/export/docx?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
+            Download DOCX
+          </a>
         </div>
       </div>
 
