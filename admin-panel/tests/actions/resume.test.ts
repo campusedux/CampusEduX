@@ -26,6 +26,8 @@ import {
   updateAtsRule,
   toggleAtsRule,
   deleteAtsRule,
+  updateAiPrompt,
+  toggleAiPrompt,
 } from '@/app/(panel)/resume/actions';
 
 beforeEach(() => {
@@ -131,5 +133,34 @@ describe('ats rules', () => {
     const res = await deleteAtsRule('we-2');
     expect(res).toEqual({ ok: true });
     expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: 'resume.ats_rule.delete', resourceId: 'we-2' }));
+  });
+});
+
+describe('ai prompts', () => {
+  it('updateAiPrompt saves the prompt + token cap and logs it', async () => {
+    setTableResult('resume_ai_prompts', { error: null });
+    const res = await updateAiPrompt('summary', { ok: false }, form({ system_prompt: 'Be concise.', max_tokens: '350' }));
+    expect(res).toEqual({ ok: true });
+    const update = callsFor('resume_ai_prompts').find((c) => c.verb === 'update');
+    expect(update?.args[0]).toEqual({ system_prompt: 'Be concise.', max_tokens: 350 });
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'resume.ai_prompt.update', resourceType: 'resume_ai_prompts', resourceId: 'summary' }),
+    );
+  });
+
+  it('updateAiPrompt rejects a blank system prompt without writing or logging', async () => {
+    const res = await updateAiPrompt('summary', { ok: false }, form({ system_prompt: '  ', max_tokens: '350' }));
+    expect(res).toEqual({ ok: false, error: 'System prompt is required.' });
+    expect(callsFor('resume_ai_prompts')).toHaveLength(0);
+    expect(logActivity).not.toHaveBeenCalled();
+  });
+
+  it('toggleAiPrompt logs the next state', async () => {
+    setTableResult('resume_ai_prompts', { error: null });
+    const res = await toggleAiPrompt('summary', false);
+    expect(res).toEqual({ ok: true });
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'resume.ai_prompt.toggle', resourceId: 'summary', details: { next: false } }),
+    );
   });
 });

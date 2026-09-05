@@ -5,9 +5,14 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
 import { useResumeDetail, useUpdateSkills } from "@/hooks/useResume";
+import { ResumeAIAssistPanel } from "@/components/resume/ResumeAIAssistPanel";
 import type { ResumeStackParamList } from "@/types";
 
 type Rte = RouteProp<ResumeStackParamList, "Skills">;
+
+const SKILLS_QUICK_ACTIONS = [
+  { label: "Suggest skills", instruction: "Suggest additional technical and soft skills based on my resume content." },
+];
 
 function SkillChipInput({
   label,
@@ -108,7 +113,21 @@ export function SkillsScreen() {
         onRemove={(s) => setSoft((list) => list.filter((x) => x !== s))}
       />
 
-      <Button label="Save & Continue" loading={updateSkills.isPending} onPress={handleContinue} className="mb-6" />
+      <ResumeAIAssistPanel
+        resumeId={params.resumeId}
+        section="skills"
+        currentText={[...technical, ...soft].join(", ")}
+        quickActions={SKILLS_QUICK_ACTIONS}
+        onAccept={(suggestionText) => {
+          const suggested = suggestionText
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0 && !technical.includes(s) && !soft.includes(s));
+          if (suggested.length > 0) setTechnical((list) => [...list, ...suggested]);
+        }}
+      />
+
+      <Button label="Save & Continue" loading={updateSkills.isPending} onPress={handleContinue} className="mt-4 mb-6" />
     </Screen>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Sharing from "expo-sharing";
 import { resumeService } from "@/services/resume.service";
+import { resumeAssistService, type AssistRequestInput } from "@/services/resumeAssist.service";
 import { useAuthStore } from "@/store/authStore";
 import type { ResumePersonalDetails, ResumeEducationEntry, ResumeSkills, ResumeFreeformSectionKey, ResumeTemplate, ResumeProjectCandidate } from "@/types";
 
@@ -135,6 +136,9 @@ export function useDownloadResumePdf(resumeId: string, resumeTitle: string) {
 
   return { download, isGenerating };
 }
+
+/** AI writing-assist — calls the website's /api/resume/assist. Never writes to the resume itself; the caller decides whether to accept the suggestion. */
+export const useResumeAssist = () => useMutation({ mutationFn: (input: AssistRequestInput) => resumeAssistService.requestSuggestion(input) });
 
 export const useResumeDownloadHistory = () => {
   const userId = useAuthStore((s) => s.user?.id);

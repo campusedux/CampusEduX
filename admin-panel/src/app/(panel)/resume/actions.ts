@@ -187,3 +187,31 @@ export async function deleteAtsRule(id: string): Promise<Result> {
   revalidatePath('/resume/ats-rules');
   return { ok: true };
 }
+
+// --- AI writing-assist prompts (Phase 8) ---------------------------
+// Fixed 4-row config (one per resume_ai_prompts.section) — no create/delete,
+// only editing the system prompt/token cap/active flag of the seeded rows.
+export async function updateAiPrompt(id: string, _p: Result, fd: FormData): Promise<Result> {
+  await requirePermission('resume', 'edit');
+  const supabase = createClient();
+  const systemPrompt = s(fd, 'system_prompt');
+  if (!systemPrompt) return { ok: false, error: 'System prompt is required.' };
+  const { error } = await supabase
+    .from('resume_ai_prompts')
+    .update({ system_prompt: systemPrompt, max_tokens: n(fd, 'max_tokens') || 400 })
+    .eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.ai_prompt.update', module: 'resume', resourceType: 'resume_ai_prompts', resourceId: id });
+  revalidatePath('/resume/ai-config');
+  return { ok: true };
+}
+
+export async function toggleAiPrompt(id: string, next: boolean): Promise<Result> {
+  await requirePermission('resume', 'edit');
+  const supabase = createClient();
+  const { error } = await supabase.from('resume_ai_prompts').update({ is_active: next }).eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  await logActivity({ action: 'resume.ai_prompt.toggle', module: 'resume', resourceType: 'resume_ai_prompts', resourceId: id, details: { next } });
+  revalidatePath('/resume/ai-config');
+  return { ok: true };
+}

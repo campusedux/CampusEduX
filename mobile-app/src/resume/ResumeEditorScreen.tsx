@@ -5,7 +5,26 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
 import { useResumeDetail, useUpdateFreeformSection, useMyCustomProjectsForResume, useAppendProjectToResume } from "@/hooks/useResume";
+import { ResumeAIAssistPanel, type AssistQuickAction } from "@/components/resume/ResumeAIAssistPanel";
+import type { AssistSection } from "@/services/resumeAssist.service";
 import type { ResumeStackParamList, ResumeFreeformSectionKey } from "@/types";
+
+const AI_QUICK_ACTIONS: Partial<Record<ResumeFreeformSectionKey, AssistQuickAction[]>> = {
+  summary: [
+    { label: "Generate", instruction: "Generate a professional summary from the rest of my resume content." },
+    { label: "Improve", instruction: "Improve this summary — sharper phrasing, same facts." },
+    { label: "Shorten", instruction: "Shorten this summary to 2-3 sentences without losing the key points." },
+    { label: "ATS-friendly", instruction: "Rewrite this to use clearer, more standard ATS-friendly phrasing." },
+  ],
+  experience: [
+    { label: "Improve bullets", instruction: "Improve these bullet points — stronger action verbs, achievement-focused." },
+    { label: "Add impact", instruction: "Suggest where measurable impact could be added, without inventing specific numbers." },
+  ],
+  projects: [
+    { label: "Generate", instruction: "Generate a resume-ready project description from this content." },
+    { label: "Improve", instruction: "Improve this project description — clearer, more impact-focused." },
+  ],
+};
 
 type Nav = NativeStackNavigationProp<ResumeStackParamList, "ResumeEditor">;
 type Rte = RouteProp<ResumeStackParamList, "ResumeEditor">;
@@ -165,7 +184,19 @@ export function ResumeEditorScreen() {
             className="border border-gray-200 rounded-xl px-4 py-3 text-gray-900 mb-4"
             style={{ height: 220, textAlignVertical: "top" }}
           />
-          <Button label="Save Section" loading={updateSection.isPending} onPress={handleSaveSection} className="mb-4" />
+          <Button label="Save Section" loading={updateSection.isPending} onPress={handleSaveSection} className="mb-2" />
+
+          {AI_QUICK_ACTIONS[activeKey as ResumeFreeformSectionKey] && (
+            <View className="mb-4">
+              <ResumeAIAssistPanel
+                resumeId={params.resumeId}
+                section={activeKey as AssistSection}
+                currentText={draft}
+                quickActions={AI_QUICK_ACTIONS[activeKey as ResumeFreeformSectionKey]!}
+                onAccept={setDraft}
+              />
+            </View>
+          )}
         </>
       ) : null}
 

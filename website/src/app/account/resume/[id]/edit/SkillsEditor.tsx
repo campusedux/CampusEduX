@@ -5,7 +5,12 @@ import { X, Plus } from "lucide-react";
 import { Input } from "@/components/ui";
 import { updateResumeSkillsAction } from "@/lib/actions/resumeBuilder";
 import type { ResumeSkills } from "@/lib/resumeBuilder/types";
+import ResumeAIAssistPanel from "@/components/resumeBuilder/ResumeAIAssistPanel";
 import { useAutosaveField, type SaveStatus } from "./useAutosaveField";
+
+const SKILLS_QUICK_ACTIONS = [
+  { label: "Suggest skills", instruction: "Suggest additional technical and soft skills based on my resume content." },
+];
 
 function SkillTagInput({ label, skills, onAdd, onRemove }: { label: string; skills: string[]; onAdd: (skill: string) => void; onRemove: (skill: string) => void }) {
   const [text, setText] = useState("");
@@ -74,11 +79,33 @@ export default function SkillsEditor({
     onChange(next);
   }
 
+  // The AI panel always returns one comma-separated string — parse it back
+  // into individual tags and merge into technical, skipping anything already listed.
+  function handleAcceptSuggestedSkills(suggestionText: string) {
+    const suggested = suggestionText
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && !skills.technical.includes(s) && !skills.soft.includes(s));
+    if (suggested.length === 0) return;
+    const next = { ...skills, technical: [...skills.technical, ...suggested] };
+    setSkills(next);
+    onChange(next);
+  }
+
+  const currentSkillsText = [...skills.technical, ...skills.soft].join(", ");
+
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-ink">Skills</h2>
       <SkillTagInput label="Technical Skills" skills={skills.technical} onAdd={(s) => addSkill("technical", s)} onRemove={(s) => removeSkill("technical", s)} />
       <SkillTagInput label="Soft Skills" skills={skills.soft} onAdd={(s) => addSkill("soft", s)} onRemove={(s) => removeSkill("soft", s)} />
+      <ResumeAIAssistPanel
+        resumeId={resumeId}
+        section="skills"
+        currentText={currentSkillsText}
+        quickActions={SKILLS_QUICK_ACTIONS}
+        onAccept={handleAcceptSuggestedSkills}
+      />
     </div>
   );
 }

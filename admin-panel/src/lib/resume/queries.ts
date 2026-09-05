@@ -87,6 +87,14 @@ export async function getAtsRules() {
   );
 }
 
+export async function getAiPrompts() {
+  const supabase = createClient();
+  return safe(
+    supabase.from('resume_ai_prompts').select('id, section, system_prompt, max_tokens, is_active, updated_at').order('section'),
+    [] as any[],
+  );
+}
+
 export async function listResumeDownloads(opts: { page: number; q?: string }) {
   const supabase = createClient();
   const from = (opts.page - 1) * RESUME_PAGE_SIZE;
