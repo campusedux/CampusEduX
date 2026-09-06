@@ -68,4 +68,11 @@ const nextConfig = {
     ];
   },
 };
-module.exports = nextConfig;
+
+// Opt-in bundle analysis: `ANALYZE=true npm run build` writes treemap reports
+// to .next/analyze/. A no-op for every normal build/deploy (enabled: false).
+const withBundleAnalyzer = require("@next/bundle-analyzer")({
+  enabled: process.env.ANALYZE === "true",
+});
+
+module.exports = withBundleAnalyzer(nextConfig);
