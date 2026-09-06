@@ -1,6 +1,7 @@
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { DEFAULT_RESOLVED_TEMPLATES, resolveTemplate, type ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
-import { TemplateGallery } from "./TemplateGallery";
+import { demoRenderModel, demoResume } from "@/lib/resumeBuilder/demoResumes";
+import { TemplateGallery, type TemplateDemo } from "./TemplateGallery";
 
 export const revalidate = 300;
 export const metadata = { title: "Resume Templates" };
@@ -22,9 +23,17 @@ export default async function ResumeTemplatesPage() {
     }
   }
 
+  // Build each template's demo render model on the server so the ~10 kB
+  // `demoResumes` data never ships to the client (thumbnails + preview modal
+  // receive it as a prop).
+  const demos: Record<string, TemplateDemo> = {};
+  for (const t of templates) {
+    demos[t.id] = { model: demoRenderModel(t.id), persona: demoResume(t.id).persona };
+  }
+
   return (
     <div className="container-page py-10">
-      <TemplateGallery templates={templates} />
+      <TemplateGallery templates={templates} demos={demos} />
     </div>
   );
 }

@@ -2,14 +2,16 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { ResumeDocumentView, SHEET_WIDTH_PX } from "./ResumeDocumentView";
-import { demoRenderModel } from "@/lib/resumeBuilder/demoResumes";
 import type { ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
 import type { ResumeRenderModel } from "@/lib/resumeBuilder/renderModel";
 
 /**
- * A real, miniature render of this template's demo persona — the actual
- * <ResumeDocumentView> scaled to the card width and clipped to A4 proportions.
- * This is what replaces the old generic document icon on /resume/templates.
+ * A real, miniature render of a résumé — the actual <ResumeDocumentView>
+ * scaled to the card width and clipped to A4 proportions.
+ *
+ * `model` is always supplied by the caller (a server component computes the
+ * template's demo model), so the ~10 kB `demoResumes` data blob never enters
+ * this client component's bundle.
  */
 export function ResumeThumbnail({
   template,
@@ -17,10 +19,10 @@ export function ResumeThumbnail({
   className,
 }: {
   template: ResolvedTemplate;
-  model?: ResumeRenderModel;
+  model: ResumeRenderModel;
   className?: string;
 }) {
-  const renderModel = model ?? demoRenderModel(template.id);
+  const renderModel = model;
   const boxRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0);
 

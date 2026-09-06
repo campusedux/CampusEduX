@@ -1,13 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { Chip } from "@/components/ui";
 import { createResumeFromTemplateAction } from "@/lib/actions/resumeBuilder";
 import type { ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
+import type { ResumeRenderModel } from "@/lib/resumeBuilder/renderModel";
 import { TemplateGalleryCard } from "@/components/resumeBuilder/TemplateGalleryCard";
-import { TemplatePreviewModal } from "@/components/resumeBuilder/TemplatePreviewModal";
+
+export type TemplateDemo = { model: ResumeRenderModel; persona: string };
+
+// The full-screen preview (with the A4 <ResumeDocumentView>) only mounts when a
+// card's "Preview" is clicked — keep it out of the gallery's route bundle.
+const TemplatePreviewModal = dynamic(
+  () => import("@/components/resumeBuilder/TemplatePreviewModal").then((m) => m.TemplatePreviewModal),
+  { ssr: false },
+);
 
 type Filter = "all" | "ats" | "modern" | "professional" | "minimal" | "creative";
 
@@ -20,7 +30,13 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "creative", label: "Creative" },
 ];
 
-export function TemplateGallery({ templates }: { templates: ResolvedTemplate[] }) {
+export function TemplateGallery({
+  templates,
+  demos,
+}: {
+  templates: ResolvedTemplate[];
+  demos: Record<string, TemplateDemo>;
+}) {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [previewing, setPreviewing] = useState<ResolvedTemplate | null>(null);
@@ -76,6 +92,7 @@ export function TemplateGallery({ templates }: { templates: ResolvedTemplate[] }
           <TemplateGalleryCard
             key={t.id}
             template={t}
+            demoModel={demos[t.id]?.model}
             onPreview={setPreviewing}
             onUse={handleUse}
             pending={pendingId === t.id}
@@ -85,12 +102,16 @@ export function TemplateGallery({ templates }: { templates: ResolvedTemplate[] }
 
       {visible.length === 0 && <p className="mt-8 text-sm text-ink-faint">No templates match that filter.</p>}
 
-      <TemplatePreviewModal
-        template={previewing}
-        onClose={() => setPreviewing(null)}
-        onUse={handleUse}
-        pending={pendingId != null}
-      />
+      {previewing && (
+        <TemplatePreviewModal
+          template={previewing}
+          model={demos[previewing.id]?.model ?? null}
+          persona={demos[previewing.id]?.persona ?? ""}
+          onClose={() => setPreviewing(null)}
+          onUse={handleUse}
+          pending={pendingId != null}
+        />
+      )}
     </div>
   );
 }

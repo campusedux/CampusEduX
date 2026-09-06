@@ -5,15 +5,18 @@ import { Badge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { ResumeThumbnail } from "./ResumeThumbnail";
 import type { ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
+import type { ResumeRenderModel } from "@/lib/resumeBuilder/renderModel";
 
 /** One template in the /resume/templates gallery — a real miniature resume, never an icon. */
 export function TemplateGalleryCard({
   template,
+  demoModel,
   onPreview,
   onUse,
   pending,
 }: {
   template: ResolvedTemplate;
+  demoModel: ResumeRenderModel | undefined;
   onPreview: (template: ResolvedTemplate) => void;
   onUse: (templateId: string) => void;
   pending: boolean;
@@ -32,7 +35,7 @@ export function TemplateGalleryCard({
         className="relative block w-full border-b border-line bg-surface text-left"
         aria-label={`Preview the ${template.label} template`}
       >
-        <ResumeThumbnail template={template} />
+        {demoModel && <ResumeThumbnail template={template} model={demoModel} />}
         <span className="absolute left-2.5 top-2.5 flex gap-1.5">
           {template.atsFriendly && <Badge tone="success">ATS</Badge>}
           {template.isPremium && <Badge tone="premium">Premium</Badge>}

@@ -1,8 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
+import dynamic from "next/dynamic";
 import { Copy, Check, Trash2, Share2 } from "lucide-react";
+
+// `qrcode.react` (~8 kB gz) is only ever painted inside this modal, on an
+// active share row — load it on demand instead of shipping it in the résumé
+// editor's route bundle.
+const QRCodeSVG = dynamic(() => import("qrcode.react").then((m) => m.QRCodeSVG), {
+  ssr: false,
+  loading: () => <div className="h-[120px] w-[120px] animate-pulse rounded bg-line/50" aria-hidden />,
+});
 import { Button, Modal } from "@/components/ui";
 import {
   createResumeShareAction,

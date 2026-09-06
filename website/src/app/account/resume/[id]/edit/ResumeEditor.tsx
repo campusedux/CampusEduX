@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, Eye, Loader2, PencilRuler } from "lucide-react";
@@ -103,6 +103,13 @@ export default function ResumeEditor({
 
   const accentColor = templates.find((t) => t.id === template)?.accentColor ?? "#4F39F6";
   const activeBlock = activeId === "personal" ? null : content.find((b) => b.id === activeId) ?? null;
+
+  // Keep typing at full speed: the live A4 preview re-renders the whole
+  // document (buildResumeRenderModel + <ResumeDocumentView>) on every change,
+  // so let React paint the keystroke first and catch the preview up at lower
+  // priority. No UX change — the preview still tracks edits, just deferred.
+  const previewContent = useDeferredValue(content);
+  const previewDetails = useDeferredValue(personalDetails);
 
   async function handleTemplateChange(next: string) {
     setTemplate(next);
@@ -256,8 +263,8 @@ export default function ResumeEditor({
         <div className={cn("min-w-0 lg:block", mobileTab === "preview" ? "block" : "hidden")}>
           <div className="lg:sticky lg:top-20">
             <ResumePreview
-              personalDetails={personalDetails}
-              content={content}
+              personalDetails={previewDetails}
+              content={previewContent}
               template={template}
               accentColor={accentColor}
               design={design}

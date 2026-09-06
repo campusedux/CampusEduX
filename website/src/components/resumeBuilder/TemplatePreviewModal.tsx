@@ -4,8 +4,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { X, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui";
 import { ResumeDocumentView, SHEET_WIDTH_PX, SHEET_MIN_HEIGHT_PX } from "./ResumeDocumentView";
-import { demoRenderModel, demoResume } from "@/lib/resumeBuilder/demoResumes";
 import type { ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
+import type { ResumeRenderModel } from "@/lib/resumeBuilder/renderModel";
 
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 2;
@@ -14,11 +14,15 @@ const ZOOM_STEP = 0.15;
 /** Full-screen A4 preview of a template — opened from a gallery card's "Preview". */
 export function TemplatePreviewModal({
   template,
+  model,
+  persona,
   onClose,
   onUse,
   pending,
 }: {
   template: ResolvedTemplate | null;
+  model: ResumeRenderModel | null;
+  persona: string;
   onClose: () => void;
   onUse: (templateId: string) => void;
   pending: boolean;
@@ -57,11 +61,9 @@ export function TemplatePreviewModal({
     return () => ro.disconnect();
   }, [template]);
 
-  if (!template) return null;
+  if (!template || !model) return null;
 
   const scale = fitScale * zoomMult;
-  const model = demoRenderModel(template.id);
-  const persona = demoResume(template.id).persona;
 
   return (
     <div className="fixed inset-0 z-[120] flex flex-col bg-ink/70" role="dialog" aria-modal="true" aria-label={`${template.label} template preview`}>
