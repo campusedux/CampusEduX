@@ -22,10 +22,10 @@ export function DocsShell({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-10">
+    <div className="container-page py-8 lg:grid lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-8">
       {/* desktop rail */}
-      <aside className="hidden lg:block">
-        <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pb-8 pr-2">
+      <aside className="hidden lg:block lg:border-r lg:border-line">
+        <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pb-8 pr-6">
           <LearningNav tree={tree} gridSlug={gridSlug} />
         </div>
       </aside>

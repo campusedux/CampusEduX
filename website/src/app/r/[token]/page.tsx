@@ -1,13 +1,26 @@
 import { notFound } from "next/navigation";
 import { getPublicSupabase } from "@/lib/supabase/server";
-import { buildResumeRenderModel, type ResumeRenderInput } from "@/lib/resumeBuilder/renderModel";
+import { buildResumeRenderModel } from "@/lib/resumeBuilder/renderModel";
+import { normalizeContent } from "@/lib/resumeBuilder/content";
+import { templateSpec } from "@/lib/resumeBuilder/templateSpecs";
+import { resolveDesign, effectiveAccent, sanitizeDesign } from "@/lib/resumeBuilder/design";
+import { EMPTY_PERSONAL, type ResumePersonalDetails } from "@/lib/resumeBuilder/types";
+import { ResumeDocumentView } from "@/components/resumeBuilder/ResumeDocumentView";
+import { ResumeSheetScaler } from "@/components/resumeBuilder/ResumeSheetScaler";
 import ReportShareButton from "./ReportShareButton";
 
 export const dynamic = "force-dynamic";
 
-interface SharedResumePayload extends ResumeRenderInput {
+interface SharedResumePayload {
   title: string;
   template: string;
+  design?: unknown;
+  personalDetails: Partial<ResumePersonalDetails>;
+  content?: unknown;
+  sections?: unknown;
+  education?: unknown;
+  skills?: unknown;
+  layout?: unknown;
 }
 
 export default async function SharedResumePage({ params }: { params: { token: string } }) {
@@ -21,34 +34,21 @@ export default async function SharedResumePage({ params }: { params: { token: st
   const { data: templateRow } = await supabase.from("resume_templates").select("accent_color").eq("id", shared.template).maybeSingle();
   const accentColor = templateRow?.accent_color ?? "#4F39F6";
 
-  const model = buildResumeRenderModel(shared);
+  const content = normalizeContent(shared.content, {
+    sections: shared.sections,
+    education: shared.education,
+    skills: shared.skills,
+    layout: shared.layout,
+  });
+  const model = buildResumeRenderModel({ personalDetails: { ...EMPTY_PERSONAL, ...shared.personalDetails }, content });
+  const design = sanitizeDesign(shared.design);
+  const spec = resolveDesign(templateSpec(shared.template), design);
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-12">
-      <div className="rounded-2xl border border-line bg-white p-8 shadow-card" style={{ borderTop: `4px solid ${accentColor}` }}>
-        <h1 className="text-2xl font-bold text-ink">{model.fullName}</h1>
-        {model.jobTitle && (
-          <p className="text-sm font-medium" style={{ color: accentColor }}>
-            {model.jobTitle}
-          </p>
-        )}
-        {model.contactLine && <p className="mt-1 text-xs text-ink-faint">{model.contactLine}</p>}
-
-        <div className="mt-6 space-y-5">
-          {model.blocks.map((block) => (
-            <div key={block.key}>
-              <h2 className="mb-1 text-xs font-bold uppercase tracking-wide" style={{ color: accentColor }}>
-                {block.heading}
-              </h2>
-              {block.lines.map((line, index) => (
-                <p key={index} className="whitespace-pre-wrap text-sm leading-relaxed text-ink-muted">
-                  {line}
-                </p>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="mx-auto max-w-3xl px-4 py-10">
+      <ResumeSheetScaler>
+        <ResumeDocumentView model={model} spec={spec} accentColor={effectiveAccent(accentColor, design)} />
+      </ResumeSheetScaler>
 
       <div className="mt-6 flex items-center justify-between">
         <p className="text-xs text-ink-faint">Shared via CampusEduX</p>

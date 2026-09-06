@@ -37,7 +37,7 @@ export function LearningNav({
 
       {tree.sections.map((section) => (
         <div key={section.id}>
-          <p className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">{section.name}</p>
+          <p className="px-2.5 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">{section.name}</p>
           <ul className="space-y-0.5 border-l border-line">
             {section.topics.map((topic) => {
               const href = `/learning/${gridSlug}/${topic.slug}`;
@@ -49,10 +49,10 @@ export function LearningNav({
                     onClick={onNavigate}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "-ml-px flex items-center gap-1.5 border-l-2 px-3 py-1.5 leading-snug transition-colors",
+                      "-ml-px flex items-center gap-1.5 rounded-r-md border-l-2 px-3 py-1.5 leading-snug transition-colors",
                       active
-                        ? "border-primary font-medium text-primary"
-                        : "border-transparent text-ink-muted hover:border-line hover:text-ink",
+                        ? "border-primary bg-primary-50/70 font-semibold text-primary"
+                        : "border-transparent text-ink-muted hover:border-line hover:bg-surface hover:text-ink",
                     )}
                   >
                     <span className="min-w-0 flex-1 truncate">{topic.title}</span>

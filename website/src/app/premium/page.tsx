@@ -3,6 +3,7 @@ import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { PremiumCard, SectionHeader, EmptyState } from "@/components/ui";
 import { formatINR } from "@/lib/format";
 import PremiumSubscribeButton from "@/components/PremiumSubscribeButton";
+import { Sparkles, Zap, BookOpen, Headphones, Crown, ShieldCheck } from "lucide-react";
 
 export const revalidate = 300;
 export const metadata = { title: "Premium" };
@@ -17,6 +18,8 @@ type Plan = {
   is_popular: boolean | null;
 };
 type Feature = { id: string; title: string; subtitle: string | null };
+
+const FEATURE_ICONS = [Sparkles, Zap, BookOpen, Headphones, Crown, ShieldCheck];
 
 export default async function PremiumPage() {
   const supabase = getPublicSupabase();
@@ -34,33 +37,50 @@ export default async function PremiumPage() {
   const { data: { user } } = await createAuthedServerSupabase().auth.getUser();
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-      <h1 className="text-3xl font-bold text-ink">Premium</h1>
-      <p className="mt-2 max-w-2xl text-ink-muted">
-        An optional tier on top of everything already free in CampusEduX — priority access, extra prep material and
-        faster support. Same account across web and the app.
-      </p>
+    <div className="container-page py-10 sm:py-12">
+      {/* Hero */}
+      <section className="overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 text-center sm:px-10 sm:py-12">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Premium</p>
+        <h1 className="mx-auto mt-4 max-w-2xl text-3xl font-bold leading-tight tracking-tight text-ink sm:text-4xl">
+          Go further, faster.
+        </h1>
+        <p className="mx-auto mt-4 max-w-2xl text-ink-muted">
+          An optional tier on top of everything already free in CampusEduX — priority access, extra prep material and
+          faster support.
+        </p>
+        <p className="mt-3 text-xs font-medium text-ink-faint">One subscription, same account across web and the app.</p>
+      </section>
 
+      {/* Benefits */}
       {features.length > 0 && (
-        <div className="mt-8">
+        <section className="mt-12">
           <SectionHeader title="What you get" />
           <div className="grid gap-4 sm:grid-cols-2">
-            {features.map((f) => (
-              <div key={f.id} className="rounded-2xl border border-line bg-white p-4 shadow-card">
-                <div className="font-semibold text-ink">{f.title}</div>
-                {f.subtitle && <p className="mt-1 text-sm text-ink-muted">{f.subtitle}</p>}
-              </div>
-            ))}
+            {features.map((f, i) => {
+              const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
+              return (
+                <div key={f.id} className="flex gap-3 rounded-2xl border border-line bg-white p-4 shadow-card">
+                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
+                    <Icon className="h-5 w-5 text-primary" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-ink">{f.title}</div>
+                    {f.subtitle && <p className="mt-1 text-sm text-ink-muted">{f.subtitle}</p>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </section>
       )}
 
-      <div className="mt-10">
+      {/* Plans */}
+      <section className="mt-12">
         <SectionHeader title="Plans" />
         {plans.length === 0 ? (
           <EmptyState title="Plan pricing coming soon" subtitle="Plans appear here once published from the admin panel." />
         ) : (
-          <div className="grid gap-5 sm:grid-cols-3">
+          <div className="grid gap-5 pt-3 sm:grid-cols-3">
             {plans.map((p) => (
               <PremiumCard
                 key={p.id}
@@ -78,7 +98,10 @@ export default async function PremiumPage() {
             ))}
           </div>
         )}
-      </div>
+        <p className="mt-6 text-center text-xs text-ink-faint">
+          Payments are processed securely through Razorpay. Everything already free in CampusEduX stays free.
+        </p>
+      </section>
     </div>
   );
 }

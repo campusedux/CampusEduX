@@ -5,6 +5,7 @@ import {
   Briefcase,
   GraduationCap,
   FileText,
+  TerminalSquare,
   Wrench,
   Boxes,
   Star,
@@ -37,6 +38,7 @@ export const HEADER_LINKS: NavItem[] = [
   { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
   { label: "Learning", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
   { label: "Resume", href: "/resume", icon: FileText, tint: "#16A34A", bg: "#DCFCE7" },
+  { label: "Compiler", href: "/compiler", icon: TerminalSquare, tint: "#0D9488", bg: "#CCFBF1" },
 ];
 
 /** Full destination list for the mobile drawer — mirrors the app's DrawerContent. */
@@ -49,6 +51,7 @@ export const DRAWER_LINKS: NavItem[] = [
   { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
   { label: "Learning", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
   { label: "Resume Builder", href: "/resume", icon: FileText, tint: "#16A34A", bg: "#DCFCE7" },
+  { label: "Compiler", href: "/compiler", icon: TerminalSquare, tint: "#0D9488", bg: "#CCFBF1" },
   { label: "Companies", href: "/jobs/companies", icon: Building2, tint: "#0D9488", bg: "#CCFBF1" },
   { label: "Referral & Earn", href: "/referral", icon: Gift, tint: "#EC4899", bg: "#FCE7F3" },
   { label: "Premium", href: "/premium", icon: Star, tint: "#F59E0B", bg: "#FEF3C7" },

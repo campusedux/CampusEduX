@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BookOpen, FileText, LayoutGrid } from "lucide-react";
-import { getLearningGrids, searchLearning, GRID_TYPE_LABEL } from "@/lib/learning";
-import { SearchBar, EmptyState, Badge } from "@/components/ui";
+import { ArrowRight, BookOpen, FileText, LayoutGrid, Code2 } from "lucide-react";
+import { getLearningGrids, searchLearning } from "@/lib/learning";
+import type { LearningGridCard } from "@/lib/learning";
+import { EmptyState, Badge, ResourceCard } from "@/components/ui";
 import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
@@ -17,23 +18,57 @@ export const metadata: Metadata = {
 
 type SP = { q?: string };
 
+function isEmoji(s: string): boolean {
+  return /\p{Extended_Pictographic}/u.test(s);
+}
+
+function GridCard({ g }: { g: LearningGridCard }) {
+  return (
+    <ResourceCard
+      resource={{
+        href: `/learning/${g.slug}`,
+        icon: g.icon && isEmoji(g.icon) ? g.icon : <BookOpen className="h-5 w-5" aria-hidden />,
+        title: g.name,
+        typeLabel: "Resource",
+        topicCount: g.topic_count,
+        description: g.description,
+        accentColor: g.accent_color,
+        isPremium: g.is_premium,
+      }}
+    />
+  );
+}
+
 export default async function LearningIndexPage({ searchParams }: { searchParams: SP }) {
   const q = searchParams.q?.trim();
   const [grids, hits] = await Promise.all([getLearningGrids(), q ? searchLearning(q, 30) : Promise.resolve([])]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <div className="container-page py-10">
       <div className="max-w-2xl">
-        <h1 className="text-3xl font-bold text-ink">Learning</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Free resources</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Learning</h1>
         <p className="mt-2 text-ink-muted">
           Structured, documentation-style learning resources — published by the CampusEduX team and kept up to date.
           Pick a resource to start reading.
         </p>
       </div>
 
-      <div className="mt-6 max-w-xl">
-        <SearchBar action="/learning" defaultValue={q} placeholder="Search topics and resources…" />
-      </div>
+      <Link
+        href="/compiler"
+        className="group mt-6 flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition hover:border-primary/30 hover:shadow-card-lg"
+      >
+        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary">
+          <Code2 className="h-5 w-5" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-ink group-hover:text-primary">Code Compiler</span>
+          <span className="block text-sm text-ink-muted">
+            Write and run Java, Python, JavaScript, C and C++ in your browser — no setup.
+          </span>
+        </span>
+        <ArrowRight className="h-4 w-4 flex-shrink-0 text-primary transition-transform group-hover:translate-x-0.5" aria-hidden />
+      </Link>
 
       {q ? (
         <section className="mt-8">
@@ -78,58 +113,30 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
         </section>
       ) : null}
 
-      <section className="mt-10">
-        {!q ? <h2 className="sr-only">All learning resources</h2> : <h2 className="mt-2 text-lg font-bold text-ink">All resources</h2>}
-        {grids.length === 0 ? (
+      {grids.length === 0 ? (
+        <section className="mt-10">
+          <h2 className="sr-only">All learning resources</h2>
           <EmptyState
             className="mt-4"
             icon={BookOpen}
             title="No learning resources yet"
             subtitle="Learning resources appear here as soon as they are published from the CampusEduX admin panel."
           />
-        ) : (
+        </section>
+      ) : (
+        <section className="mt-10">
+          {!q ? (
+            <h2 className="sr-only">All learning resources</h2>
+          ) : (
+            <h2 className="mt-2 text-lg font-bold text-ink">All resources</h2>
+          )}
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {grids.map((g) => (
-              <Link
-                key={g.id}
-                href={`/learning/${g.slug}`}
-                className="group flex flex-col rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-lg font-bold text-primary"
-                    style={{ backgroundColor: g.accent_color ? `${g.accent_color}1a` : "#EEF0FF" }}
-                  >
-                    {g.icon && isEmoji(g.icon) ? g.icon : g.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="flex items-center gap-1.5 font-semibold text-ink group-hover:text-primary">
-                      <span className="truncate">{g.name}</span>
-                      {g.is_premium ? <Badge tone="premium">Premium</Badge> : null}
-                    </h3>
-                    <p className="text-xs text-ink-faint">
-                      {GRID_TYPE_LABEL[g.grid_type] ?? "Resource"} · {g.topic_count} topic
-                      {g.topic_count === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                </div>
-                {g.description ? (
-                  <p className="mt-3 line-clamp-3 flex-1 text-sm text-ink-muted">{g.description}</p>
-                ) : (
-                  <span className="flex-1" />
-                )}
-                <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                  View resource <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
-                </span>
-              </Link>
+              <GridCard key={g.id} g={g} />
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
-}
-
-function isEmoji(s: string): boolean {
-  return /\p{Extended_Pictographic}/u.test(s);
 }

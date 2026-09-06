@@ -22,7 +22,7 @@ export default async function FaqPage() {
   }, {});
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+    <div className="container-prose py-10">
       {faqs.length > 0 && <JsonLd data={faqJsonLd(faqs)} />}
       <h1 className="text-3xl font-bold text-ink">Frequently Asked Questions</h1>
       {faqs.length === 0 ? (

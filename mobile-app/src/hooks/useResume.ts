@@ -4,7 +4,17 @@ import * as Sharing from "expo-sharing";
 import { resumeService } from "@/services/resume.service";
 import { resumeAssistService, type AssistRequestInput } from "@/services/resumeAssist.service";
 import { useAuthStore } from "@/store/authStore";
-import type { ResumePersonalDetails, ResumeEducationEntry, ResumeSkills, ResumeFreeformSectionKey, ResumeTemplate, ResumeProjectCandidate } from "@/types";
+import type {
+  ResumePersonalDetails,
+  ResumeEducationEntry,
+  ResumeSkills,
+  ResumeFreeformSectionKey,
+  ResumeTemplate,
+  ResumeProjectCandidate,
+  ResumeContent,
+  ResumeDesign,
+} from "@/types";
+import { demoResume } from "@/data/demoResumes";
 
 export const resumeQueryKeys = {
   list: ["resumes-builder"] as const,
@@ -71,6 +81,68 @@ export const useUpdateSkills = (resumeId: string) => {
   return useMutation({
     mutationFn: (skills: ResumeSkills) => resumeService.updateSkills(resumeId, skills),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: resumeQueryKeys.detail(resumeId) }),
+  });
+};
+
+/** Create a résumé pre-filled with a template's demo persona (flagged is_demo). */
+export const useCreateResumeFromDemo = () => {
+  const queryClient = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id);
+  return useMutation({
+    mutationFn: (template: ResumeTemplate) => {
+      const demo = demoResume(template);
+      return resumeService.createResumeFromDemo(userId as string, template, { personalDetails: demo.personalDetails, content: demo.content });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: resumeQueryKeys.list }),
+  });
+};
+
+/** The block-list editor's autosave — writes the whole structured `content`. */
+export const useUpdateResumeContent = (resumeId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (content: ResumeContent) => resumeService.updateContent(resumeId, content),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: resumeQueryKeys.detail(resumeId) }),
+  });
+};
+
+export const useSetResumeDemoFlag = (resumeId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (isDemo: boolean) => resumeService.setDemoFlag(resumeId, isDemo),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: resumeQueryKeys.detail(resumeId) }),
+  });
+};
+
+export const useClearResumeContent = (resumeId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => resumeService.clearContent(resumeId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: resumeQueryKeys.detail(resumeId) }),
+  });
+};
+
+export const useUpdateResumeDesign = (resumeId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (design: ResumeDesign) => resumeService.updateDesign(resumeId, design),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: resumeQueryKeys.detail(resumeId) }),
+  });
+};
+
+export const useMatchResumeToJd = (resumeId: string) =>
+  useMutation({ mutationFn: (jdText: string) => resumeService.matchJd(resumeId, jdText) });
+
+export const useParseUploadedResume = () =>
+  useMutation({ mutationFn: (file: { uri: string; name: string; mimeType?: string | null }) => resumeService.parseUploadedResume(file) });
+
+export const useCreateResumeFromParsed = () => {
+  const queryClient = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id);
+  return useMutation({
+    mutationFn: (parsed: Parameters<typeof resumeService.createResumeFromParsed>[1]) =>
+      resumeService.createResumeFromParsed(userId as string, parsed),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: resumeQueryKeys.list }),
   });
 };
 

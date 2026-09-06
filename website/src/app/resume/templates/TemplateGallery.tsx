@@ -1,0 +1,98 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
+import { Chip } from "@/components/ui";
+import { createResumeFromTemplateAction } from "@/lib/actions/resumeBuilder";
+import type { ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
+import { TemplateGalleryCard } from "@/components/resumeBuilder/TemplateGalleryCard";
+import { TemplatePreviewModal } from "@/components/resumeBuilder/TemplatePreviewModal";
+
+type Filter = "all" | "ats" | "modern" | "professional" | "minimal" | "creative";
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "ats", label: "ATS Friendly" },
+  { key: "modern", label: "Modern" },
+  { key: "professional", label: "Professional" },
+  { key: "minimal", label: "Minimal" },
+  { key: "creative", label: "Creative" },
+];
+
+export function TemplateGallery({ templates }: { templates: ResolvedTemplate[] }) {
+  const router = useRouter();
+  const [filter, setFilter] = useState<Filter>("all");
+  const [previewing, setPreviewing] = useState<ResolvedTemplate | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const visible = useMemo(() => {
+    if (filter === "all") return templates;
+    if (filter === "ats") return templates.filter((t) => t.atsFriendly);
+    return templates.filter((t) => t.id === filter);
+  }, [templates, filter]);
+
+  async function handleUse(templateId: string) {
+    setError(null);
+    setPendingId(templateId);
+    const result = await createResumeFromTemplateAction(templateId);
+    if (result.needsAuth) {
+      router.push(`/login?next=${encodeURIComponent("/resume/templates")}`);
+      return;
+    }
+    if (result.error || !result.resumeId) {
+      setError(result.error ?? "Something went wrong. Please try again.");
+      setPendingId(null);
+      return;
+    }
+    router.push(`/account/resume/${result.resumeId}/edit`);
+  }
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-ink">Resume Templates</h1>
+      <p className="mt-2 max-w-2xl text-ink-muted">
+        Choose a professional template and build an ATS-friendly resume. Every template previews with real content,
+        and you can switch between them later without losing anything you&apos;ve written.
+      </p>
+
+      <div className="mt-6 flex flex-wrap gap-2">
+        {FILTERS.map((f) => (
+          <Chip key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>
+            {f.label}
+          </Chip>
+        ))}
+      </div>
+
+      {error && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" /> {error}
+        </div>
+      )}
+
+      <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {visible.map((t) => (
+          <TemplateGalleryCard
+            key={t.id}
+            template={t}
+            onPreview={setPreviewing}
+            onUse={handleUse}
+            pending={pendingId === t.id}
+          />
+        ))}
+      </div>
+
+      {visible.length === 0 && <p className="mt-8 text-sm text-ink-faint">No templates match that filter.</p>}
+
+      <TemplatePreviewModal
+        template={previewing}
+        onClose={() => setPreviewing(null)}
+        onUse={handleUse}
+        pending={pendingId != null}
+      />
+    </div>
+  );
+}
+
+export default TemplateGallery;

@@ -37,7 +37,7 @@ export function ProjectCard({ project, rank, className }: { project: ProjectCard
         className,
       )}
     >
-      <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden bg-primary-50">
+      <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden bg-primary-50">
         {project.thumbnail_url ? (
           <Image
             src={project.thumbnail_url}
@@ -65,13 +65,15 @@ export function ProjectCard({ project, rank, className }: { project: ProjectCard
       </div>
 
       <div className="p-4">
-        <h3 className="truncate font-bold text-ink group-hover:text-primary">{project.title}</h3>
-        <p className="mt-1 truncate text-xs text-ink-muted">{techLine}</p>
-        <div className="mt-3 flex items-center justify-between">
+        <h3 className="truncate text-[0.95rem] font-semibold tracking-tight text-ink group-hover:text-primary">
+          {project.title}
+        </h3>
+        <p className="mt-1 truncate text-xs text-ink-faint">{techLine}</p>
+        <div className="mt-3 flex items-center justify-between gap-2">
           <Rating value={project.rating} count={project.review_count} size={13} showEmpty />
           <div className="flex items-center gap-2">
             <PriceDisplay price={project.price} originalPrice={project.original_price} size="sm" />
-            <span className="inline-flex items-center gap-0.5 rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary">
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-primary-50 px-2 py-1 text-[0.7rem] font-semibold text-primary">
               View
               <ArrowRight className="h-3 w-3" aria-hidden />
             </span>

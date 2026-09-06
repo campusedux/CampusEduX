@@ -18,7 +18,7 @@ export default async function BestSellersPage() {
     projects = (data ?? []) as ProjectCardData[];
   }
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <div className="container-page py-10">
       <h1 className="text-3xl font-bold text-ink">Best Sellers</h1>
       <p className="mt-2 text-ink-muted">Consistently top-selling projects on the platform.</p>
       <ProjectGrid projects={projects} showRank emptyTitle="No best-seller projects flagged yet" />

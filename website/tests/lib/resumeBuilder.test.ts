@@ -22,6 +22,9 @@ import {
   createResumeVersionAction,
   listResumeVersionsAction,
   restoreResumeVersionAction,
+  updateResumeContentAction,
+  duplicateResumeAction,
+  deleteResumeAction,
 } from "@/lib/actions/resumeBuilder";
 
 const USER = { id: "user-1", email: "s@campusedux.app" };
@@ -129,6 +132,7 @@ const VALID_PERSONAL = {
   phone: "9999999999",
   location: "Bengaluru",
   linkedin: "linkedin.com/in/rohan",
+  github: "github.com/rohan",
   website: "rohan.dev",
   photoUrl: null,
 };
@@ -221,6 +225,55 @@ describe("Phase 4 editor actions", () => {
     expect(savedLayout.order).toHaveLength(9);
     expect(savedLayout.hidden).toEqual(["skills"]);
   });
+
+  it("updateResumeContentAction normalizes the block array and mirrors the legacy columns", async () => {
+    setTableResult("resumes_builder", { data: { id: RESUME_ID } });
+    const result = await updateResumeContentAction(RESUME_ID, [
+      { id: "b1", type: "summary", heading: "Summary", variant: "text", hidden: false, text: "Hi there." },
+      { id: "b2", type: "skills", heading: "Skills", variant: "tags", hidden: false, groups: [{ id: "g1", label: "Technical", items: ["React"] }] },
+    ]);
+    expect(result).toEqual({ ok: true });
+    const update = callsFor("resumes_builder").find((c) => c.verb === "update");
+    const saved = update?.args[0] as { content: unknown[]; sections: Record<string, string>; skills: { technical: string[] } };
+    expect(saved.content).toHaveLength(2);
+    expect(saved.sections.summary).toBe("Hi there.");
+    expect(saved.skills.technical).toEqual(["React"]);
+  });
+
+  it("updateResumeContentAction rejects a non-array payload", async () => {
+    expect(await updateResumeContentAction(RESUME_ID, { nope: true })).toEqual({ error: "Invalid request." });
+  });
+});
+
+describe("Phase 4 dashboard actions", () => {
+  beforeEach(() => setUser(USER));
+
+  it("duplicateResumeAction copies an owned resume into a new '(copy)' row", async () => {
+    setTableResult("resumes_builder", {
+      data: { id: RESUME_ID, title: "My Resume", template: "modern", personal_details: {}, content: [], education: [], skills: {}, sections: {}, layout: {} },
+    });
+    const result = await duplicateResumeAction(RESUME_ID);
+    expect(result).toEqual({ resumeId: RESUME_ID });
+    const insert = callsFor("resumes_builder").find((c) => c.verb === "insert");
+    expect((insert?.args[0] as { title: string }).title).toBe("My Resume (copy)");
+  });
+
+  it("duplicateResumeAction rejects a resume the caller does not own", async () => {
+    setTableResult("resumes_builder", { data: null });
+    expect(await duplicateResumeAction(RESUME_ID)).toEqual({ error: "That resume could not be found." });
+  });
+
+  it("deleteResumeAction deletes only when a row is returned", async () => {
+    setTableResult("resumes_builder", { data: { id: RESUME_ID } });
+    expect(await deleteResumeAction(RESUME_ID)).toEqual({ ok: true });
+    setTableResult("resumes_builder", { data: null });
+    expect(await deleteResumeAction(RESUME_ID)).toEqual({ error: "That resume could not be found." });
+  });
+
+  it("deleteResumeAction rejects when signed out", async () => {
+    setUser(null);
+    expect(await deleteResumeAction(RESUME_ID)).toEqual({ error: expect.stringMatching(/sign in/i) });
+  });
 });
 
 describe("matchResumeToJdAction", () => {
@@ -300,6 +353,10 @@ describe("createResumeFromImportAction", () => {
     expect(row.education).toEqual(VALID_IMPORT.education);
     expect(row.skills).toEqual({ technical: ["React", "Node.js"], soft: [] });
     expect(row.sections).toEqual({ summary: "A short pitch." });
+    // the structured `content` model is built from the reviewed parse result too
+    const content = row.content as { type: string }[];
+    expect(Array.isArray(content) && content.length).toBeTruthy();
+    expect(content.map((b) => b.type)).toEqual(expect.arrayContaining(["summary", "education", "skills"]));
   });
 
   it("falls back to a generic title when no name was parsed", async () => {

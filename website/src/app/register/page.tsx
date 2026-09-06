@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { Field, Input } from "@/components/ui";
+import { CURRENT_LEGAL_VERSION, LEGAL_VERSIONS } from "@/legal/config";
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -61,6 +62,16 @@ function RegisterForm() {
       if (signUpError) throw new Error(signUpError.message);
 
       if (data.session) {
+        // Record acceptance of the policies shown below the form, the same way
+        // the mobile app does (migration 0039). Best-effort — never block signup.
+        void supabase
+          .rpc("record_legal_consent", {
+            p_legal_version: CURRENT_LEGAL_VERSION,
+            p_privacy_version: LEGAL_VERSIONS["privacy-policy"].version,
+            p_terms_version: LEGAL_VERSIONS.terms.version,
+            p_source: "website_register",
+          })
+          .then(undefined, () => undefined);
         router.push("/account");
         router.refresh();
       } else {
@@ -139,6 +150,17 @@ function RegisterForm() {
         {error && (
           <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{error}</p>
         )}
+        <p className="text-xs leading-relaxed text-ink-muted">
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="font-medium text-primary hover:underline" target="_blank">
+            Terms &amp; Conditions
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy-policy" className="font-medium text-primary hover:underline" target="_blank">
+            Privacy Policy
+          </Link>
+          .
+        </p>
         <button type="submit" disabled={loading} className="btn-primary w-full">
           {loading ? "Creating account…" : "Create account"}
         </button>

@@ -26,7 +26,7 @@ export default async function Page() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
+    <div className="container-prose py-12">
       <h1 className="text-3xl font-bold text-ink">Features &amp; files</h1>
       <p className="mt-2 text-sm text-ink-muted">
         Pick the features your project needs, and attach any requirement or reference files.

@@ -2,6 +2,10 @@
 // and write the same resumes_builder jsonb columns, so the field names here
 // must match mobile's camelCase shape byte-for-byte.
 
+import { normalizeContent, type ResumeContent } from "./content";
+import { sanitizeDesign, type ResumeDesign } from "./design";
+
+export type { ResumeContent, ResumeDesign };
 export type ResumeTemplate = string;
 
 export interface ResumePersonalDetails {
@@ -11,6 +15,7 @@ export interface ResumePersonalDetails {
   phone: string;
   location: string;
   linkedin: string;
+  github: string;
   website: string;
   photoUrl: string | null;
 }
@@ -55,6 +60,10 @@ export interface ATSBreakdown {
   formatting: number;
   skills: number;
   keywords: number;
+  /** share of the core sections a recruiter expects that are actually filled in. */
+  completeness: number;
+  /** heuristic: bullet usage, line length, wall-of-text penalty. */
+  readability: number;
   tips: ATSTip[];
 }
 
@@ -63,6 +72,13 @@ export interface ResumeDocument {
   title: string;
   template: ResumeTemplate;
   personalDetails: ResumePersonalDetails;
+  /** the structured section model — the source of truth (see content.ts). */
+  content: ResumeContent;
+  /** true right after creation from a template — holds that template's demo persona. */
+  isDemo: boolean;
+  /** per-résumé design overrides on top of the template spec (see design.ts). */
+  design: ResumeDesign;
+  // --- legacy columns, still populated by mapResumeRow() for anything mid-rollout ---
   education: ResumeEducationEntry[];
   skills: ResumeSkills;
   sections: Record<ResumeFreeformSectionKey, string>;
@@ -89,16 +105,20 @@ export const EMPTY_PERSONAL: ResumePersonalDetails = {
   phone: "",
   location: "",
   linkedin: "",
+  github: "",
   website: "",
   photoUrl: null,
 };
 
-/** Maps a raw resumes_builder row (snake_case jsonb columns) into a ResumeDocument. */
+/** Maps a raw resumes_builder row (snake_case jsonb columns) into a ResumeDocument. Upgrades a legacy (content-less) row on read. */
 export function mapResumeRow(row: {
   id: string;
   title: string;
   template: string;
   personal_details: unknown;
+  content?: unknown;
+  is_demo?: boolean | null;
+  design?: unknown;
   education: unknown;
   skills: unknown;
   sections: unknown;
@@ -120,6 +140,14 @@ export function mapResumeRow(row: {
     title: row.title,
     template: row.template,
     personalDetails: { ...EMPTY_PERSONAL, ...((row.personal_details ?? {}) as Partial<ResumePersonalDetails>) },
+    content: normalizeContent(row.content, {
+      sections: row.sections,
+      education: row.education,
+      skills: row.skills,
+      layout: row.layout,
+    }),
+    isDemo: row.is_demo === true,
+    design: sanitizeDesign(row.design),
     education: (row.education ?? []) as ResumeEducationEntry[],
     skills: (row.skills ?? { technical: [], soft: [] }) as ResumeSkills,
     sections,

@@ -43,12 +43,11 @@ export function LiveTestScreen() {
       const timeTakenSeconds = Math.round((Date.now() - startTimeRef.current) / 1000);
       try {
         const result = await submitAttempt.mutateAsync({ answers: answerList, timeTakenSeconds });
-        const targetRoute = test?.companyId ? "CompanyResult" : "TestResult";
-        const targetParams = test?.companyId
-          ? { attemptId: result.attemptId, companyId: test.companyId }
-          : { attemptId: result.attemptId };
         navigation.dispatch(
-          CommonActions.reset({ index: 0, routes: [{ name: targetRoute as never, params: targetParams as never }] })
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: "TestResult" as never, params: { attemptId: result.attemptId } as never }],
+          })
         );
       } catch (error: any) {
         hasSubmittedRef.current = false;

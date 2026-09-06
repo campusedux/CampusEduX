@@ -14,10 +14,10 @@ import {
 } from "@/components/ui";
 import { ProjectCard, JobCard } from "@/components/cards";
 import { useTrendingProjects, useLatestJobs, useNotifications } from "@/hooks/useHomeData";
-import { useNotes } from "@/hooks/useNotes";
+import { useLearningGrids } from "@/hooks/useLearning";
 import { useAuthStore } from "@/store/authStore";
 import { CARD_SHADOW, CARD_SHADOW_LG } from "@/constants/theme";
-import type { HomeStackParamList, PrepNote } from "@/types";
+import type { HomeStackParamList, LearningGridCard } from "@/types";
 
 type Nav = NativeStackNavigationProp<HomeStackParamList, "HomeDashboard">;
 
@@ -30,9 +30,9 @@ interface HomeCategory {
 }
 
 /**
- * Exactly 6 major functions kept directly on the Home page — not buried in
- * "View All". Notes and Placement are intentionally not listed here; they stay
- * reachable from the Learn tab / drawer and the Learning section below.
+ * Major functions kept directly on the Home page — not buried in "View All".
+ * The Learning content system stays reachable from the Learning tab / drawer
+ * and the "Learning" section further down this feed.
  */
 const CATEGORIES: HomeCategory[] = [
   {
@@ -50,11 +50,11 @@ const CATEGORIES: HomeCategory[] = [
     go: (n) => n.getParent()?.navigate("Jobs", { screen: "JobsDashboard" }),
   },
   {
-    label: "Learn",
+    label: "Learning",
     icon: "school",
     color: "#16A34A",
     bg: "#DCFCE7",
-    go: (n) => n.getParent()?.navigate("Prep", { screen: "PlacementHome" }),
+    go: (n) => n.getParent()?.navigate("Prep", { screen: "LearningGrids" }),
   },
   {
     label: "Resume Builder",
@@ -62,20 +62,6 @@ const CATEGORIES: HomeCategory[] = [
     color: "#DB2777",
     bg: "#FCE7F3",
     go: (n) => n.getParent()?.navigate("ResumeBuilder", { screen: "ResumeDashboard" }),
-  },
-  {
-    label: "Mock Tests",
-    icon: "timer",
-    color: "#7C3AED",
-    bg: "#EDE9FE",
-    go: (n) => n.getParent()?.navigate("Prep", { screen: "PracticeTestList" }),
-  },
-  {
-    label: "DSA / Coding",
-    icon: "code-slash",
-    color: "#0D9488",
-    bg: "#CCFBF1",
-    go: (n) => n.getParent()?.navigate("Prep", { screen: "DSADashboard" }),
   },
   {
     label: "Custom Project",
@@ -94,7 +80,7 @@ export function HomeScreen() {
   const trending = useTrendingProjects();
   const jobs = useLatestJobs();
   const notifications = useNotifications();
-  const learning = useNotes({});
+  const learning = useLearningGrids();
   const unreadCount = (notifications.data ?? []).filter((n) => !n.isRead).length;
 
   const submitSearch = () => {
@@ -108,9 +94,9 @@ export function HomeScreen() {
   const openJobDetail = (jobId: string) =>
     (navigation.getParent() as any)?.navigate("Jobs", { screen: "JobDetails", params: { jobId } });
   const openPremium = () => (navigation.getParent() as any)?.navigate("Premium", { screen: "PremiumPlans" });
-  const openNote = (noteId: string) =>
-    (navigation.getParent() as any)?.navigate("Prep", { screen: "NoteDetail", params: { noteId } });
-  const openLearn = () => (navigation.getParent() as any)?.navigate("Prep", { screen: "Notes" });
+  const openGrid = (gridSlug: string, gridName: string) =>
+    (navigation.getParent() as any)?.navigate("Prep", { screen: "LearningGrid", params: { gridSlug, gridName } });
+  const openLearn = () => (navigation.getParent() as any)?.navigate("Prep", { screen: "LearningGrids" });
 
   return (
     <Screen scroll className="px-6">
@@ -140,7 +126,7 @@ export function HomeScreen() {
         <Ionicons name="search-outline" size={18} color="#9CA3AF" />
         <TextInput
           className="flex-1 ml-2 text-gray-900"
-          placeholder="Search projects, jobs and notes..."
+          placeholder="Search projects, jobs and topics..."
           placeholderTextColor="#9CA3AF"
           value={searchText}
           onChangeText={setSearchText}
@@ -217,17 +203,17 @@ export function HomeScreen() {
       <View className="mt-3">
         <SectionHeader title="Learning" onViewAll={openLearn} />
         {learning.isLoading ? (
-          <LoadingState label="Loading learning material..." />
+          <LoadingState label="Loading learning resources..." />
         ) : learning.isError ? (
-          <ErrorState message="Couldn't load learning material." onRetry={() => learning.refetch()} />
+          <ErrorState message="Couldn't load learning resources." onRetry={() => learning.refetch()} />
         ) : learning.data && learning.data.length > 0 ? (
           <View className="mb-2">
-            {learning.data.slice(0, 4).map((note) => (
-              <LearningRow key={note.id} note={note} onPress={() => openNote(note.id)} />
+            {learning.data.slice(0, 4).map((grid) => (
+              <LearningRow key={grid.id} grid={grid} onPress={() => openGrid(grid.slug, grid.name)} />
             ))}
           </View>
         ) : (
-          <EmptyState title="No learning material yet" />
+          <EmptyState title="No learning resources yet" />
         )}
       </View>
 
@@ -236,7 +222,7 @@ export function HomeScreen() {
   );
 }
 
-function LearningRow({ note, onPress }: { note: PrepNote; onPress: () => void }) {
+function LearningRow({ grid, onPress }: { grid: LearningGridCard; onPress: () => void }) {
   return (
     <PressableScale
       onPress={onPress}
@@ -244,15 +230,15 @@ function LearningRow({ note, onPress }: { note: PrepNote; onPress: () => void })
       style={CARD_SHADOW}
     >
       <View className="w-11 h-11 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: "#EEF0FF" }}>
-        <Ionicons name="document-text-outline" size={20} color="#4F39F6" />
+        <Ionicons name="library-outline" size={20} color="#4F39F6" />
       </View>
       <View className="flex-1">
         <Text className="font-semibold text-gray-900" numberOfLines={1}>
-          {note.title}
+          {grid.name}
         </Text>
         <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
-          {note.category}
-          {note.topic ? ` • ${note.topic}` : ""}
+          {grid.topic_count} topic{grid.topic_count === 1 ? "" : "s"}
+          {grid.description ? ` • ${grid.description}` : ""}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />

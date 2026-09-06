@@ -22,7 +22,7 @@ export default async function ResumeAddProjectPage({ params }: { params: { id: s
 
   return (
     <div className="container-prose py-12">
-      <Link href="/account/resume" className="text-sm text-ink-muted hover:text-ink">
+      <Link href="/resume" className="text-sm text-ink-muted hover:text-ink">
         &larr; Back to your resumes
       </Link>
       <h1 className="mt-2 text-2xl font-bold text-ink">Add a project to &ldquo;{resume.title}&rdquo;</h1>

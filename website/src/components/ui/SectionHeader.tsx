@@ -18,8 +18,8 @@ export function SectionHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-4 flex items-center justify-between gap-4", className)}>
-      <h2 className="text-lg font-bold text-ink sm:text-xl">{title}</h2>
+    <div className={cn("mb-5 flex items-center justify-between gap-4", className)}>
+      <h2 className="text-lg font-bold tracking-tight text-ink sm:text-xl">{title}</h2>
       {viewAllHref && (
         <Link
           href={viewAllHref}

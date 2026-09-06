@@ -12,7 +12,7 @@ export interface OfferBanner {
 export function OffersStrip({ offers }: { offers: OfferBanner[] }) {
   if (offers.length === 0) return null;
   return (
-    <section className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
+    <section className="container-page pt-8">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {offers.map((o) => (
           <div

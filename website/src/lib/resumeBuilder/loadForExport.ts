@@ -12,7 +12,7 @@ export async function loadOwnResumeForExport(resumeId: string): Promise<LoadResu
   const supabase = createAuthedServerSupabase();
   const { data: row } = await supabase
     .from("resumes_builder")
-    .select("id, title, template, personal_details, education, skills, sections, ats_score, layout, updated_at")
+    .select("id, title, template, design, personal_details, content, education, skills, sections, ats_score, layout, updated_at")
     .eq("id", resumeId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -41,6 +41,7 @@ export async function snapshotBeforeExport(userId: string, resume: ResumeDocumen
       title: resume.title,
       template: resume.template,
       personal_details: resume.personalDetails,
+      content: resume.content,
       education: resume.education,
       skills: resume.skills,
       sections: resume.sections,

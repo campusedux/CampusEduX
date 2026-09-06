@@ -3,6 +3,7 @@ import { renderResumePdfBuffer } from "@/lib/resumeBuilder/pdfDocument";
 import { renderResumeDocxBuffer } from "@/lib/resumeBuilder/docxBuilder";
 import { extractTextFromPdf, extractTextFromDocx, detectFileType } from "@/lib/resumeBuilder/fileExtraction";
 import { parseResumeText } from "@/lib/resumeBuilder/parser";
+import { normalizeContent } from "@/lib/resumeBuilder/content";
 import { EMPTY_PERSONAL, type ResumeDocument } from "@/lib/resumeBuilder/types";
 
 // Full round-trip against the REAL pdf-parse/mammoth libraries: generate an
@@ -11,22 +12,28 @@ import { EMPTY_PERSONAL, type ResumeDocument } from "@/lib/resumeBuilder/types";
 // not just against hand-typed fixture text.
 
 function fixtureResume(): ResumeDocument {
+  const education = [{ id: "e1", degree: "B.Sc Statistics", institution: "Delhi University", startYear: "2019", endYear: "2022", percentage: "78" }];
+  const skills = { technical: ["Python", "SQL"], soft: [] };
+  const sections = {
+    summary: "Data analyst experienced in building dashboards and statistical models.",
+    experience: "",
+    projects: "",
+    certifications: "",
+    achievements: "",
+    languages: "",
+    references: "",
+  };
   return {
     id: "res-1",
     title: "Priya Sharma Resume",
     template: "modern",
     personalDetails: { ...EMPTY_PERSONAL, fullName: "Priya Sharma", jobTitle: "Data Analyst", email: "priya.sharma@example.com" },
-    education: [{ id: "e1", degree: "B.Sc Statistics", institution: "Delhi University", startYear: "2019", endYear: "2022", percentage: "78" }],
-    skills: { technical: ["Python", "SQL"], soft: [] },
-    sections: {
-      summary: "Data analyst experienced in building dashboards and statistical models.",
-      experience: "",
-      projects: "",
-      certifications: "",
-      achievements: "",
-      languages: "",
-      references: "",
-    },
+    content: normalizeContent(undefined, { sections, education, skills, layout: { order: [], hidden: [] } }),
+    education,
+    skills,
+    sections,
+    isDemo: false,
+    design: {},
     atsScore: 0,
     layout: { order: [], hidden: [] },
     updatedAt: "2026-01-01T00:00:00.000Z",

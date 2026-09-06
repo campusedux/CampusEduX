@@ -4,12 +4,15 @@ import { ResumeDashboardScreen } from "@/resume/ResumeDashboardScreen";
 import { ResumeTipsScreen } from "@/resume/ResumeTipsScreen";
 import { TemplatesScreen } from "@/resume/TemplatesScreen";
 import { ResumeEditorScreen } from "@/resume/ResumeEditorScreen";
+import { SectionEditScreen } from "@/resume/SectionEditScreen";
 import { PersonalDetailsScreen } from "@/resume/PersonalDetailsScreen";
 import { EducationScreen } from "@/resume/EducationScreen";
 import { SkillsScreen } from "@/resume/SkillsScreen";
 import { PreviewResumeScreen } from "@/resume/PreviewResumeScreen";
 import { ATSScoreScreen } from "@/resume/ATSScoreScreen";
+import { JdMatchScreen } from "@/resume/JdMatchScreen";
 import { DownloadPDFScreen } from "@/resume/DownloadPDFScreen";
+import { ResumeUploadImportScreen } from "@/resume/ResumeUploadImportScreen";
 import { ResumeHistoryScreen } from "@/resume/ResumeHistoryScreen";
 import type { ResumeStackParamList } from "@/types";
 
@@ -28,12 +31,15 @@ export function ResumeNavigator() {
       <Stack.Screen name="ResumeTips" component={ResumeTipsScreen} />
       <Stack.Screen name="Templates" component={TemplatesScreen} />
       <Stack.Screen name="ResumeEditor" component={ResumeEditorScreen} />
+      <Stack.Screen name="SectionEdit" component={SectionEditScreen} />
       <Stack.Screen name="PersonalDetails" component={PersonalDetailsScreen} />
       <Stack.Screen name="Education" component={EducationScreen} />
       <Stack.Screen name="Skills" component={SkillsScreen} />
       <Stack.Screen name="PreviewResume" component={PreviewResumeScreen} />
       <Stack.Screen name="ATSScore" component={ATSScoreScreen} />
+      <Stack.Screen name="JdMatch" component={JdMatchScreen} />
       <Stack.Screen name="DownloadPDF" component={DownloadPDFScreen} />
+      <Stack.Screen name="ResumeUploadImport" component={ResumeUploadImportScreen} />
       <Stack.Screen name="ResumeHistory" component={ResumeHistoryScreen} />
     </Stack.Navigator>
   );

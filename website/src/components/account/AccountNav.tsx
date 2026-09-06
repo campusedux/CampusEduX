@@ -11,7 +11,7 @@ const NAV = [
   { href: "/account/saved-projects", label: "Saved Projects" },
   { href: "/account/applications", label: "Applications" },
   { href: "/account/saved-jobs", label: "Saved Jobs" },
-  { href: "/account/resume", label: "Resume" },
+  { href: "/resume", label: "Resume" },
   { href: "/account/wallet", label: "Wallet" },
   { href: "/account/referral", label: "Referral" },
   { href: "/account/notifications", label: "Notifications" },

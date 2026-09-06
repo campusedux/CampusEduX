@@ -1,90 +1,141 @@
 import React from "react";
 import { View, Text, Pressable } from "react-native";
-import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, Button, CircularProgress, LoadingState, ErrorState } from "@/components/ui";
-import { useATSBreakdown } from "@/hooks/useResume";
+import { Screen, CircularProgress, LoadingState, ErrorState } from "@/components/ui";
+import { useResumeDetail, useATSBreakdown } from "@/hooks/useResume";
+import { buildAtsAnalysis, type AtsCategory, type AtsStatus } from "@/services/atsCategories";
+import type { CompletionTarget } from "@/services/resumeContent";
 import type { ResumeStackParamList } from "@/types";
 
 type Rte = RouteProp<ResumeStackParamList, "ATSScore">;
 
-function scoreLabel(score: number) {
+function overallLabel(score: number) {
   if (score >= 80) return "Excellent";
   if (score >= 60) return "Good";
   return "Needs Work";
 }
 
-export function ATSScoreScreen() {
-  const navigation = useNavigation();
-  const { params } = useRoute<Rte>();
-  const { data: breakdown, isLoading, isError, refetch } = useATSBreakdown(params.resumeId);
+const STATUS: Record<AtsStatus, { text: string; bg: string; fg: string; bar: string }> = {
+  strong: { text: "Strong", bg: "#DCFCE7", fg: "#166534", bar: "#16A34A" },
+  ok: { text: "OK", bg: "#FEF3C7", fg: "#92400E", bar: "#D97706" },
+  weak: { text: "Needs work", bg: "#FEE2E2", fg: "#991B1B", bar: "#DC2626" },
+};
 
-  if (isLoading) return <Screen className="items-center justify-center"><LoadingState label="Analyzing your resume..." /></Screen>;
-  if (isError || !breakdown) return <Screen className="items-center justify-center px-6"><ErrorState message="Couldn't analyze your resume." onRetry={refetch} /></Screen>;
+function CategoryCard({ category, resumeId }: { category: AtsCategory; resumeId: string }) {
+  const navigation = useNavigation();
+  const s = STATUS[category.status];
+
+  const improve = () => {
+    const t: CompletionTarget | undefined = category.target;
+    if (!t) return;
+    if (t.kind === "personal") (navigation as any).navigate("PersonalDetails", { resumeId });
+    else if (t.kind === "block") (navigation as any).navigate("SectionEdit", { resumeId, blockId: t.blockId });
+    else (navigation as any).navigate("ResumeEditor", { resumeId });
+  };
 
   return (
-    <Screen className="px-6">
-      <View className="flex-row items-center justify-between mt-2 mb-6">
-        <View className="flex-row items-center">
-          <Pressable onPress={() => navigation.goBack()} className="mr-3">
-            <Ionicons name="arrow-back" size={22} color="#111827" />
-          </Pressable>
-          <Text className="text-lg font-bold text-gray-900">ATS Score</Text>
+    <View className="rounded-2xl border border-gray-200 p-4 mb-3">
+      <View className="flex-row items-center justify-between">
+        <Text className="font-bold text-gray-900 text-base">{category.label}</Text>
+        <View style={{ backgroundColor: s.bg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+          <Text style={{ color: s.fg, fontSize: 10, fontWeight: "700" }}>{s.text}</Text>
         </View>
       </View>
-
-      <View className="items-center mb-6">
-        <CircularProgress percent={breakdown.overall} size={140} sublabel={scoreLabel(breakdown.overall)} />
-        <Text className="text-gray-900 font-semibold mt-3">Your resume is ATS-friendly</Text>
+      <View className="flex-row items-baseline mt-0.5">
+        <Text className="text-2xl font-bold text-gray-900">{category.score}</Text>
+        <Text className="text-gray-400 text-xs ml-1">/ 100</Text>
+      </View>
+      <View className="h-1.5 bg-gray-100 rounded-full mt-2">
+        <View style={{ width: `${category.score}%`, height: 6, borderRadius: 999, backgroundColor: s.bar }} />
       </View>
 
-      <ScoreBar label="Content" value={breakdown.content} />
-      <ScoreBar label="Formatting" value={breakdown.formatting} />
-      <ScoreBar label="Skills" value={breakdown.skills} />
-      <ScoreBar label="Keywords" value={breakdown.keywords} />
-
-      <View className="bg-green-50 rounded-2xl p-4 mt-4 mb-6">
-        {breakdown.tips.map((tip, index) => (
-          <View key={tip.ruleId ?? `tip-${index}`} className="flex-row items-start mb-2.5">
-            <Ionicons
-              name={tip.ruleId === null ? "star" : "alert-circle"}
-              size={14}
-              color={tip.ruleId === null ? "#16A34A" : "#D97706"}
-              style={{ marginTop: 2 }}
-            />
-            <View className="ml-2 flex-1">
-              <Text className="text-green-800 text-sm font-medium">{tip.problem}</Text>
-              {!!tip.why && <Text className="text-green-700 text-xs mt-0.5">{tip.why}</Text>}
-            </View>
+      <View className="mt-3">
+        {category.good.map((g, i) => (
+          <View key={`g${i}`} className="flex-row items-start mb-1">
+            <Ionicons name="checkmark-circle" size={14} color="#16A34A" style={{ marginTop: 1 }} />
+            <Text className="text-gray-600 text-sm ml-1.5 flex-1">{g}</Text>
+          </View>
+        ))}
+        {category.weak.map((w, i) => (
+          <View key={`w${i}`} className="flex-row items-start mb-1">
+            <Ionicons name="alert-circle" size={14} color="#D97706" style={{ marginTop: 1 }} />
+            <Text className="text-gray-600 text-sm ml-1.5 flex-1">{w}</Text>
           </View>
         ))}
       </View>
 
-      <Button
-        label="Download Resume"
-        className="mb-3"
-        onPress={() => (navigation as any).navigate("DownloadPDF", { resumeId: params.resumeId })}
-      />
-      <Button
-        label="Back to Dashboard"
-        variant="text"
-        onPress={() => navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: "ResumeDashboard" }] }))}
-      />
-    </Screen>
+      {category.suggestions.length > 0 && (
+        <View className="bg-gray-50 rounded-xl p-3 mt-2">
+          <Text className="text-[10px] font-bold uppercase text-gray-400 mb-1">How to improve</Text>
+          {category.suggestions.map((sug, i) => (
+            <Text key={i} className="text-gray-600 text-xs mb-0.5">• {sug}</Text>
+          ))}
+        </View>
+      )}
+
+      {category.target && (
+        <Pressable onPress={improve} className="flex-row items-center mt-3" hitSlop={6}>
+          <Text className="text-primary text-sm font-semibold">Improve {category.label}</Text>
+          <Ionicons name="arrow-forward" size={14} color="#4F39F6" style={{ marginLeft: 4 }} />
+        </Pressable>
+      )}
+    </View>
   );
 }
 
-function ScoreBar({ label, value }: { label: string; value: number }) {
+export function ATSScoreScreen() {
+  const navigation = useNavigation();
+  const { params } = useRoute<Rte>();
+  const { data: resume, isLoading: rLoading, isError: rError, refetch: rRefetch } = useResumeDetail(params.resumeId);
+  const { data: breakdown, isLoading: bLoading, isError: bError, refetch: bRefetch } = useATSBreakdown(params.resumeId);
+
+  if (rLoading || bLoading)
+    return (
+      <Screen className="items-center justify-center">
+        <LoadingState label="Analysing your résumé..." />
+      </Screen>
+    );
+  if (rError || bError || !resume || !breakdown)
+    return (
+      <Screen className="items-center justify-center px-6">
+        <ErrorState message="Couldn't analyse your résumé." onRetry={() => { rRefetch(); bRefetch(); }} />
+      </Screen>
+    );
+
+  const analysis = buildAtsAnalysis(breakdown, resume.content, resume.personalDetails);
+
   return (
-    <View className="mb-3">
-      <View className="flex-row justify-between mb-1">
-        <Text className="text-gray-700 text-sm">{label}</Text>
-        <Text className="text-gray-400 text-xs">{value}%</Text>
+    <Screen scroll className="px-5 pb-8">
+      <View className="flex-row items-center justify-between mt-2 mb-4">
+        <View className="flex-row items-center">
+          <Pressable onPress={() => navigation.goBack()} className="mr-3" hitSlop={10}>
+            <Ionicons name="arrow-back" size={22} color="#111827" />
+          </Pressable>
+          <Text className="text-lg font-bold text-gray-900">ATS Check</Text>
+        </View>
+        <Pressable onPress={() => (navigation as any).navigate("JdMatch", { resumeId: params.resumeId })} hitSlop={8}>
+          <Text className="text-primary text-sm font-semibold">Job match</Text>
+        </Pressable>
       </View>
-      <View className="h-2 bg-gray-100 rounded-full">
-        <View className="h-2 bg-primary rounded-full" style={{ width: `${value}%` }} />
+
+      <View className="items-center mb-5">
+        <CircularProgress percent={analysis.overall} size={128} sublabel={overallLabel(analysis.overall)} />
+        <Text className="text-gray-400 text-xs mt-2">Deterministic score from your résumé&apos;s real content</Text>
       </View>
-    </View>
+
+      {analysis.categories.map((c) => (
+        <CategoryCard key={c.key} category={c} resumeId={params.resumeId} />
+      ))}
+
+      <Pressable
+        onPress={() => (navigation as any).navigate("PreviewResume", { resumeId: params.resumeId })}
+        className="items-center justify-center rounded-xl mt-2"
+        style={{ height: 48, backgroundColor: "#4F39F6" }}
+      >
+        <Text className="text-white font-bold">Back to Preview</Text>
+      </Pressable>
+    </Screen>
   );
 }
 

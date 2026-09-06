@@ -9,7 +9,7 @@ const COLUMNS: FooterColumn[] = [
     links: [
       { href: "/projects", label: "Projects" },
       { href: "/jobs", label: "Jobs" },
-      { href: "/placement", label: "Placement" },
+      { href: "/learning", label: "Learning" },
       { href: "/resume", label: "Resume" },
       { href: "/custom-projects", label: "Custom Projects" },
       { href: "/premium", label: "Premium" },
@@ -31,10 +31,14 @@ const COLUMNS: FooterColumn[] = [
       { href: "/privacy-policy", label: "Privacy Policy" },
       { href: "/terms", label: "Terms & Conditions" },
       { href: "/refund-policy", label: "Refund Policy" },
+      { href: "/cookie-policy", label: "Cookie Policy" },
+      { href: "/data-and-permissions", label: "Data & Permissions" },
       { href: "/project-license", label: "Project License" },
       { href: "/community-guidelines", label: "Community Guidelines" },
       { href: "/disclaimer", label: "Disclaimer" },
+      { href: "/grievance", label: "Grievance Redressal" },
       { href: "/delete-account", label: "Delete Account" },
+      { href: "/legal", label: "All policies" },
     ],
   },
 ];
@@ -56,7 +60,7 @@ export default function Footer() {
 
   return (
     <footer className="border-t border-line bg-surface">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-14">
+      <div className="container-page py-12 sm:py-14">
         <div className="grid gap-x-8 gap-y-2 sm:grid-cols-3 sm:gap-y-10 lg:grid-cols-[1.7fr_repeat(3,1fr)] lg:gap-x-12">
           {/* Brand */}
           <div className="pb-4 sm:col-span-3 sm:pb-0 lg:col-span-1">

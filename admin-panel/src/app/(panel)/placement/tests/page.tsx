@@ -20,13 +20,14 @@ export const metadata = { title: 'Mock Tests · CampusEduX Admin' };
 export default async function MockTestsPage({
   searchParams,
 }: {
-  searchParams: { page?: string; q?: string; category?: string };
+  searchParams: { page?: string; q?: string; category?: string; grid?: string };
 }) {
   const admin = await requireModule('placement');
   const page = Math.max(1, Number(searchParams.page) || 1);
   const q = (searchParams.q ?? '').trim();
   const category = searchParams.category ?? '';
-  const { rows, total, missing } = await listMockTests({ page, q, category });
+  const grid = searchParams.grid ?? '';
+  const { rows, total, missing } = await listMockTests({ page, q, category, grid });
 
   return (
     <div className="space-y-6">

@@ -9,7 +9,7 @@ export function Skeleton({ className }: { className?: string }) {
 export function SkeletonProjectCard() {
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
-      <Skeleton className="aspect-[16/10] rounded-none" />
+      <Skeleton className="aspect-[16/9] rounded-none" />
       <div className="space-y-2 p-4">
         <Skeleton className="h-4 w-3/4" />
         <Skeleton className="h-3 w-1/2" />

@@ -15,6 +15,7 @@ import type {
   ResumeProjectCandidate,
   ResumeLayout,
   ManageableResumeSectionKey,
+  ResumeContent,
 } from "@/types";
 import { RESUME_FREEFORM_SECTIONS, MANAGEABLE_RESUME_SECTIONS } from "@/types";
 import {
@@ -23,6 +24,26 @@ import {
   sampleATSBreakdown,
   sampleResumeDownloadHistory,
 } from "@/data/sampleResumeContent";
+import {
+  normalizeResumeContent,
+  contentToLegacyColumns,
+  defaultStarterContent,
+  buildResumeRenderModel,
+  applyLegacyTextSection,
+  applyLegacyEducation,
+  applyLegacySkills,
+} from "@/services/resumeContent";
+import { templateSpec } from "@/services/resumeTemplateSpecs";
+import { resolveDesign, effectiveAccent } from "@/services/resumeDesign";
+
+/** Shape returned by the website's /api/resume/parse route (lib/resumeBuilder/parser.ts ParsedResumeResult). */
+export interface ParsedResumeUpload {
+  contact: { fullName: string | null; email: string | null; phone: string | null; linkedin: string | null; github: string | null; website: string | null };
+  sections: Record<string, string>;
+  education: ResumeEducationEntry[];
+  skills: string[];
+  unrecognizedText: string;
+}
 
 const EMPTY_PERSONAL: ResumePersonalDetails = {
   fullName: "",
@@ -31,6 +52,7 @@ const EMPTY_PERSONAL: ResumePersonalDetails = {
   phone: "",
   location: "",
   linkedin: "",
+  github: "",
   website: "",
   photoUrl: null,
 };
@@ -77,6 +99,14 @@ function mapRow(row: any): ResumeDocument {
     title: row.title,
     template: row.template,
     personalDetails: { ...EMPTY_PERSONAL, ...(row.personal_details ?? {}) },
+    content: normalizeResumeContent(row.content, {
+      sections: row.sections,
+      education: row.education,
+      skills: row.skills,
+      layout: row.layout,
+    }),
+    isDemo: row.is_demo === true,
+    design: (row.design ?? {}) as ResumeDocument["design"],
     education: row.education ?? [],
     skills: row.skills ?? { technical: [], soft: [] },
     sections,
@@ -99,47 +129,86 @@ export function appendToFreeformContent(current: string, snippet: string): strin
   return trimmed ? `${trimmed}\n\n${snippet}` : snippet;
 }
 
-function renderResumeHtml(doc: ResumeDocument, accent: string): string {
-  const p = doc.personalDetails;
-  const section = (title: string, body: string) =>
-    body?.trim() ? `<h3 style="color:${accent};margin:18px 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;">${title}</h3><p style="margin:0;white-space:pre-wrap;font-size:13px;line-height:1.5;">${body}</p>` : "";
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
-  return `
-    <html>
-      <head><meta charset="utf-8" /></head>
-      <body style="font-family:Helvetica,Arial,sans-serif;color:#111827;padding:32px;">
-        <h1 style="margin:0;font-size:24px;">${p.fullName || "Your Name"}</h1>
-        <p style="margin:2px 0 12px;color:${accent};font-size:14px;">${p.jobTitle || ""}</p>
-        <p style="margin:0 0 16px;font-size:12px;color:#6B7280;">
-          ${[p.email, p.phone, p.location, p.linkedin, p.website].filter(Boolean).join(" · ")}
-        </p>
-        <hr style="border:none;border-top:2px solid ${accent};" />
-        ${section("Summary", doc.sections.summary)}
-        ${section("Experience", doc.sections.experience)}
-        ${section("Projects", doc.sections.projects)}
-        ${
-          doc.education.length
-            ? `<h3 style="color:${accent};margin:18px 0 6px;font-size:14px;text-transform:uppercase;">Education</h3>` +
-              doc.education
-                .map(
-                  (e) =>
-                    `<p style="margin:0 0 6px;font-size:13px;"><b>${e.degree}</b> — ${e.institution} (${e.startYear}-${e.endYear})${e.percentage ? `, ${e.percentage}%` : ""}</p>`
-                )
-                .join("")
-            : ""
-        }
-        ${
-          doc.skills.technical.length || doc.skills.soft.length
-            ? `<h3 style="color:${accent};margin:18px 0 6px;font-size:14px;text-transform:uppercase;">Skills</h3><p style="margin:0;font-size:13px;">${[...doc.skills.technical, ...doc.skills.soft].join(", ")}</p>`
-            : ""
-        }
-        ${section("Certifications", doc.sections.certifications)}
-        ${section("Achievements", doc.sections.achievements)}
-        ${section("Languages", doc.sections.languages)}
-        ${section("References", doc.sections.references)}
-      </body>
-    </html>
-  `;
+/**
+ * Renders the résumé as print HTML from the structured `content` model,
+ * styled from the SAME TemplateSpec + design overrides as the on-screen
+ * <ResumeDocument> (resumeTemplateSpecs.ts / resumeDesign.ts) — header
+ * alignment, heading rule, accent usage, font family and margins all track
+ * the chosen template, so the on-device PDF matches the live preview.
+ */
+function renderResumeHtml(doc: ResumeDocument, templateAccent: string): string {
+  const spec = resolveDesign(templateSpec(doc.template), doc.design);
+  const accent = effectiveAccent(templateAccent, doc.design);
+  const t = spec.type;
+  const showAccent = spec.accent !== "none";
+  const centered = spec.header === "centered-serif";
+  const band = spec.header === "accent-band";
+  const model = buildResumeRenderModel({ personalDetails: doc.personalDetails, content: doc.content });
+  const bullet = spec.bulletChar || "•";
+  const pad = band ? 0 : Math.max(24, Math.round(t.padding * 0.7));
+
+  const headingHtml = (txt: string) => {
+    const base = `margin:${t.sectionGap}px 0 6px;font-size:${t.heading}px;text-transform:uppercase;font-weight:700;`;
+    if (spec.heading === "full-underline")
+      return `<h3 style="${base}color:#000;letter-spacing:0.5px;border-bottom:1.5px solid #000;padding-bottom:3px;">${escapeHtml(txt)}</h3>`;
+    if (spec.heading === "plain-caps")
+      return `<h3 style="${base}color:#6B7280;font-weight:600;letter-spacing:1.4px;">${escapeHtml(txt)}</h3>`;
+    if (spec.heading === "bar")
+      return `<h3 style="${base}color:#111827;border-left:4px solid ${accent};padding-left:8px;">${escapeHtml(txt)}</h3>`;
+    return `<h3 style="${base}color:${showAccent ? accent : "#111827"};border-bottom:1px solid ${showAccent ? accent + "55" : "#E5E7EB"};padding-bottom:3px;">${escapeHtml(txt)}</h3>`;
+  };
+
+  const body = model.blocks
+    .map((block) => {
+      if (block.variant === "entries" && block.entries) {
+        const rows = block.entries
+          .map((e) => {
+            const head = `<div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">${escapeHtml(e.title)}${e.subtitle ? ` &mdash; <span style="font-weight:500;color:#374151;">${escapeHtml(e.subtitle)}</span>` : ""}</span>${e.meta ? `<span style="font-size:${t.small}px;color:#6B7280;white-space:nowrap;">${escapeHtml(e.meta)}</span>` : ""}</div>`;
+            const bullets = e.bullets.map((b) => `<div style="margin:1px 0 0 10px;"><span style="color:${showAccent ? accent : "#6B7280"};">${bullet}</span> ${escapeHtml(b)}</div>`).join("");
+            const tags = e.tags.length ? `<div style="margin-top:2px;font-size:${t.small}px;color:#6B7280;">${escapeHtml(e.tags.join(" · "))}</div>` : "";
+            const url = e.url ? `<div style="margin-top:1px;font-size:${t.small}px;color:${showAccent ? accent : "#6B7280"};">${escapeHtml(e.url)}</div>` : "";
+            return `<div style="margin-bottom:8px;">${head}${bullets}${tags}${url}</div>`;
+          })
+          .join("");
+        return headingHtml(block.heading) + rows;
+      }
+      if (block.variant === "tags" && block.chips && spec.skills === "chips") {
+        const chips = block.chips
+          .map(
+            (c) =>
+              `<span style="display:inline-block;font-size:${t.small}px;padding:2px 8px;margin:0 6px 6px 0;border-radius:6px;background:${showAccent ? accent + "14" : "#F3F4F6"};color:${showAccent ? accent : "#374151"};border:1px solid ${showAccent ? accent + "33" : "#E5E7EB"};">${escapeHtml(c)}</span>`,
+          )
+          .join("");
+        return headingHtml(block.heading) + `<div>${chips}</div>`;
+      }
+      const lines = block.lines.map((l) => `<div style="margin:0 0 2px;color:#374151;white-space:pre-wrap;">${escapeHtml(l)}</div>`).join("");
+      return headingHtml(block.heading) + lines;
+    })
+    .join("");
+
+  const align = centered ? "center" : "left";
+  const nameSize = Math.round(t.name * 0.7);
+  const header = band
+    ? `<div style="background:${accent};color:#fff;padding:${t.padding}px ${t.padding + 8}px;">
+         <div style="font-size:${nameSize}px;font-weight:700;">${escapeHtml(model.fullName)}</div>
+         ${model.jobTitle ? `<div style="font-size:${t.title}px;opacity:.92;margin-top:3px;">${escapeHtml(model.jobTitle)}</div>` : ""}
+         ${model.contactLine ? `<div style="font-size:${t.small}px;opacity:.8;margin-top:6px;">${escapeHtml(model.contactLine)}</div>` : ""}
+       </div>`
+    : `<div style="text-align:${align};padding-bottom:10px;margin-bottom:${t.sectionGap}px;border-bottom:${centered ? "1.5px solid #000" : spec.header === "left-accent" ? `2px solid ${accent}` : "1px solid #E5E7EB"};">
+         <div style="font-size:${nameSize}px;font-weight:${spec.header === "left-plain" ? 400 : 700};">${escapeHtml(model.fullName)}</div>
+         ${model.jobTitle ? `<div style="font-size:${t.title}px;margin-top:3px;color:${showAccent && spec.accent === "bold" ? accent : "#374151"};${centered ? "text-transform:uppercase;letter-spacing:1.2px;" : ""}">${escapeHtml(model.jobTitle)}</div>` : ""}
+         ${model.contactLine ? `<div style="font-size:${t.small}px;color:#6B7280;margin-top:6px;">${escapeHtml(model.contactLine)}</div>` : ""}
+       </div>`;
+
+  return `<html><head><meta charset="utf-8" /></head>
+    <body style="font-family:${spec.fontFamily};color:#111827;font-size:${t.body}px;line-height:${t.lineHeight};margin:0;padding:${band ? 0 : pad}px;">
+      ${header}
+      <div style="${band ? `padding:${t.padding}px ${t.padding + 8}px 0;` : ""}">${body}</div>
+    </body></html>`;
 }
 
 /**
@@ -147,6 +216,45 @@ function renderResumeHtml(doc: ResumeDocument, accent: string): string {
  * created yet). Resume edits then stay local — the screens still work against
  * the sample content — instead of surfacing an error on every save.
  */
+/**
+ * Applies a change to the structured `content` model of a resume and writes
+ * it back alongside the re-derived legacy columns. The mobile editor screens
+ * still edit the legacy shapes; this keeps `content` (the source of truth,
+ * shared with the website) in sync without discarding any structured section
+ * the website may have added.
+ */
+async function patchContent(
+  resumeId: string,
+  patch: (content: ResumeContent) => ResumeContent,
+  extra: Record<string, unknown> = {},
+): Promise<{ error: { message: string } | null }> {
+  const { data: row } = await supabase
+    .from("resumes_builder")
+    .select("content, sections, education, skills, layout")
+    .eq("id", resumeId)
+    .maybeSingle();
+  const current = normalizeResumeContent(row?.content, {
+    sections: row?.sections,
+    education: row?.education,
+    skills: row?.skills,
+    layout: row?.layout,
+  });
+  const next = patch(current);
+  const legacy = contentToLegacyColumns(next);
+  return supabase
+    .from("resumes_builder")
+    .update({
+      content: next,
+      sections: legacy.sections,
+      education: legacy.education,
+      skills: legacy.skills,
+      layout: legacy.layout,
+      updated_at: new Date().toISOString(),
+      ...extra,
+    })
+    .eq("id", resumeId);
+}
+
 async function persist(label: string, run: () => PromiseLike<{ error: { message: string } | null }>): Promise<void> {
   try {
     const { error } = await run();
@@ -193,6 +301,8 @@ export const resumeService = {
       // no profile data to prefill with — the form simply starts blank for these fields
     }
 
+    const content = defaultStarterContent();
+    const legacy = contentToLegacyColumns(content);
     try {
       const { data, error } = await supabase
         .from("resumes_builder")
@@ -201,9 +311,11 @@ export const resumeService = {
           title: "Untitled Resume",
           template,
           personal_details: { ...EMPTY_PERSONAL, linkedin, website },
-          education: [],
-          skills: { technical: [], soft: [] },
-          sections: {},
+          content,
+          education: legacy.education,
+          skills: legacy.skills,
+          sections: legacy.sections,
+          layout: legacy.layout,
         })
         .select("id")
         .single();
@@ -255,23 +367,153 @@ export const resumeService = {
   },
 
   async updateEducation(resumeId: string, education: ResumeEducationEntry[]): Promise<void> {
-    await persist("updateEducation", () =>
-      supabase.from("resumes_builder").update({ education, updated_at: new Date().toISOString() }).eq("id", resumeId)
-    );
+    await persist("updateEducation", () => patchContent(resumeId, (c) => applyLegacyEducation(c, education)));
   },
 
   async updateSkills(resumeId: string, skills: ResumeSkills): Promise<void> {
-    await persist("updateSkills", () =>
-      supabase.from("resumes_builder").update({ skills, updated_at: new Date().toISOString() }).eq("id", resumeId)
+    await persist("updateSkills", () => patchContent(resumeId, (c) => applyLegacySkills(c, skills)));
+  },
+
+  async updateFreeformSection(resumeId: string, key: ResumeFreeformSectionKey, content: string, _currentSections: Record<string, string>): Promise<void> {
+    void _currentSections; // kept for call-site compatibility; the section text is now applied onto `content`
+    await persist("updateFreeformSection", () => patchContent(resumeId, (c) => applyLegacyTextSection(c, key, content)));
+  },
+
+  /** Saves the whole structured `content` model in one write (+ mirrored legacy columns). The block-list editor's autosave. */
+  async updateContent(resumeId: string, content: ResumeContent): Promise<void> {
+    const normalized = normalizeResumeContent(content);
+    await persist("updateContent", () => patchContent(resumeId, () => normalized));
+  },
+
+  /** Create a résumé pre-filled with a template's demo persona (flagged is_demo). */
+  async createResumeFromDemo(userId: string, template: ResumeTemplate, demo: { personalDetails: ResumePersonalDetails; content: ResumeContent }): Promise<string> {
+    const content = normalizeResumeContent(demo.content);
+    const legacy = contentToLegacyColumns(content);
+    try {
+      const { data, error } = await supabase
+        .from("resumes_builder")
+        .insert({
+          user_id: userId,
+          title: `${demo.personalDetails.jobTitle || "New"} résumé (demo)`,
+          template,
+          is_demo: true,
+          personal_details: demo.personalDetails,
+          content,
+          education: legacy.education,
+          skills: legacy.skills,
+          sections: legacy.sections,
+          layout: legacy.layout,
+        })
+        .select("id")
+        .single();
+      if (error || !data) throw new Error(error?.message ?? "Could not create resume.");
+      return data.id;
+    } catch (error) {
+      console.info(`[resume.service] createResumeFromDemo: not persisted (${(error as Error).message})`);
+      return `res-local-${Date.now()}`;
+    }
+  },
+
+  async setDemoFlag(resumeId: string, isDemo: boolean): Promise<void> {
+    await persist("setDemoFlag", () =>
+      supabase.from("resumes_builder").update({ is_demo: isDemo, updated_at: new Date().toISOString() }).eq("id", resumeId),
     );
   },
 
-  async updateFreeformSection(resumeId: string, key: ResumeFreeformSectionKey, content: string, currentSections: Record<string, string>): Promise<void> {
-    await persist("updateFreeformSection", () =>
-      supabase
-        .from("resumes_builder")
-        .update({ sections: { ...currentSections, [key]: content }, updated_at: new Date().toISOString() })
-        .eq("id", resumeId)
+  /** Wipes a résumé back to the empty starter set and drops the demo flag. */
+  async clearContent(resumeId: string): Promise<void> {
+    const content = defaultStarterContent();
+    await persist("clearContent", () =>
+      patchContent(
+        resumeId,
+        () => content,
+        {
+          is_demo: false,
+          personal_details: {
+            fullName: "", jobTitle: "", email: "", phone: "", location: "", linkedin: "", github: "", website: "", photoUrl: null,
+          },
+        },
+      ),
+    );
+  },
+
+  /**
+   * Uploads a PDF/DOCX to the website's /api/resume/parse (bearer JWT — same
+   * dual-auth route the AI-assist call uses) and returns the heuristic parse
+   * result. Nothing is saved until the caller reviews + imports it.
+   */
+  async parseUploadedResume(file: { uri: string; name: string; mimeType?: string | null }): Promise<ParsedResumeUpload> {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error("Please sign in again.");
+
+    const form = new FormData();
+    // React Native's fetch understands this { uri, name, type } shape for file parts.
+    form.append("file", { uri: file.uri, name: file.name, type: file.mimeType ?? "application/octet-stream" } as unknown as Blob);
+
+    const res = await fetch(`${BRAND.website.replace(/\/$/, "")}/api/resume/parse`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error ?? "Couldn't read that file. Try a text-based PDF or DOCX.");
+    return body.parsed as ParsedResumeUpload;
+  },
+
+  /** Creates a NEW résumé from a reviewed parse result — never overwrites an existing one. */
+  async createResumeFromParsed(userId: string, parsed: ParsedResumeUpload): Promise<string> {
+    const personal: ResumePersonalDetails = {
+      fullName: parsed.contact.fullName ?? "",
+      jobTitle: "",
+      email: parsed.contact.email ?? "",
+      phone: parsed.contact.phone ?? "",
+      location: "",
+      linkedin: parsed.contact.linkedin ?? "",
+      github: parsed.contact.github ?? "",
+      website: parsed.contact.website ?? "",
+      photoUrl: null,
+    };
+    const legacy = {
+      sections: parsed.sections ?? {},
+      education: parsed.education ?? [],
+      skills: { technical: parsed.skills ?? [], soft: [] as string[] },
+      layout: { order: [] as string[], hidden: [] as string[] },
+    };
+    const content = normalizeResumeContent(undefined, legacy);
+    const cols = contentToLegacyColumns(content);
+    const { data, error } = await supabase
+      .from("resumes_builder")
+      .insert({
+        user_id: userId,
+        title: personal.fullName ? `${personal.fullName}'s Resume` : "Imported Resume",
+        template: "modern",
+        is_demo: false,
+        personal_details: personal,
+        content,
+        education: cols.education,
+        skills: cols.skills,
+        sections: cols.sections,
+        layout: cols.layout,
+      })
+      .select("id")
+      .single();
+    if (error || !data) throw new Error(error?.message ?? "Could not create the résumé.");
+    return data.id;
+  },
+
+  /** Deterministic JD keyword match — delegates to the shared match_resume_to_jd() Postgres function. */
+  async matchJd(resumeId: string, jdText: string): Promise<{ matchPercent: number; matched: string[]; missing: string[]; jdKeywordCount: number }> {
+    const { data, error } = await supabase.rpc("match_resume_to_jd", { p_resume_id: resumeId, p_jd_text: jdText });
+    if (error || !data) throw new Error(error?.message ?? "Couldn't match this résumé against that job description.");
+    return data as { matchPercent: number; matched: string[]; missing: string[]; jdKeywordCount: number };
+  },
+
+  async updateDesign(resumeId: string, design: ResumeDocument["design"]): Promise<void> {
+    await persist("updateDesign", () =>
+      supabase.from("resumes_builder").update({ design, updated_at: new Date().toISOString() }).eq("id", resumeId),
     );
   },
 

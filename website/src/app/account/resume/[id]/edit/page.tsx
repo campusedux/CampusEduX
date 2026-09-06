@@ -11,7 +11,7 @@ export default async function ResumeEditPage({ params }: { params: { id: string 
 
   const { data: row } = await supabase
     .from("resumes_builder")
-    .select("id, title, template, personal_details, education, skills, sections, ats_score, layout, updated_at")
+    .select("id, title, template, design, is_demo, personal_details, content, education, skills, sections, ats_score, layout, updated_at")
     .eq("id", params.id)
     .eq("user_id", user.id)
     .maybeSingle();

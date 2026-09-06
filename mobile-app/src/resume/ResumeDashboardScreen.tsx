@@ -14,6 +14,7 @@ function buildTools(nav: Nav, resumes: ResumeSummary[] | undefined) {
   const latest = resumes?.[0];
   return [
     { label: "Templates", icon: "grid-outline", onPress: () => nav.navigate("Templates", undefined) },
+    { label: "Upload résumé", icon: "cloud-upload-outline", onPress: () => nav.navigate("ResumeUploadImport") },
     {
       label: "ATS Score",
       icon: "speedometer-outline",
@@ -21,6 +22,12 @@ function buildTools(nav: Nav, resumes: ResumeSummary[] | undefined) {
         latest
           ? nav.navigate("ATSScore", { resumeId: latest.id })
           : notify("ATS Score", "Create a resume first, then check its ATS score here."),
+    },
+    {
+      label: "Job match",
+      icon: "briefcase-outline",
+      onPress: () =>
+        latest ? nav.navigate("JdMatch", { resumeId: latest.id }) : notify("Job match", "Create a résumé first, then match it against a job description."),
     },
     { label: "Resume Tips", icon: "bulb-outline", onPress: () => nav.navigate("ResumeTips") },
     { label: "History", icon: "time-outline", onPress: () => nav.navigate("ResumeHistory") },

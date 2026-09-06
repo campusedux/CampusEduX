@@ -6,7 +6,7 @@ export * from "./home.types";
 export * from "./marketplace.types";
 export * from "./profile.types";
 export * from "./placement.types";
-export * from "./notes.types";
+export * from "./learning.types";
 export * from "./customProject.types";
 export * from "./referral.types";
 export * from "./premium.types";

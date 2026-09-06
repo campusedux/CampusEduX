@@ -6,6 +6,9 @@ import type {
   LearningTree,
   LearningTopicPage,
   LearningSearchHit,
+  TopicPractice,
+  CodingProblemDetail,
+  MockTestDetail,
 } from "@/lib/learning.types";
 
 /**
@@ -28,8 +31,13 @@ export type {
   LearningTopicPage,
   LearningContentBlock,
   LearningSearchHit,
+  TopicPractice,
+  TopicMockTestCard,
+  TopicCodingProblemCard,
+  CodingProblemDetail,
+  MockTestDetail,
 } from "@/lib/learning.types";
-export { firstTopicOf, flattenTopics, isContentGrid, GRID_TYPE_LABEL } from "@/lib/learning.types";
+export { firstTopicOf, flattenTopics } from "@/lib/learning.types";
 
 const PLATFORM = "website";
 
@@ -66,6 +74,62 @@ export const getLearningTopicPage = cache(
   },
 );
 
+/**
+ * Topic-specific Mock Tests + Coding Problems for the bottom of a topic page.
+ * `learning_topic_practice` (migration 0048/025) enforces the same publish +
+ * platform + academic-targeting chain as `learning_topic_content` and only
+ * lists rows attached to this exact topic. Returns `{ mock_tests: [],
+ * coding_problems: [] }` for a topic with no practice — the caller renders
+ * nothing in that case.
+ */
+export const getTopicPractice = cache(
+  async (gridSlug: string, topicSlug: string): Promise<TopicPractice> => {
+    const empty: TopicPractice = { mock_tests: [], coding_problems: [] };
+    const supabase = getPublicSupabase();
+    if (!supabase) return empty;
+    const { data, error } = await supabase.rpc("learning_topic_practice", {
+      p_grid_slug: gridSlug,
+      p_topic_slug: topicSlug,
+      p_platform: PLATFORM,
+    });
+    if (error || !data) return empty;
+    const payload = data as Partial<TopicPractice>;
+    return {
+      mock_tests: Array.isArray(payload.mock_tests) ? payload.mock_tests : [],
+      coding_problems: Array.isArray(payload.coding_problems) ? payload.coding_problems : [],
+    };
+  },
+);
+
+/** One topic Coding Problem by its global slug, for `/coding-problems/<slug>`.
+ *  `coding_problem_detail` (0048/025) withholds the body / examples / hints /
+ *  editorial when the caller can't open a premium problem (`locked: true`), and
+ *  NEVER returns the hidden judge test cases. */
+export const getCodingProblem = cache(async (slug: string): Promise<CodingProblemDetail | null> => {
+  const supabase = getPublicSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("coding_problem_detail", {
+    p_slug: slug,
+    p_platform: PLATFORM,
+  });
+  if (error || !data) return null;
+  return data as CodingProblemDetail;
+});
+
+/** One topic Mock Test's meta for `/mock-tests/<id>` (instruction card +
+ *  breadcrumb). Questions + scoring stay in `test_questions` RLS +
+ *  `submit_test_attempt()`. */
+export const getMockTest = cache(async (testId: string): Promise<MockTestDetail | null> => {
+  const supabase = getPublicSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("mock_test_detail", {
+    p_test_id: testId,
+    p_platform: PLATFORM,
+  });
+  if (error || !data) return null;
+  return data as MockTestDetail;
+});
+
 /** Lightweight grid header — one row, no tree. RLS on `learning_grids`
  *  (migration 0045/022) already restricts anon to published + global +
  *  website-visible, so an unpublished / archived / targeted grid comes back
@@ -83,88 +147,6 @@ export const getLearningGridBrief = cache(async (slug: string): Promise<Learning
   if (error || !data) return null;
   return data as LearningGridBrief;
 });
-
-// ---------------------------------------------------------------------------
-// Specialised (typed) grid catalogs — read the canonical practice tables,
-// scoped by `learning_grid_id` (migration 0044/021). Every table has an RLS
-// SELECT policy (migration 0045/022) that hides draft / premium / targeted
-// rows from the anon client, so nothing here re-checks visibility.
-// ---------------------------------------------------------------------------
-export const getGridDsaCatalog = cache(async (gridId: string) => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return [];
-  const { data } = await supabase
-    .from("dsa_topics")
-    .select("id,name,slug,sort_order,dsa_problems(id,difficulty)")
-    .eq("learning_grid_id", gridId)
-    .order("sort_order", { ascending: true });
-  return (data ?? []).map((t: any) => ({
-    id: t.id as string,
-    name: t.name as string,
-    slug: (t.slug ?? null) as string | null,
-    problems: (t.dsa_problems ?? []).length as number,
-    byDifficulty: countBy((t.dsa_problems ?? []).map((p: any) => p.difficulty)),
-  }));
-});
-
-export const getGridMockTests = cache(async (gridId: string) => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return [];
-  const { data } = await supabase
-    .from("practice_tests")
-    .select("id,title,category,question_count,duration_minutes,is_premium")
-    .eq("learning_grid_id", gridId)
-    .order("created_at", { ascending: false })
-    .limit(60);
-  return (data ?? []) as {
-    id: string;
-    title: string;
-    category: string;
-    question_count: number;
-    duration_minutes: number;
-    is_premium: boolean;
-  }[];
-});
-
-export const getGridHrCatalog = cache(async (gridId: string) => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return [];
-  const { data } = await supabase
-    .from("hr_questions")
-    .select("category")
-    .eq("learning_grid_id", gridId)
-    .limit(2000);
-  const counts = countBy((data ?? []).map((r: any) => r.category || "General"));
-  return Object.entries(counts)
-    .map(([category, count]) => ({ category, count }))
-    .sort((a, b) => b.count - a.count);
-});
-
-export const getGridCompanies = cache(async (gridId: string) => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return [];
-  const { data } = await supabase
-    .from("learning_grid_companies")
-    .select("id,headline,sort_order,company:companies(id,name,logo_url)")
-    .eq("grid_id", gridId)
-    .eq("status", "published")
-    .eq("show_on_website", true)
-    .order("sort_order", { ascending: true });
-  return (data ?? [])
-    .filter((r: any) => r.company)
-    .map((r: any) => ({
-      id: r.company.id as string,
-      name: r.company.name as string,
-      logoUrl: (r.company.logo_url ?? null) as string | null,
-      headline: (r.headline ?? "") as string,
-    }));
-});
-
-function countBy(values: string[]): Record<string, number> {
-  const m: Record<string, number> = {};
-  for (const v of values) m[v] = (m[v] ?? 0) + 1;
-  return m;
-}
 
 export async function searchLearning(q: string, limit = 20): Promise<LearningSearchHit[]> {
   const term = q.trim();

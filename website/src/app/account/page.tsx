@@ -1,8 +1,8 @@
 import Link from "next/link";
+import { ArrowRight, Wallet, ShoppingBag, Briefcase, Users, Bookmark, Heart, Wrench } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR } from "@/lib/format";
-import { Button } from "@/components/ui";
 
 export default async function AccountOverviewPage() {
   const user = await requireUser();
@@ -20,40 +20,72 @@ export default async function AccountOverviewPage() {
   const balance = (txns ?? []).reduce((sum, t) => sum + (t.type === "credit" ? Number(t.amount) : -Number(t.amount)), 0);
 
   const CARDS = [
-    { href: "/account/wallet", label: "Wallet balance", value: formatINR(balance) },
-    { href: "/account/purchases", label: "Projects purchased", value: purchaseCount ?? 0 },
-    { href: "/account/applications", label: "Job applications", value: applicationCount ?? 0 },
-    { href: "/account/referral", label: "Friends referred", value: referralCode?.total_referrals ?? 0 },
+    { href: "/account/wallet", label: "Wallet balance", value: formatINR(balance), hint: "Lifetime balance", icon: Wallet },
+    { href: "/account/purchases", label: "Projects purchased", value: purchaseCount ?? 0, hint: "Completed", icon: ShoppingBag },
+    { href: "/account/applications", label: "Job applications", value: applicationCount ?? 0, hint: "Submitted", icon: Briefcase },
+    { href: "/account/referral", label: "Friends referred", value: referralCode?.total_referrals ?? 0, hint: "Joined with your code", icon: Users },
+  ];
+
+  const SHORTCUTS = [
+    { href: "/account/saved-projects", label: `Saved projects${savedProjects ? ` (${savedProjects})` : ""}`, icon: Bookmark },
+    { href: "/account/saved-jobs", label: "Saved jobs", icon: Heart },
+    { href: "/custom-projects/my-projects", label: "Custom project requests", icon: Wrench },
   ];
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-ink">
+      <h1 className="text-2xl font-bold tracking-tight text-ink">
         Welcome back{user.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}
       </h1>
+      <p className="mt-1 text-sm text-ink-muted">Here&apos;s a snapshot of your CampusEduX account.</p>
+
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {CARDS.map((c) => (
-          <Link
-            key={c.href}
-            href={c.href}
-            className="rounded-2xl border border-line bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg"
-          >
-            <div className="text-xs text-ink-faint">{c.label}</div>
-            <div className="mt-2 text-2xl font-bold text-ink">{c.value}</div>
-          </Link>
-        ))}
+        {CARDS.map((c) => {
+          const Icon = c.icon;
+          return (
+            <Link
+              key={c.href}
+              href={c.href}
+              className="group rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                  <Icon className="h-5 w-5 text-primary" aria-hidden />
+                </span>
+                <ArrowRight
+                  className="h-4 w-4 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transform-none"
+                  aria-hidden
+                />
+              </div>
+              <div className="mt-3 text-2xl font-bold text-ink">{c.value}</div>
+              <div className="mt-1 text-sm font-medium text-ink">{c.label}</div>
+              <div className="text-xs text-ink-faint">{c.hint}</div>
+            </Link>
+          );
+        })}
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-2.5">
-        <Button href="/account/saved-projects" variant="ghost" size="sm">
-          Saved projects{savedProjects ? ` (${savedProjects})` : ""}
-        </Button>
-        <Button href="/account/saved-jobs" variant="ghost" size="sm">
-          Saved jobs
-        </Button>
-        <Button href="/custom-projects/my-projects" variant="ghost" size="sm">
-          Custom project requests
-        </Button>
+      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-ink-faint">Shortcuts</h2>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {SHORTCUTS.map((s) => {
+          const Icon = s.icon;
+          return (
+            <Link
+              key={s.href}
+              href={s.href}
+              className="group flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+            >
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface">
+                <Icon className="h-[18px] w-[18px] text-ink-muted group-hover:text-primary" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{s.label}</span>
+              <ArrowRight
+                className="h-4 w-4 flex-shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transform-none"
+                aria-hidden
+              />
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

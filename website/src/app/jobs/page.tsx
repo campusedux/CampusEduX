@@ -3,7 +3,7 @@ import Link from "next/link";
 import { X } from "lucide-react";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import JobCard, { JobCardData } from "@/components/JobCard";
-import { SearchBar, FilterSheet, Pagination, EmptyState } from "@/components/ui";
+import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { JobFilters } from "@/components/marketplace/JobFilters";
 import { JOB_LIST_FIELDS, JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobSort, parsePage, totalPages } from "@/lib/marketplace";
 
@@ -62,16 +62,12 @@ export default async function JobsPage({ searchParams }: { searchParams: SP }) {
   const clearAllHref = searchParams.q ? `/jobs?q=${encodeURIComponent(searchParams.q)}` : "/jobs";
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <h1 className="text-3xl font-bold text-ink">Jobs &amp; Internships</h1>
-      <p className="mt-2 max-w-2xl text-ink-muted">
-        Roles posted for CampusEduX students — filter by location and type, and apply from the web or the app with the
-        same account.
-      </p>
-
-      <div className="mt-6 max-w-xl">
-        <SearchBar action="/jobs" defaultValue={searchParams.q} placeholder="Job title…" hiddenParams={carried} />
-      </div>
+    <div className="container-page py-10">
+      <PageHeader
+        eyebrow="Careers"
+        title="Jobs & Internships"
+        description="Roles posted for CampusEduX students — filter by location and type, and apply from the web or the app with the same account."
+      />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[240px_1fr]">
         <FilterSheet title="Filters" activeCount={activeCount}>

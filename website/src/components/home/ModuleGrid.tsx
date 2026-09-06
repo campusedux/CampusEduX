@@ -1,16 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import {
-  ArrowRight,
-  LayoutGrid,
-  GraduationCap,
-  Briefcase,
-  Target,
-  FileText,
-  Wrench,
-  ClipboardList,
-  Code2,
-} from "lucide-react";
+import { ArrowRight, LayoutGrid, GraduationCap, Briefcase, FileText, Wrench } from "lucide-react";
 
 interface ModuleTile {
   label: string;
@@ -32,16 +22,13 @@ const MODULES: ModuleTile[] = [
   { label: "Projects", desc: "Explore and buy final year projects", href: "/projects", icon: LayoutGrid, tint: "#4F39F6", bg: "#EEF0FF" },
   { label: "Learning", desc: "Courses, tutorials and study material", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
   { label: "Jobs", desc: "Find jobs & internships", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
-  { label: "Placement", desc: "Prepare for aptitude, technical & HR rounds", href: "/placement", icon: Target, tint: "#EF4444", bg: "#FEE2E2" },
   { label: "Resume", desc: "Build ATS-friendly resumes", href: "/resume", icon: FileText, tint: "#EA580C", bg: "#FFEDD5" },
   { label: "Custom Projects", desc: "Get your custom project built", href: "/custom-projects", icon: Wrench, tint: "#DB2777", bg: "#FCE7F3" },
-  { label: "Mock Tests", desc: "Test your skills with mock tests", href: "/placement#tests", icon: ClipboardList, tint: "#F59E0B", bg: "#FEF3C7" },
-  { label: "DSA", desc: "Practice DSA & improve problem solving", href: "/placement#dsa", icon: Code2, tint: "#0D9488", bg: "#CCFBF1" },
 ];
 
 export function ModuleGrid() {
   return (
-    <section className="mx-auto max-w-6xl px-4 pt-8 sm:px-6" aria-label="Explore CampusEduX">
+    <section className="container-page pt-8" aria-label="Explore CampusEduX">
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {MODULES.map((m) => {
           const Icon = m.icon;

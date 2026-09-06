@@ -49,7 +49,8 @@ const resetTabOnPress: React.ComponentProps<typeof Tab.Screen>["listeners"] = ({
 /**
  * Bottom tab bar shown across every module. The fourth tab keeps the internal
  * route name "Prep" (deep links / navigation unchanged) but is shown to the
- * user as "Learn" (spec §2).
+ * user as "Learning" — one dynamic, DB-driven Learning home listing every
+ * published grid (Grid → Section → Topic → Content).
  */
 export function BottomTabNavigator() {
   return (
@@ -67,7 +68,7 @@ export function BottomTabNavigator() {
       <Tab.Screen name="Home" component={HomeNavigator} listeners={resetTabOnPress} />
       <Tab.Screen name="Projects" component={ProjectNavigator} listeners={resetTabOnPress} />
       <Tab.Screen name="Jobs" component={JobNavigator} listeners={resetTabOnPress} />
-      <Tab.Screen name="Prep" component={PlacementNavigator} options={{ title: "Learn" }} listeners={resetTabOnPress} />
+      <Tab.Screen name="Prep" component={PlacementNavigator} options={{ title: "Learning" }} listeners={resetTabOnPress} />
       <Tab.Screen name="Profile" component={ProfileNavigator} listeners={resetTabOnPress} />
     </Tab.Navigator>
   );

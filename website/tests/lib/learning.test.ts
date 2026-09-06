@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { firstTopicOf, flattenTopics, isContentGrid, GRID_TYPE_LABEL, type LearningTree } from "@/lib/learning.types";
+import { firstTopicOf, flattenTopics, GRID_TYPE_LABEL, type LearningTree } from "@/lib/learning.types";
 
 function tree(sections: { slug: string; topics: string[] }[]): LearningTree {
   return {
@@ -43,22 +43,9 @@ describe("flattenTopics", () => {
   });
 });
 
-describe("isContentGrid", () => {
-  it("treats content / custom / unknown / null as a Grid→Topic→Content tree", () => {
-    for (const t of ["content", "custom", "communication", "", null, undefined]) {
-      expect(isContentGrid(t as string)).toBe(true);
-    }
-  });
-  it("treats the four specialised practice types as NOT a plain tree", () => {
-    for (const t of ["aptitude", "dsa", "mock_test", "hr", "company"]) {
-      expect(isContentGrid(t)).toBe(false);
-    }
-  });
-});
-
 describe("GRID_TYPE_LABEL", () => {
   it("has a human label for every known grid type", () => {
-    for (const t of ["content", "aptitude", "dsa", "mock_test", "hr", "company", "custom"]) {
+    for (const t of ["content", "custom"]) {
       expect(typeof GRID_TYPE_LABEL[t]).toBe("string");
       expect(GRID_TYPE_LABEL[t].length).toBeGreaterThan(0);
     }

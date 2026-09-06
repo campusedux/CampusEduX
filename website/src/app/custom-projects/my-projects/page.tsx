@@ -28,7 +28,7 @@ export default async function Page() {
     .order("created_at", { ascending: false });
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
+    <div className="container-prose py-12">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-ink">My custom projects</h1>
         <Link

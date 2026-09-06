@@ -1,34 +1,15 @@
 /** Pure types + helpers for Learning — no React/server imports, so
  *  it's safe to unit-test and to import from client components. */
 
-/** Grid types (migration 0044/021). `content` / `custom` (and anything the
- *  website doesn't recognise) are ordinary Grid → Topic → Content trees; the
- *  other four bind to the canonical practice tables. */
-export type LearningGridType =
-  | "content"
-  | "aptitude"
-  | "dsa"
-  | "mock_test"
-  | "hr"
-  | "company"
-  | "custom";
+/** Grid types (migration 0044/021, tightened by 036/0064). Every grid is an
+ *  ordinary Grid → Section → Topic → Content tree — `custom` is a cosmetic
+ *  variant of `content`. Any unrecognised value renders as the tree too. */
+export type LearningGridType = "content" | "custom";
 
 export const GRID_TYPE_LABEL: Record<string, string> = {
   content: "Notes",
-  aptitude: "Aptitude",
-  dsa: "DSA / Coding",
-  mock_test: "Mock Test",
-  hr: "HR Interview",
-  company: "Company Specific",
   custom: "Resource",
 };
-
-/** True when a grid renders as the generic Grid → Topic → Content tree (i.e.
- *  NOT one of the specialised practice catalogs). Unknown / future types fall
- *  through to the tree so a new admin grid type still opens without a deploy. */
-export function isContentGrid(gridType: string | null | undefined): boolean {
-  return !["aptitude", "dsa", "mock_test", "hr", "company"].includes(String(gridType));
-}
 
 export interface LearningGridCard {
   id: string;
@@ -124,6 +105,77 @@ export interface LearningSearchHit {
   title: string;
   snippet: string | null;
   is_premium: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Topic-specific practice — Mock Tests + Coding Problems attached to one topic
+// (migration 0048/025 RPCs: learning_topic_practice / coding_problem_detail /
+//  mock_test_detail). Both platforms consume the same rows.
+// ---------------------------------------------------------------------------
+export interface TopicMockTestCard {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  question_count: number;
+  duration_minutes: number;
+  difficulty: string;
+  total_marks: number;
+  negative_marking: number;
+  is_premium: boolean;
+}
+
+export interface TopicCodingProblemCard {
+  id: string;
+  slug: string;
+  title: string;
+  difficulty: string;
+  supported_languages: string[];
+  is_premium: boolean;
+}
+
+export interface TopicPractice {
+  mock_tests: TopicMockTestCard[];
+  coding_problems: TopicCodingProblemCard[];
+}
+
+export interface CodingProblemDetail {
+  problem: {
+    id: string;
+    slug: string;
+    title: string;
+    difficulty: string;
+    is_premium: boolean;
+    supported_languages: string[];
+    description: string | null;
+    examples: { input?: string; output?: string; explanation?: string }[];
+    constraints: string[];
+    hints: string[];
+    starter_code: Record<string, string>;
+    time_complexity: string;
+    space_complexity: string;
+  };
+  topic: { grid_slug: string; topic_slug: string; title: string };
+  locked: boolean;
+  editorial: string;
+  solution_code: Record<string, string>;
+  solution_approach: string;
+}
+
+export interface MockTestDetail {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  duration_minutes: number;
+  difficulty: string;
+  negative_marking: number;
+  instructions: string;
+  question_count: number;
+  total_marks: number;
+  attempts_allowed: number | null;
+  is_premium: boolean;
+  topic: { grid_slug: string; topic_slug: string; title: string } | null;
 }
 
 /** First readable topic of a grid, for "start reading" / grid-root redirect. */

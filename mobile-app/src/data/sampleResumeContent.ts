@@ -6,6 +6,7 @@ import type {
   ResumeDownloadRecord,
 } from "@/types";
 import { RESUME_FREEFORM_SECTIONS, MANAGEABLE_RESUME_SECTIONS } from "@/types";
+import { normalizeResumeContent } from "@/services/resumeContent";
 
 /**
  * Sample content for Module 6 (Resume Builder). Each resume service read
@@ -32,56 +33,71 @@ const emptySections = () =>
 export function sampleResumeDetail(resumeId: string): ResumeDocument {
   const summary = SAMPLE_RESUME_LIST.find((r) => r.id === resumeId);
   const template: ResumeTemplate = summary?.template ?? "modern";
+
+  const personalDetails = {
+    fullName: "Alex Johnson",
+    jobTitle: "Software Engineer",
+    email: "alex.johnson@email.com",
+    phone: "+91 98765 43210",
+    location: "Bangalore, India",
+    linkedin: "linkedin.com/in/alexjohnson",
+    github: "github.com/alexjohnson",
+    website: "alexjohnson.dev",
+    photoUrl: null,
+  };
+
+  const education: ResumeDocument["education"] = [
+    {
+      id: "edu-1",
+      degree: "Bachelor of Technology, Computer Science Engineering",
+      institution: "R V College of Engineering, Bangalore",
+      startYear: "2020",
+      endYear: "2024",
+      percentage: "8.2",
+    },
+    {
+      id: "edu-2",
+      degree: "Higher Secondary (12th)",
+      institution: "Kendriya Vidyalaya, Bangalore",
+      startYear: "2018",
+      endYear: "2020",
+      percentage: "92",
+    },
+  ];
+
+  const skills = {
+    technical: ["JavaScript", "TypeScript", "React.js", "Node.js", "Express.js", "MongoDB", "Python", "SQL", "Git", "Docker"],
+    soft: ["Problem Solving", "Communication", "Teamwork", "Time Management", "Adaptability", "Leadership"],
+  };
+
+  const sections = {
+    ...emptySections(),
+    summary:
+      "Software Engineer with a strong foundation in full-stack web development and a track record of shipping clean, well-tested features. Passionate about building products that scale and mentoring newer teammates.",
+    experience:
+      "Software Engineer Intern — Acme Corp (Jun 2023 - Dec 2023)\n- Built responsive UI components with React and TypeScript\n- Implemented REST APIs in Node.js and Express, reducing average response time by 30%\n- Wrote unit and integration tests, raising coverage from 55% to 85%",
+    projects:
+      "E-Commerce Website — React, Node.js, MongoDB\n- Developed a full-stack shopping app with cart, checkout and payment integration\n- Designed the admin panel and product management flow",
+    certifications: "AWS Certified Cloud Practitioner (2024)",
+    achievements: "Winner, Smart India Hackathon 2023",
+    languages: "English (Fluent), Hindi (Native)",
+  };
+
+  const layout = { order: [...MANAGEABLE_RESUME_SECTIONS], hidden: [] };
+
   return {
     id: resumeId,
     title: summary?.title ?? "Software Engineer Resume",
     template,
-    personalDetails: {
-      fullName: "Alex Johnson",
-      jobTitle: "Software Engineer",
-      email: "alex.johnson@email.com",
-      phone: "+91 98765 43210",
-      location: "Bangalore, India",
-      linkedin: "linkedin.com/in/alexjohnson",
-      website: "alexjohnson.dev",
-      photoUrl: null,
-    },
-    education: [
-      {
-        id: "edu-1",
-        degree: "Bachelor of Technology, Computer Science Engineering",
-        institution: "R V College of Engineering, Bangalore",
-        startYear: "2020",
-        endYear: "2024",
-        percentage: "8.2",
-      },
-      {
-        id: "edu-2",
-        degree: "Higher Secondary (12th)",
-        institution: "Kendriya Vidyalaya, Bangalore",
-        startYear: "2018",
-        endYear: "2020",
-        percentage: "92",
-      },
-    ],
-    skills: {
-      technical: ["JavaScript", "TypeScript", "React.js", "Node.js", "Express.js", "MongoDB", "Python", "SQL", "Git", "Docker"],
-      soft: ["Problem Solving", "Communication", "Teamwork", "Time Management", "Adaptability", "Leadership"],
-    },
-    sections: {
-      ...emptySections(),
-      summary:
-        "Software Engineer with a strong foundation in full-stack web development and a track record of shipping clean, well-tested features. Passionate about building products that scale and mentoring newer teammates.",
-      experience:
-        "Software Engineer Intern — Acme Corp (Jun 2023 - Dec 2023)\n- Built responsive UI components with React and TypeScript\n- Implemented REST APIs in Node.js and Express, reducing average response time by 30%\n- Wrote unit and integration tests, raising coverage from 55% to 85%",
-      projects:
-        "E-Commerce Website — React, Node.js, MongoDB\n- Developed a full-stack shopping app with cart, checkout and payment integration\n- Designed the admin panel and product management flow",
-      certifications: "AWS Certified Cloud Practitioner (2024)",
-      achievements: "Winner, Smart India Hackathon 2023",
-      languages: "English (Fluent), Hindi (Native)",
-    },
+    personalDetails,
+    content: normalizeResumeContent(undefined, { sections, education, skills, layout }),
+    isDemo: false,
+    design: {},
+    education,
+    skills,
+    sections,
     atsScore: summary?.atsScore ?? 85,
-    layout: { order: [...MANAGEABLE_RESUME_SECTIONS], hidden: [] },
+    layout,
     updatedAt: summary?.updatedAt ?? daysAgo(2),
   };
 }
@@ -94,6 +110,8 @@ export function sampleATSBreakdown(resumeId: string): ATSBreakdown {
     formatting: 80,
     skills: 85,
     keywords: 85,
+    completeness: 90,
+    readability: 95,
     tips: [
       {
         ruleId: null,

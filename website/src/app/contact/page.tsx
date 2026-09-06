@@ -1,27 +1,33 @@
 import ContactForm from "./ContactForm";
+import { LegalPageShell } from "@/legal/LegalPageShell";
+import { LegalSections } from "@/legal/LegalProse";
+import { RelatedPolicies } from "@/legal/LegalDocView";
+import { interpolateDocument } from "@/legal/interpolate";
+import { getLegalDocument } from "@/legal/registry";
+import { LEGAL_VERSIONS, formatLegalDate } from "@/legal/config";
+import { legalMetadata } from "@/legal/seo";
 
-export const metadata = { title: "Contact" };
+export const metadata = legalMetadata("contact");
 
 export default function ContactPage() {
-  const email = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
+  const doc = interpolateDocument(getLegalDocument("contact"));
+  const meta = LEGAL_VERSIONS.contact;
+
   return (
-    <div className="mx-auto max-w-2xl px-6 py-14">
-      <h1 className="text-3xl font-bold text-ink">Contact</h1>
-      <p className="mt-4 text-ink-muted">
-        {email ? (
-          <>
-            Reach the CampusEduX team at{" "}
-            <a className="text-ink underline" href={`mailto:${email}`}>
-              {email}
-            </a>
-            , or use the form below.
-          </>
-        ) : (
-          "Send us a message with the form below."
-        )}
-      </p>
+    <LegalPageShell title={doc.title} version={meta.version} effectiveDate={formatLegalDate(meta.effectiveDate)}>
+      {doc.intro.map((p, i) => (
+        <p key={i} className="mt-4 text-[15px] leading-relaxed text-ink-muted">
+          {p}
+        </p>
+      ))}
 
       <ContactForm />
-    </div>
+
+      <hr className="mt-10 border-line" />
+      <p className="mt-6 text-sm font-semibold text-ink">Or email the right address directly</p>
+      <LegalSections doc={doc} />
+
+      <RelatedPolicies id="contact" />
+    </LegalPageShell>
   );
 }

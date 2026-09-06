@@ -63,7 +63,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+    <div className="container-prose py-10">
       <JsonLd data={jobJsonLd} />
       <JsonLd
         data={breadcrumbJsonLd([

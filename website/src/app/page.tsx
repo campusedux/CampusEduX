@@ -2,14 +2,17 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { FileText, Wrench, Gift, ArrowRight } from "lucide-react";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import JobCard, { JobCardData } from "@/components/JobCard";
-import { SectionHeader, Rating, Reveal } from "@/components/ui";
+import { SectionHeader, Rating, Reveal, Button } from "@/components/ui";
 import { OffersStrip, type OfferBanner } from "@/components/home/OffersStrip";
 import { PremiumPromo } from "@/components/home/PremiumPromo";
 import { LearningResources } from "@/components/home/LearningResources";
 import { ModuleGrid } from "@/components/home/ModuleGrid";
+import { HeroVisual } from "@/components/home/HeroVisual";
+import { BRAND } from "@/lib/brand";
 import { inWindow } from "@/lib/home";
 
 export const revalidate = 300; // 5-min ISR — catalog + CMS change via the admin panel, not per request
@@ -106,9 +109,9 @@ export default async function HomePage() {
   const { trending, jobs, testimonials, faqs, banner, offers } = await getHomeData();
 
   return (
-    <div className="pb-4">
+    <div className="pb-16 sm:pb-20">
       {/* Hero — an admin `banners` row for placement 'home' overrides the default copy. */}
-      <header className="mx-auto max-w-6xl px-4 pb-10 pt-8 sm:px-6 sm:pt-12">
+      <header className="container-page pb-8 pt-8 sm:pb-10 sm:pt-10">
         {banner ? (
           <Link
             href={banner.target_url || "/projects"}
@@ -136,10 +139,10 @@ export default async function HomePage() {
             </div>
           </Link>
         ) : (
-          <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 sm:px-10 sm:py-14">
+          <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 sm:px-12 sm:py-14 lg:px-14 lg:py-16">
             <div
               aria-hidden
-              className="pointer-events-none absolute -right-10 top-1/2 hidden h-72 w-72 -translate-y-1/2 text-primary opacity-[0.14] sm:block"
+              className="pointer-events-none absolute -right-10 top-1/2 hidden h-72 w-72 -translate-y-1/2 text-primary opacity-[0.12] lg:block"
               style={{
                 backgroundImage: "radial-gradient(currentColor 1.6px, transparent 1.6px)",
                 backgroundSize: "18px 18px",
@@ -147,16 +150,29 @@ export default async function HomePage() {
                 maskImage: "radial-gradient(circle at center, #000, transparent 72%)",
               }}
             />
-            <p className="relative text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-              Projects · Jobs · Placement Prep · Resume · Custom Projects
-            </p>
-            <h1 className="relative mt-4 max-w-2xl text-3xl font-bold leading-tight text-ink sm:text-4xl">
-              Everything a student needs for a career, in one place.
-            </h1>
-            <p className="relative mt-4 max-w-xl text-ink-muted">
-              Buy or sell final-year projects, apply to jobs and internships, prepare for placements, build a resume, and
-              get a custom project built — all on one account, shared with the CampusEduX app.
-            </p>
+            <div className="relative grid items-center gap-10 lg:grid-cols-[1.08fr_0.92fr] lg:gap-14">
+              <div>
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+                  {BRAND.tagline}
+                </span>
+                <h1 className="mt-5 max-w-xl text-[1.75rem] font-bold leading-[1.15] tracking-tight text-ink sm:text-4xl lg:text-[2.7rem]">
+                  Everything a student needs for a career, in one place.
+                </h1>
+                <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-ink-muted sm:text-base">
+                  Buy or sell final-year projects, apply to jobs and internships, prepare for placements, build a
+                  resume, and get a custom project built — all on one account, shared with the CampusEduX app.
+                </p>
+                <div className="mt-7 flex flex-wrap gap-3">
+                  <Button href="/projects">Browse projects</Button>
+                  <Button href="/learning" variant="ghost">
+                    Explore learning
+                  </Button>
+                </div>
+              </div>
+              <div className="hidden lg:block">
+                <HeroVisual />
+              </div>
+            </div>
           </div>
         )}
       </header>
@@ -165,7 +181,7 @@ export default async function HomePage() {
 
       <OffersStrip offers={offers} />
 
-      <section className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
+      <section className="container-page pt-10">
         <PremiumPromo />
       </section>
 
@@ -175,7 +191,7 @@ export default async function HomePage() {
 
       {trending.length > 0 && (
         <Reveal>
-          <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+          <section className="container-page pt-10 sm:pt-14">
             <SectionHeader title="Trending projects" viewAllHref="/projects/trending" />
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {trending.map((p, i) => (
@@ -188,7 +204,7 @@ export default async function HomePage() {
 
       {jobs.length > 0 && (
         <Reveal>
-          <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+          <section className="container-page pt-10 sm:pt-14">
             <SectionHeader title="Latest jobs" viewAllHref="/jobs" />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {jobs.map((j) => (
@@ -201,29 +217,43 @@ export default async function HomePage() {
 
       {/* Static module overview — links into the dynamic sections above/below. */}
       <Reveal>
-        <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+        <section className="container-page pt-10 sm:pt-14">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { href: "/resume", title: "Resume Builder", body: "Guided sections, ATS scoring, PDF export." },
-              { href: "/custom-projects", title: "Custom Projects", body: "Describe what you need — get it built and delivered." },
-              { href: "/referral", title: "Referral Program", body: "Invite a friend, earn wallet credit." },
-            ].map((m) => (
-              <Link
-                key={m.href}
-                href={m.href}
-                className="rounded-2xl border border-line bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none"
-              >
-                <div className="font-bold text-ink">{m.title}</div>
-                <p className="mt-1.5 text-sm text-ink-muted">{m.body}</p>
-              </Link>
-            ))}
+              { href: "/resume", title: "Resume Builder", body: "Guided sections, ATS scoring, PDF export.", icon: FileText },
+              { href: "/custom-projects", title: "Custom Projects", body: "Describe what you need — get it built and delivered.", icon: Wrench },
+              { href: "/referral", title: "Referral Program", body: "Invite a friend, earn wallet credit.", icon: Gift },
+            ].map((m) => {
+              const Icon = m.icon;
+              return (
+                <Link
+                  key={m.href}
+                  href={m.href}
+                  className="group flex items-start gap-4 rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none"
+                >
+                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
+                    <Icon className="h-5 w-5 text-primary" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="font-semibold tracking-tight text-ink group-hover:text-primary">{m.title}</span>
+                      <ArrowRight
+                        className="h-4 w-4 flex-shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transform-none"
+                        aria-hidden
+                      />
+                    </span>
+                    <span className="mt-1 block text-sm text-ink-muted">{m.body}</span>
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </section>
       </Reveal>
 
       {testimonials.length > 0 && (
         <Reveal>
-          <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+          <section className="container-page pt-10 sm:pt-14">
             <SectionHeader title="What students say" />
             <div className="grid gap-5 md:grid-cols-3">
               {testimonials.map((t) => (
@@ -243,7 +273,7 @@ export default async function HomePage() {
 
       {faqs.length > 0 && (
         <Reveal>
-          <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+          <section className="container-page pt-10 sm:pt-14">
             <SectionHeader title="Frequently asked questions" viewAllHref="/faq" viewAllLabel="All FAQs" />
             <div className="divide-y divide-line border-y border-line">
               {faqs.map((f) => (

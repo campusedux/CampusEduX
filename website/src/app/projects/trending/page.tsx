@@ -18,7 +18,7 @@ export default async function TrendingPage() {
     projects = (data ?? []) as ProjectCardData[];
   }
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <div className="container-page py-10">
       <h1 className="text-3xl font-bold text-ink">Trending Projects</h1>
       <p className="mt-2 text-ink-muted">The most-bought projects on CampusEduX right now.</p>
       <ProjectGrid projects={projects} showRank emptyTitle="No trending projects yet" />

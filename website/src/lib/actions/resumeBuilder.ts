@@ -7,6 +7,8 @@ import type { CustomProjectStatus } from "@/lib/customProjects";
 import { formatProjectSnippet, appendToFreeformContent } from "@/lib/resumeBuilder/formatting";
 import { RESUME_FREEFORM_SECTIONS, type ResumeFreeformSectionKey } from "@/lib/resumeBuilder/types";
 import { normalizeLayout, type ResumeLayout } from "@/lib/resumeBuilder/sections";
+import { normalizeContent, contentToLegacyColumns, defaultStarterContent } from "@/lib/resumeBuilder/content";
+import { demoResume } from "@/lib/resumeBuilder/demoResumes";
 
 // ---------------------------------------------------------------------------
 // Server-side counterpart of mobile-app's resume.service.ts
@@ -154,6 +156,7 @@ const personalDetailsSchema = z.object({
   phone: z.string().trim().max(50),
   location: z.string().trim().max(200),
   linkedin: z.string().trim().max(300),
+  github: z.string().trim().max(300),
   website: z.string().trim().max(300),
   photoUrl: z.string().trim().max(2000).nullable(),
 });
@@ -237,6 +240,288 @@ export async function updateResumeLayoutAction(rawResumeId: string, rawLayout: u
 }
 
 // ---------------------------------------------------------------------------
+// "Use this template" — create a resume from the gallery, PRE-FILLED with
+// that template's realistic demo persona (demoResumes.ts) and flagged
+// is_demo. The editor never opens on a blank form; a "Demo content" banner
+// then lets the student clear it or import their CampusEduX profile over it.
+// Demo and real data are never silently mixed.
+// ---------------------------------------------------------------------------
+
+export interface CreateFromTemplateResult {
+  resumeId?: string;
+  error?: string;
+  /** true → caller should send the user to /login first. */
+  needsAuth?: boolean;
+}
+
+export async function createResumeFromTemplateAction(rawTemplateId: string): Promise<CreateFromTemplateResult> {
+  const templateParsed = templateSchema.safeParse(rawTemplateId);
+  if (!templateParsed.success) return { error: "Unknown template." };
+  const template = templateParsed.data;
+
+  const user = await getOptionalUser();
+  if (!user) return { needsAuth: true, error: "Please sign in to start a resume." };
+
+  const supabase = createAuthedServerSupabase();
+
+  const demo = demoResume(template);
+  const content = normalizeContent(demo.content);
+  const legacy = contentToLegacyColumns(content);
+
+  const { data, error } = await supabase
+    .from("resumes_builder")
+    .insert({
+      user_id: user.id,
+      title: `${demo.persona} résumé (demo)`,
+      template,
+      is_demo: true,
+      personal_details: demo.personalDetails,
+      content,
+      education: legacy.education,
+      skills: legacy.skills,
+      sections: legacy.sections,
+      layout: legacy.layout,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { error: "Could not create the resume. Please try again." };
+
+  return { resumeId: data.id };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — the editor now saves the whole structured `content` model in one
+// debounced write (replacing the per-field-group actions). Normalized
+// server-side, with the legacy columns re-derived alongside so an app build
+// still reading sections/education/skills keeps working during the rollout.
+// ---------------------------------------------------------------------------
+
+const entrySchema = z.object({
+  id: z.string().max(200),
+  title: z.string().max(500),
+  subtitle: z.string().max(500),
+  location: z.string().max(300),
+  startDate: z.string().max(80),
+  endDate: z.string().max(80),
+  description: z.string().max(20_000),
+  url: z.string().max(1000),
+  tags: z.array(z.string().max(150)).max(80),
+});
+
+const blockSchema = z
+  .object({
+    id: z.string().max(200),
+    type: z.string().max(50),
+    heading: z.string().max(300),
+    variant: z.string().max(20),
+    hidden: z.boolean().optional(),
+    text: z.string().max(20_000).optional(),
+    entries: z.array(entrySchema).max(120).optional(),
+    groups: z
+      .array(z.object({ id: z.string().max(200), label: z.string().max(200), items: z.array(z.string().max(250)).max(250) }))
+      .max(60)
+      .optional(),
+    links: z.array(z.object({ id: z.string().max(200), label: z.string().max(200), url: z.string().max(1000) })).max(120).optional(),
+  })
+  .passthrough();
+
+const contentSchema = z.array(blockSchema).max(80);
+
+export async function updateResumeContentAction(rawResumeId: string, rawContent: unknown): Promise<OkResult> {
+  const idParsed = resumeIdSchema.safeParse(rawResumeId);
+  const contentParsed = contentSchema.safeParse(rawContent);
+  if (!idParsed.success || !contentParsed.success) return { error: "Invalid request." };
+
+  const content = normalizeContent(contentParsed.data);
+  const legacy = contentToLegacyColumns(content);
+  return updateOwnResume(idParsed.data, {
+    content,
+    sections: legacy.sections,
+    education: legacy.education,
+    skills: legacy.skills,
+    layout: legacy.layout,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Demo-content lifecycle + per-résumé design overrides.
+// ---------------------------------------------------------------------------
+
+/** Wipes a résumé back to the empty starter set and drops the demo flag. */
+export async function clearResumeContentAction(rawResumeId: string): Promise<OkResult> {
+  const idParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!idParsed.success) return { error: "Invalid request." };
+  const content = defaultStarterContent();
+  const legacy = contentToLegacyColumns(content);
+  return updateOwnResume(idParsed.data, {
+    content,
+    is_demo: false,
+    personal_details: {
+      fullName: "",
+      jobTitle: "",
+      email: "",
+      phone: "",
+      location: "",
+      linkedin: "",
+      github: "",
+      website: "",
+      photoUrl: null,
+    },
+    sections: legacy.sections,
+    education: legacy.education,
+    skills: legacy.skills,
+    layout: legacy.layout,
+  });
+}
+
+/** Keeps the content but stops treating it as demo (student took ownership). */
+export async function setResumeDemoDismissedAction(rawResumeId: string): Promise<OkResult> {
+  const idParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!idParsed.success) return { error: "Invalid request." };
+  return updateOwnResume(idParsed.data, { is_demo: false });
+}
+
+const designSchema = z
+  .object({
+    accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    fontFamily: z.enum(["sans", "serif", "slab"]).optional(),
+    size: z.enum(["s", "m", "l"]).optional(),
+    spacing: z.enum(["compact", "normal", "relaxed"]).optional(),
+    margin: z.enum(["narrow", "normal", "wide"]).optional(),
+    headingStyle: z.enum(["template", "rule", "full-underline", "plain-caps", "bar"]).optional(),
+  })
+  .strict();
+
+export async function updateResumeDesignAction(rawResumeId: string, rawDesign: unknown): Promise<OkResult> {
+  const idParsed = resumeIdSchema.safeParse(rawResumeId);
+  const designParsed = designSchema.safeParse(rawDesign ?? {});
+  if (!idParsed.success || !designParsed.success) return { error: "Invalid request." };
+  // sanitizeDesign() is the render-time clamp; store the validated shape as-is.
+  return updateOwnResume(idParsed.data, { design: designParsed.data });
+}
+
+/** Deep-copies a resume the caller owns into a new "(copy)" resume. */
+export async function duplicateResumeAction(rawResumeId: string): Promise<{ resumeId: string } | ActionError> {
+  const idParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!idParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { data: src } = await supabase
+    .from("resumes_builder")
+    .select("title, template, design, personal_details, content, education, skills, sections, layout")
+    .eq("id", idParsed.data)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!src) return { error: "That resume could not be found." };
+
+  const { data, error } = await supabase
+    .from("resumes_builder")
+    .insert({
+      user_id: user.id,
+      title: `${src.title} (copy)`,
+      template: src.template,
+      design: src.design ?? {},
+      personal_details: src.personal_details,
+      content: src.content,
+      education: src.education,
+      skills: src.skills,
+      sections: src.sections,
+      layout: src.layout,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { error: "Could not duplicate the resume. Please try again." };
+  return { resumeId: data.id };
+}
+
+// ---------------------------------------------------------------------------
+// "Import from CampusEduX" — surfaces the data the profile ACTUALLY has
+// (there is no structured skills/cert store): personal fields, one education
+// entry from course/branch, coding-profile links, and finished Custom
+// Project Builder requests (the existing project picker). Read-only — the
+// editor decides what to apply, and only ever fills blanks / appends.
+// ---------------------------------------------------------------------------
+
+export interface CampusEduxImportData {
+  personal: {
+    fullName: string;
+    email: string;
+    phone: string;
+    location: string;
+    linkedin: string;
+    github: string;
+    website: string;
+  };
+  educationSuggestion: { title: string; subtitle: string } | null;
+  codingProfiles: { label: string; url: string }[];
+  projects: ResumeProjectCandidate[];
+}
+
+export async function getCampusEduxImportDataAction(): Promise<CampusEduxImportData | ActionError> {
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const [{ data: profile }, projects] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, email, mobile_number, location, linkedin_url, github_url, portfolio_url, course, branch, coding_profiles")
+      .eq("id", user.id)
+      .maybeSingle(),
+    listMyResumeProjectCandidatesAction(),
+  ]);
+
+  const codingRaw = Array.isArray(profile?.coding_profiles) ? (profile!.coding_profiles as unknown[]) : [];
+  const codingProfiles = codingRaw
+    .map((c) => {
+      const r = (c ?? {}) as Record<string, unknown>;
+      return { label: String(r.platform ?? r.label ?? r.name ?? "").trim(), url: String(r.url ?? r.link ?? "").trim() };
+    })
+    .filter((c) => c.url);
+
+  const course = profile?.course?.trim() ?? "";
+  const branch = profile?.branch?.trim() ?? "";
+
+  return {
+    personal: {
+      fullName: profile?.full_name?.trim() ?? "",
+      email: profile?.email?.trim() ?? user.email ?? "",
+      phone: profile?.mobile_number?.trim() ?? "",
+      location: profile?.location?.trim() ?? "",
+      linkedin: profile?.linkedin_url?.trim() ?? "",
+      github: profile?.github_url?.trim() ?? "",
+      website: profile?.portfolio_url?.trim() ?? "",
+    },
+    educationSuggestion: course || branch ? { title: [course, branch].filter(Boolean).join(" — "), subtitle: "" } : null,
+    codingProfiles,
+    projects: Array.isArray(projects) ? projects : [],
+  };
+}
+
+export async function deleteResumeAction(rawResumeId: string): Promise<OkResult> {
+  const idParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!idParsed.success) return { error: "Invalid request." };
+
+  const user = await getOptionalUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const supabase = createAuthedServerSupabase();
+  const { data, error } = await supabase
+    .from("resumes_builder")
+    .delete()
+    .eq("id", idParsed.data)
+    .eq("user_id", user.id)
+    .select("id")
+    .maybeSingle();
+  if (error) return { error: "Could not delete the resume. Please try again." };
+  if (!data) return { error: "That resume could not be found." };
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // Phase 6 — deterministic job-description matching, delegating to the
 // match_resume_to_jd() Postgres function (mobile-app migration
 // 0058_resume_jd_match.sql), built on Phase 1's shared tokenize_keywords()
@@ -312,6 +597,27 @@ export async function createResumeFromImportAction(rawInput: unknown): Promise<{
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
+  const personalDetails = {
+    fullName: input.fullName,
+    jobTitle: input.jobTitle,
+    email: input.email,
+    phone: input.phone,
+    location: input.location,
+    linkedin: input.linkedin,
+    github: "",
+    website: input.website,
+    photoUrl: null,
+  };
+  const legacy = {
+    sections: input.sections,
+    education: input.education,
+    skills: { technical: input.technicalSkills, soft: [] as string[] },
+    layout: { order: [], hidden: [] },
+  };
+  // Store `content` explicitly (built from the reviewed parse result) so the
+  // imported resume is consistent with everything else even before 0062 runs.
+  const content = normalizeContent(undefined, legacy);
+
   const supabase = createAuthedServerSupabase();
   const { data, error } = await supabase
     .from("resumes_builder")
@@ -319,19 +625,11 @@ export async function createResumeFromImportAction(rawInput: unknown): Promise<{
       user_id: user.id,
       title: input.fullName ? `${input.fullName}'s Resume` : "Imported Resume",
       template: "modern",
-      personal_details: {
-        fullName: input.fullName,
-        jobTitle: input.jobTitle,
-        email: input.email,
-        phone: input.phone,
-        location: input.location,
-        linkedin: input.linkedin,
-        website: input.website,
-        photoUrl: null,
-      },
-      education: input.education,
-      skills: { technical: input.technicalSkills, soft: [] },
-      sections: input.sections,
+      personal_details: personalDetails,
+      content,
+      education: legacy.education,
+      skills: legacy.skills,
+      sections: legacy.sections,
     })
     .select("id")
     .single();
@@ -456,7 +754,7 @@ export async function createResumeVersionAction(rawResumeId: string, rawLabel: s
   const supabase = createAuthedServerSupabase();
   const { data: resume } = await supabase
     .from("resumes_builder")
-    .select("title, template, personal_details, education, skills, sections, layout")
+    .select("title, template, personal_details, content, education, skills, sections, layout")
     .eq("id", resumeParsed.data)
     .eq("user_id", user.id)
     .maybeSingle();

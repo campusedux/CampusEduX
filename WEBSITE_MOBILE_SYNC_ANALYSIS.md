@@ -465,3 +465,130 @@ Next.js 14.2.5 App Router. **Server Components + ISR** (`revalidate` 120–300) 
 ## 14. Critical rules being honoured
 
 Reuse working code · Supabase is the single source of truth · one auth · no secret exposure · no RLS weakening · additive migrations only · don't break mobile/admin · mobile app is the primary UI reference · brand = **CampusEduX** · end state = **Dynamic + Responsive + Supabase‑connected + Mobile‑consistent + Admin‑controlled + Secure + SEO‑ready + Production‑ready** · run `typecheck`/`lint`/`test`/`build` before declaring done · fix real errors, never suppress.
+
+---
+
+## 15. UI/UX Premium Polish Pass — follow‑up (2026‑08‑31)
+
+A second engagement against a stricter, **presentation‑only** brief (no data / query / RLS /
+auth / payment / route / prop changes; nothing outside `website/`). Built on P1–P8. 7 phases,
+each gated with `typecheck`/`lint`/`test`/`build` + a route smoke.
+
+| Phase | Scope | Key changes |
+|---|---|---|
+| **UX‑1** Motion + form primitives | `globals.css`, `tailwind.config.ts`, `ui/*` | Global `@media (prefers-reduced-motion: reduce)` guard + `scroll-behavior` moved under `no-preference` (spec §15). `fade-in` / `fade-in-up` / `scale-in` keyframe+animation tokens. **New** `ui/Field.tsx` = `Input` / `Textarea` / `Select` / `Field` / `OptionChips` (one input language, h‑11, indigo focus ring — spec §14). **New** `ui/Reveal.tsx` = SSR‑safe scroll‑reveal (visible by default, only arms below‑fold elements, no‑ops on reduce‑motion / no‑IO). `Button` + `.btn-*` + `Drawer` got `active:scale` press + `motion-reduce` guards. |
+| **UX‑2** Header | `nav/*` | **New** `HeaderLinks` (client, active‑underline desktop nav, `lg+`), `HeaderSearch` (compact GET search, `lg+`), `MobileSearchButton` (bottom‑sheet search, `< lg`), `NotificationBell` (signed‑in only, links `/account/notifications`, **no fabricated count**). `AuthMenu` → real profile dropdown (Account/Purchases/Applications/Saved/Wallet/Notifications/Sign out, Esc + click‑outside, `animate-scale-in`). Hamburger drawer now `< lg` (was `< md`); wordmark hides `< 380px`. |
+| **UX‑3** Footer | `components/Footer.tsx` | Killed the dev string (`"…set NEXT_PUBLIC_LEGAL_ENTITY_NAME"`) → `© {year} {entity ?? "CampusEduX"}`. Regrouped into **Explore / Company / Support / Legal** (every prior link kept; `/referral` added). Brand block + env‑gated **"Get the app"** (`NEXT_PUBLIC_PLAY_STORE_URL`) + env‑gated social row (`NEXT_PUBLIC_SOCIAL_{INSTAGRAM,LINKEDIN,YOUTUBE,X}` — icon renders only when its URL is set; documented in `.env.example`). `grid-cols-2 … lg:grid-cols-[1.6fr_repeat(4,1fr)]`. |
+| **UX‑4** Homepage | `app/page.tsx` | Default hero → soft gradient panel (exact same copy + `SearchBar`), eyebrow, module quick‑link chips (`HEADER_LINKS` slice). Admin `banners` branch kept + image hover‑zoom. Every section wrapped in `<Reveal>`; consistent `py-10 sm:py-14`; FAQ `<summary>` got a rotating `+`. **No invented stats.** `/` still `○ Static`. |
+| **UX‑5** Projects & Jobs | cards + list pages + detail | `ProjectCard` / `JobCard` / `CategoryCard` / `CompanyCard`: image zoom‑on‑hover, `active:` press, `hover:border-primary/30`, icon‑tile pop — prop shapes untouched. `ProjectFilters` / `JobFilters` on the new `Input`/`Select` primitives. `/projects` + `/jobs`: active‑filter **chip summary** (each chip is a `<Link>` dropping one param) + **Clear all** (keeps `?q=`) — pure links, no client state. **New** `projects/[id]/Gallery.tsx` = client thumbnail switcher (SSR still paints `images[0]`); buy box `lg:sticky lg:top-24` + grid `lg:items-start`. |
+| **UX‑6** Placement / Resume / Premium / Custom explainer / Account | components + pages | `PremiumCard`: "Most popular" ribbon + `ring-2` + `lg:-translate-y-1`, `text-3xl` price. `ResumeTemplateCard` / `NoteCard` / placement track cards: hover lift + zoom + press. `custom-projects/page.tsx` "How it works" → numbered card grid. `AccountNav` → segmented control on mobile / sidebar on desktop. |
+| **UX‑7** Wizard + Auth + responsive + doc | wizard islands, `login`/`register`, sweep | `StepBar` → real numbered stepper (done ✓ / current / upcoming + connector). `BuilderStart` fully on `Field`/`Input`/`Select`/`Textarea`/`OptionChips`/`Button` — **fixes the dead `hover:border-line` on the type/level pills**. `BuilderFeatures` / `estimate` / `MessageThread`: raw controls → primitives + `.btn-primary` + `accent-primary`; `hover:bg-primary/90` → token. `login` + `register` → centered card + "C" logo lockup + primitives + boxed error — **all auth logic (`email_for_mobile` RPC, `signUp` options, `safeInternalPath`, Suspense) byte‑for‑byte unchanged**. Responsive sweep 320→1920 (overflow / grids / wrap / tap targets / bottom‑nav clearance). |
+
+**Gates (final):** `typecheck` 0 · `lint` 0 · `vitest` **71/71** · `build` **49/49 static, 53 route entries**, `/` + `/about` + curated + legal still `○ Static`. Dev smoke: every route 200 (or 307 `/account/*` + wizard steps → `/login`), dev log clean.
+
+**Untouched, as required:** every Supabase query / RLS policy / Edge Function call / server action / zod schema / route / component prop contract; `mobile-app/` and `admin-panel/`. Brand still 0 `ProjectHub`. `next.config.js` CSP unchanged (motion is pure CSS/JS). New env vars (`NEXT_PUBLIC_SOCIAL_*`) are optional and documented; blank = feature simply absent.
+
+**Not done (out of the presentation‑only scope):** `forgot-password` / `reset-password` screens — they don't exist in this repo and adding auth flows was excluded. The P8 manual actions (apply `0041` + `0001_contact_submissions`, cross‑user RLS tests, fill owner env vars + `cms_pages` legal content) still stand.
+
+---
+
+## 16. Learning ⇄ Placement de‑duplication — follow‑up (2026‑09‑01)
+
+**Brief:** there must be exactly **one** learning system, user‑facing name **"Learning"**,
+one DB hierarchy (`learning_*`: Grids → Sections → Topics → Content), shared by
+Admin + Website + Mobile. All the "Placement Preparation / Learn / Learning /
+Preparation Notes" duplicates collapse into it. Practice/Tests/DSA/Aptitude are
+genuinely separate and keep working under a module now simply called **"Placement"**.
+
+**Decisions (owner):** (A) Learning = the content hierarchy only; the
+practice/test suite stays a separate module renamed "Placement". (2) Labels +
+structure only — internal identifiers unchanged (website `/placement*` routes,
+mobile `Prep` route name, admin `placement` permission key). (3) Migrate the
+`prep_notes` rows into `learning_*`, retire the standalone Notes UI, keep the
+`prep_notes` / `prep_note_bookmarks` tables (deprecated, read‑only) for rollback.
+
+### DB — migration pair (byte‑identical body, guarded, idempotent)
+`mobile-app/supabase/migrations/0043_merge_notes_into_learning.sql` +
+`admin-panel/supabase/migrations/020_merge_notes_into_learning.sql`, applied
+**after** `0042` / `019`:
+- one grid `Preparation Notes` (slug `preparation-notes`), one section per
+  distinct `prep_notes.category`, one topic + one `content_format='plain'`
+  content block per note. `learning_topics.source_prep_note_id` = idempotency key.
+- **Safety:** a note that is course/branch‑targeted (`target_type <> 'global'`)
+  or unpublished lands as a **draft** topic (no academic targeting on `learning_*`);
+  global + published notes land published. Nothing in `prep_notes` is modified.
+- `prep_note_bookmarks` → `learning_bookmarks` (join on `source_prep_note_id`).
+- new SECURITY DEFINER RPC `learning_topic_by_source_note(uuid)` → `(grid_slug,
+  topic_slug)` for the website's legacy‑link redirect; `learning_slugify(text)`
+  helper.
+- `prep_notes` / `prep_note_bookmarks` get a `DEPRECATED …` table comment.
+- Validated on scratch PG17: mapping, plain format, premium flag, branch→draft,
+  unpublished→draft, slug‑CHECK conformance + collision suffix, bookmark carry,
+  resolver RPC, full idempotency + incremental re‑run, wrong‑order guard.
+
+### Admin
+- **Deleted** `placement/notes/NotesManager.tsx`, `learning/.../ImportNotes.tsx`.
+- `placement/notes/page.tsx` → `redirect('/learning')` stub.
+- Removed the prep‑note CRUD actions (`createNote`/`updateNote`/`deleteNote`/
+  `toggleNotePublished`, `placement/actions.ts`), `importPrepNotes`
+  (`learning/actions.ts`), `getPrepNotes`/`AdminPrepNote`
+  (`lib/placement/queries.ts`), `getImportablePrepNotes`/`ImportableNote`
+  (`lib/learning/queries.ts`), `NOTE_CATEGORIES` (`lib/placement/constants.ts`).
+- Renames: sidebar + page + permission label **"Placement Prep" → "Placement"**;
+  page titles/back‑links **"Learning Management" → "Learning"**. Route `/learning`
+  and the `placement` permission key are unchanged.
+- Gates: `typecheck` 0 · `lint` 0 · `vitest` **79/79** · `build` OK.
+
+### Website
+- **Deleted** `components/home/HomeLearning.tsx` (the `prep_notes` home feed),
+  `components/placement/NoteCard.tsx`, `placement/notes/loading.tsx`,
+  `placement/notes/[id]/BookmarkButton.tsx`.
+- `placement/notes/page.tsx` → `permanentRedirect('/learning')`;
+  `placement/notes/[id]/page.tsx` → resolver via `resolveLegacyNotePath()` →
+  `/learning/<grid>/<topic>` (or `/learning`).
+- `app/page.tsx`: dropped `<HomeLearning/>`; moved `<LearningResources/>` under a
+  section now headed **"Placement"** (was "Placement Preparation");
+  `PLACEMENT_TRACKS` "notes" → `/learning`.
+- `nav/navConfig.ts`: drawer loses the "Study Notes" row, "Placement Preparation"
+  → "Placement"; bottom‑tab "Learn" → "Placement". Header keeps "Placement" +
+  "Learning".
+- `placement/page.tsx`: every `/placement/notes*` link → `/learning`; the
+  prep‑notes count is now a Learning‑grid count (`getLearningGrids()`), so the
+  page makes **zero** `prep_notes` reads; title "Placement Preparation" →
+  "Placement".
+- `ModuleGrid.tsx`: "Learning" tile → `/learning`; "Placement Prep" → "Placement".
+- `lib/placement.ts`: removed `NOTE_CATEGORIES`/`noteCategory`; the "notes" track
+  is renamed **"Learning"**. `sitemap.ts`: dropped `/placement/notes` + the
+  per‑note URLs (Learning grid/topic URLs via `learning_sitemap` stay).
+- Tests: `tests/lib/placement.test.ts` rewritten to cover `PLACEMENT_TRACKS`.
+- Gates: `typecheck` 0 · `lint` 0 · `vitest` **74/74** · `build` OK (`/placement`
+  `○`, `/placement/notes` `○` redirect, `/placement/notes/[id]` `ƒ`).
+
+### Mobile
+- **Deleted** `placement/NotesListScreen.tsx`, `placement/NoteDetailScreen.tsx`,
+  `services/notes.service.ts`, `hooks/useNotes.ts`, `types/notes.types.ts`,
+  `data/sampleNotesContent.ts`, `tests/unit/services/notes.service.test.ts`.
+- `PlacementNavigator` loses the `Notes` / `NoteDetail` screens;
+  `PlacementStackParamList` loses those routes; `types/index.ts` stops
+  re‑exporting `notes.types`.
+- `PlacementHomeScreen`: "Study Notes" section removed (Learning kept, first);
+  heading "Learn" → "Placement". `BottomTabNavigator`: `Prep` tab title
+  "Learn" → "Placement" (route name still `Prep`). `DrawerContent`: "Placement
+  Preparation" → "Placement". `PlacementBannerScreen` heading → "Placement".
+- `home/HomeScreen`: the "Learning" feed switches from `useNotes` to
+  `useLearningGrids`; rows deep‑link `Prep`/`LearningGrid`; the Home "Learn"
+  category tile → "Learning" → `Prep`/`LearningGrids`.
+- Gates: `typecheck` 0 · `lint` 0 err (+2 baseline warnings) · `jest`
+  **228/228** (36 suites) · `expo export --platform web` exit 0.
+
+### User manual actions (Supabase — not runnable from here)
+1. Apply `0042_learning_management.sql` (or admin `019`) if not already applied.
+2. Then apply `0043_merge_notes_into_learning.sql` (or admin `020`). Guarded +
+   idempotent — safe to re‑run.
+3. Verify: `select status, count(*) from learning_topics where source_prep_note_id
+   is not null group by 1;` then open `/learning/preparation-notes` on the site.
+4. `prep_notes` / `prep_note_bookmarks` stay (deprecated). Schedule a `drop`
+   migration once production‑verified. Branch/course‑targeted notes imported as
+   drafts — an admin republishes them from Learning after confirming scope.
+
+**Not committed** — same as the rest of the `website-mobile-ui-sync` branch.

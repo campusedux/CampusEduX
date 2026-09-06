@@ -1,5 +1,8 @@
-import CmsLegalPage from "@/components/CmsLegalPage";
-export const metadata = { title: "Terms & Conditions" };
+import { LegalDocView } from "@/legal/LegalDocView";
+import { legalMetadata } from "@/legal/seo";
+
+export const metadata = legalMetadata("terms");
+
 export default function Page() {
-  return <CmsLegalPage cmsKey="terms" fallbackTitle="Terms & Conditions" />;
+  return <LegalDocView docId="terms" />;
 }

@@ -15,10 +15,10 @@ import { AuthMenu } from "./AuthMenu";
  *   Auth and the full destination list live inside the drawer; a fixed bottom
  *   tab bar (`<BottomNav>`) covers primary navigation on phones.
  */
-export function Header() {
+export function Header(){
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/75">
-      <div className="mx-auto grid h-16 max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 sm:px-6 lg:grid-cols-[1fr_auto_1fr]">
+      <div className="container-page grid h-16 grid-cols-[auto_1fr_auto] items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
         {/* Left — brand */}
         <Link
           href="/"
@@ -50,5 +50,4 @@ export function Header() {
     </header>
   );
 }
-
 export default Header;

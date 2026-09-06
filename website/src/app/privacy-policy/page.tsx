@@ -1,5 +1,8 @@
-import CmsLegalPage from "@/components/CmsLegalPage";
-export const metadata = { title: "Privacy Policy" };
+import { LegalDocView } from "@/legal/LegalDocView";
+import { legalMetadata } from "@/legal/seo";
+
+export const metadata = legalMetadata("privacy-policy");
+
 export default function Page() {
-  return <CmsLegalPage cmsKey="privacy" fallbackTitle="Privacy Policy" />;
+  return <LegalDocView docId="privacy-policy" />;
 }

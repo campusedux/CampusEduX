@@ -3,7 +3,7 @@ import Link from "next/link";
 import { X } from "lucide-react";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
-import { SearchBar, FilterSheet, Pagination, EmptyState } from "@/components/ui";
+import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
 import {
   PROJECT_LIST_FIELDS,
@@ -111,16 +111,12 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
   const clearAllHref = searchParams.q ? `/projects?q=${encodeURIComponent(searchParams.q)}` : "/projects";
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <h1 className="text-3xl font-bold text-ink">Project Marketplace</h1>
-      <p className="mt-2 max-w-2xl text-ink-muted">
-        Academic, personal and business projects listed by the CampusEduX community — filter by category and price, or
-        search by title.
-      </p>
-
-      <div className="mt-6 max-w-xl">
-        <SearchBar action="/projects" defaultValue={searchParams.q} placeholder="Search projects…" hiddenParams={carried} />
-      </div>
+    <div className="container-page py-10">
+      <PageHeader
+        eyebrow="Marketplace"
+        title="Project Marketplace"
+        description="Academic, personal and business projects listed by the CampusEduX community — filter by category and price, or search by title."
+      />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[240px_1fr]">
         <FilterSheet title="Filters" activeCount={activeCount}>

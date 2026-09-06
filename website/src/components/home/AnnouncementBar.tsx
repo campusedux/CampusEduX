@@ -53,7 +53,7 @@ export function AnnouncementBar() {
 
   return (
     <div className="border-b border-primary-100 bg-primary-50">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2 text-sm sm:px-6">
+      <div className="container-page flex items-center gap-3 py-2 text-sm">
         <Megaphone className="h-4 w-4 flex-shrink-0 text-primary" aria-hidden />
         <p className="min-w-0 flex-1 truncate text-primary-900">
           <span className="font-semibold">{item.title}</span>

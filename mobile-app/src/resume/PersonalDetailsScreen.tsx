@@ -46,7 +46,7 @@ export function PersonalDetailsScreen() {
     }
     try {
       await updateDetails.mutateAsync(details);
-      (navigation as any).navigate("Education", { resumeId: params.resumeId });
+      navigation.goBack();
     } catch (error: any) {
       notify("Couldn't save", error.message ?? "Please try again.");
     }
@@ -80,9 +80,10 @@ export function PersonalDetailsScreen() {
       <Input icon="call-outline" placeholder="Phone" keyboardType="phone-pad" value={details.phone} onChangeText={(v) => set("phone", v)} />
       <Input icon="location-outline" placeholder="Location" value={details.location} onChangeText={(v) => set("location", v)} />
       <Input icon="logo-linkedin" placeholder="LinkedIn" autoCapitalize="none" value={details.linkedin} onChangeText={(v) => set("linkedin", v)} />
+      <Input icon="logo-github" placeholder="GitHub" autoCapitalize="none" value={details.github} onChangeText={(v) => set("github", v)} />
       <Input icon="globe-outline" placeholder="Website" autoCapitalize="none" value={details.website} onChangeText={(v) => set("website", v)} />
 
-      <Button label="Save & Continue" loading={updateDetails.isPending} onPress={handleContinue} className="mt-2 mb-6" />
+      <Button label="Save" loading={updateDetails.isPending} onPress={handleContinue} className="mt-2 mb-6" />
     </Screen>
   );
 }

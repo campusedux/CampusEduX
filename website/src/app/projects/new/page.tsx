@@ -18,7 +18,7 @@ export default async function NewArrivalsPage() {
     projects = (data ?? []) as ProjectCardData[];
   }
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <div className="container-page py-10">
       <h1 className="text-3xl font-bold text-ink">New Arrivals</h1>
       <p className="mt-2 text-ink-muted">Freshly listed projects from the CampusEduX community.</p>
       <ProjectGrid projects={projects} emptyTitle="No new projects yet" />

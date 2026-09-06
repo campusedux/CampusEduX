@@ -13,7 +13,7 @@ export default async function ResumeJdMatchPage({ params }: { params: { id: stri
 
   return (
     <div className="container-prose py-12">
-      <Link href="/account/resume" className="text-sm text-ink-muted hover:text-ink">
+      <Link href="/resume" className="text-sm text-ink-muted hover:text-ink">
         &larr; Back to your resumes
       </Link>
       <h1 className="mt-2 text-2xl font-bold text-ink">Check &ldquo;{resume.title}&rdquo; against a job description</h1>

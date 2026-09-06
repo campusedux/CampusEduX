@@ -34,7 +34,6 @@ export type HomeStackParamList = {
   PremiumProjects: undefined;
   BestSellers: undefined;
   NewArrivals: undefined;
-  PlacementBanner: undefined;
   LatestJobs: undefined;
   ReferralBanner: undefined;
   OfferBanner: undefined;
@@ -78,33 +77,22 @@ export type JobStackParamList = {
   RecruiterDetails: { jobId: string };
 };
 
+/**
+ * The "Learning" tab stack (internal route name "Prep", kept for deep-link
+ * stability). Grid → Section → Topic → Content, plus the native mock-test-taking
+ * flow (TestInstruction → LiveTest → TestResult → PerformanceAnalysis) that a
+ * topic's Mock Test card opens.
+ */
 export type PlacementStackParamList = {
   PlacementHome: undefined;
-  Notes: undefined;
-  NoteDetail: { noteId: string };
-  AptitudeDashboard: undefined;
-  Quantitative: undefined;
-  LogicalReasoning: undefined;
-  VerbalAbility: undefined;
-  PracticeTestList: { category?: string } | undefined;
+  LearningGrids: undefined;
+  LearningGrid: { gridSlug: string; gridName?: string };
+  LearningTopic: { gridSlug: string; topicSlug: string; topicTitle?: string };
+  LearningCodingProblem: { slug: string; title?: string };
   TestInstruction: { testId: string };
   LiveTest: { testId: string };
   TestResult: { attemptId: string };
   PerformanceAnalysis: { attemptId?: string } | undefined;
-  DSADashboard: undefined;
-  TopicList: { topicId: string };
-  ProblemDetails: { problemId: string };
-  CodeEditor: { problemId: string };
-  SolutionExplanation: { problemId: string };
-  HRDashboard: undefined;
-  HRQuestion: { category?: string } | undefined;
-  FavoriteQuestion: undefined;
-  CompanyList: undefined;
-  CompanyDashboard: { companyId: string };
-  CompanyQuestion: { companyId: string };
-  CompanyMockTest: { companyId: string };
-  CompanyResult: { attemptId: string; companyId?: string };
-  CompanyAnalytic: { companyId: string };
 };
 
 export type ProfileStackParamList = {
@@ -135,11 +123,14 @@ export type ResumeStackParamList = {
   ResumeTips: undefined;
   Templates: { resumeId?: string } | undefined;
   ResumeEditor: { resumeId: string };
+  SectionEdit: { resumeId: string; blockId: string };
   PersonalDetails: { resumeId: string };
   Education: { resumeId: string };
   Skills: { resumeId: string };
   PreviewResume: { resumeId: string };
   ATSScore: { resumeId: string };
+  JdMatch: { resumeId: string };
+  ResumeUploadImport: undefined;
   DownloadPDF: { resumeId: string };
   ResumeHistory: undefined;
 };

@@ -9,6 +9,7 @@ import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { DocsShell } from "../../_components/DocsShell";
 import { LearningBookmarkButton } from "./LearningBookmarkButton";
 import { PremiumTopicContent } from "./PremiumTopicContent";
+import { TopicPractice } from "./_components/TopicPractice";
 
 export const revalidate = 300;
 export const dynamicParams = true;
@@ -134,6 +135,9 @@ export default async function TopicPage({
             </div>
           )}
         </article>
+
+        {/* Topic-specific Mock Tests + Coding Problems (renders nothing when there are none) */}
+        <TopicPractice gridSlug={grid.slug} topicSlug={topic.slug} />
 
         <nav className="mt-10 flex items-stretch justify-between gap-3 border-t border-line pt-6" aria-label="Topic navigation">
           {prev ? (

@@ -38,9 +38,3 @@ export const recruiterRow = {
   about: "6+ years hiring tech talent.",
   company: { name: "Infosys", logo_url: null },
 };
-
-/** Shape returned by placement.service.getCompanies()'s embedded counts. */
-export const placementCompanyRows = [
-  { id: "tcs", name: "TCS", logo_url: null, hr_questions: [{ count: 5 }], practice_tests: [{ count: 3 }] },
-  { id: "infosys", name: "Infosys", logo_url: null, hr_questions: [{ count: 2 }], practice_tests: [{ count: 2 }] },
-];

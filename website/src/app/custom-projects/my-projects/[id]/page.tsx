@@ -97,7 +97,7 @@ export default async function Page({ params }: Params) {
   const customRequirements: { text: string }[] = Array.isArray(request.custom_requirements) ? request.custom_requirements : [];
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
+    <div className="container-prose py-12">
       <Link href="/custom-projects/my-projects" className="text-sm text-ink underline">
         ← All custom projects
       </Link>

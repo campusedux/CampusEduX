@@ -5,10 +5,10 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://campusedux.app";
 
 const STATIC_ROUTES = [
   "", "/projects", "/projects/trending", "/projects/premium", "/projects/best-sellers", "/projects/new",
-  "/jobs", "/jobs/companies", "/learning", "/resume", "/resume/templates", "/custom-projects",
+  "/jobs", "/jobs/companies", "/learning", "/compiler", "/resume", "/resume/templates", "/custom-projects",
   "/premium", "/referral", "/faq", "/about", "/contact", "/support",
-  "/privacy-policy", "/terms", "/refund-policy", "/project-license", "/community-guidelines",
-  "/disclaimer", "/delete-account",
+  "/legal", "/privacy-policy", "/terms", "/refund-policy", "/project-license", "/community-guidelines",
+  "/disclaimer", "/data-and-permissions", "/cookie-policy", "/grievance", "/delete-account",
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -25,12 +25,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       { data: categories },
       { data: companies },
       { data: learning },
+      { data: codingProblems },
     ] = await Promise.all([
       supabase.from("projects").select("id,updated_at").limit(1000),
       supabase.from("jobs").select("id,updated_at").limit(1000),
       supabase.from("categories").select("id").limit(200),
       supabase.from("companies").select("id,updated_at").limit(500),
       supabase.rpc("learning_sitemap", { p_platform: "website" }),
+      supabase.rpc("coding_problems_sitemap", { p_platform: "website" }),
     ]);
 
     projects?.forEach((p) => entries.push({ url: `${siteUrl}/projects/${p.id}`, lastModified: new Date(p.updated_at) }));
@@ -46,6 +48,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ? `/learning/${row.grid_slug}/${row.topic_slug}`
         : `/learning/${row.grid_slug}`;
       entries.push({ url: `${siteUrl}${path}`, lastModified: new Date(row.updated_at) });
+    });
+
+    // Published, website-visible topic Coding Problems (migration 0048/025).
+    (codingProblems as { slug: string; updated_at: string }[] | null)?.forEach((row) => {
+      entries.push({ url: `${siteUrl}/coding-problems/${row.slug}`, lastModified: new Date(row.updated_at) });
     });
   }
 

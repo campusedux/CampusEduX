@@ -2,58 +2,37 @@ import { notFound, redirect } from 'next/navigation';
 import { requireModule } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QuestionForm } from '../../../../QuestionForm';
-import {
-  getTestQuestion,
-  getDsaProblem,
-  getHrQuestion,
-  getTestOptions,
-  getDsaTopics,
-} from '@/lib/placement/queries';
-import { getCompanyOptions } from '@/lib/jobs/queries';
-import { updateTestQuestion, updateDsaProblem, updateHrQuestion } from '../../../../actions';
-import type { QuestionType } from '@/lib/placement/constants';
+import { getTestQuestion, getTestOptions } from '@/lib/placement/queries';
+import { updateTestQuestion } from '../../../../actions';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Edit Question · CampusEduX Admin' };
 
+/**
+ * MCQ question editing for a mock test — kept for Learning topic practice. The
+ * `[type]` segment is retained for URL compatibility but only `aptitude` (MCQ)
+ * is supported now.
+ */
 export default async function EditQuestionPage({ params }: { params: { type: string; id: string } }) {
   const admin = await requireModule('placement');
   if (!admin.perms.placement.edit) redirect('/placement?error=no_access');
-  if (!['aptitude', 'dsa', 'hr'].includes(params.type)) notFound();
-  const type = params.type as QuestionType;
+  if (params.type !== 'aptitude') notFound();
 
-  const [tests, dsaTopics, companies] = await Promise.all([getTestOptions(), getDsaTopics(), getCompanyOptions()]);
-
-  let initial: any;
-  let action: (prev: { ok: boolean; error?: string }, fd: FormData) => Promise<{ ok: boolean; error?: string }>;
-  let back: string;
-  if (type === 'aptitude') {
-    initial = await getTestQuestion(params.id);
-    action = updateTestQuestion.bind(null, params.id);
-    back = '/placement/aptitude';
-  } else if (type === 'dsa') {
-    initial = await getDsaProblem(params.id);
-    action = updateDsaProblem.bind(null, params.id);
-    back = '/placement/dsa';
-  } else {
-    initial = await getHrQuestion(params.id);
-    action = updateHrQuestion.bind(null, params.id);
-    back = initial?.company_id ? '/placement/company' : '/placement/hr';
-  }
+  const [initial, tests] = await Promise.all([getTestQuestion(params.id), getTestOptions()]);
   if (!initial) notFound();
 
   return (
     <div className="max-w-4xl space-y-6">
-      <PageHeader title="Edit Question" subtitle={`${type.toUpperCase()} question`} />
+      <PageHeader title="Edit Question" subtitle="MCQ question" />
       <QuestionForm
-        type={type}
+        type="aptitude"
         mode="edit"
-        action={action}
+        action={updateTestQuestion.bind(null, params.id)}
         initial={initial}
         tests={tests}
-        dsaTopics={dsaTopics.map((t: any) => ({ id: t.id, name: t.name }))}
-        companies={companies}
-        cancelHref={back}
+        dsaTopics={[]}
+        companies={[]}
+        cancelHref="/placement/tests"
       />
     </div>
   );

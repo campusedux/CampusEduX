@@ -7,7 +7,6 @@ import { referralService } from "@/services/referral.service";
 import { projectService } from "@/services/project.service";
 import { jobService } from "@/services/job.service";
 import { resumeService } from "@/services/resume.service";
-import { placementService } from "@/services/placement.service";
 import { profileService } from "@/services/profile.service";
 import { homeService } from "@/services/home.service";
 import { resetSupabaseMock, setTableResult } from "../../mocks/supabase.mock";
@@ -81,17 +80,6 @@ it("jobs activity (saved / applied / résumés) is empty and alerts are off", as
 it("résumé builder has no documents", async () => {
   expect(await resumeService.getResumes("new-user")).toEqual([]);
   expect(await resumeService.getDownloadHistory("new-user")).toEqual([]);
-});
-
-it("placement dashboard and analytics are zeroed", async () => {
-  const dash = await placementService.getDashboardSummary("new-user");
-  expect(dash).toEqual({ testsTaken: 0, questionsSolved: 0, accuracyPercent: 0, overallProgressPercent: 0 });
-
-  const perf = await placementService.getPerformanceAnalysis("new-user");
-  expect(perf.testsTaken).toBe(0);
-  expect(perf.trend).toEqual([]);
-
-  expect(await placementService.getFavoriteQuestions("new-user")).toEqual([]);
 });
 
 it("notifications are empty", async () => {

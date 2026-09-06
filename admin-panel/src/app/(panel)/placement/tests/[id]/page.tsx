@@ -84,7 +84,7 @@ export default async function MockTestDetailPage({
       <Card>
         <CardHeader title={`Questions (${questions.length})`} />
         {questions.length === 0 ? (
-          <EmptyState title="No questions yet" description="Add questions from the Aptitude Questions screen and pick this test." />
+          <EmptyState title="No questions yet" description="Use “Add question” above to build this test's question bank." />
         ) : (
           <ol className="space-y-2">
             {questions.map((q: any, i: number) => (

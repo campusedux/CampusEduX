@@ -45,7 +45,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-bold text-ink group-hover:text-primary">{job.title}</h3>
+          <h3 className="truncate text-[0.95rem] font-semibold tracking-tight text-ink group-hover:text-primary">{job.title}</h3>
           <p className="truncate text-sm text-ink-muted">{job.company_name || "Company"}</p>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CodeBlock } from "./CodeBlock";
 
 /** Allow only safe URL schemes for admin-authored Markdown links / images.
  *  Blocks `javascript:`, `vbscript:`, `data:` (except images), unknown schemes.
@@ -88,15 +89,7 @@ function renderBlocks(src: string): ReactNode[] {
         i += 1;
       }
       i += 1;
-      out.push(
-        <pre
-          key={`b${k++}`}
-          className="my-4 overflow-x-auto rounded-xl border border-line bg-[#0f172a] p-4 text-[13px] leading-relaxed text-slate-100"
-        >
-          {lang ? <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">{lang}</div> : null}
-          <code className="font-mono">{buf.join("\n")}</code>
-        </pre>,
-      );
+      out.push(<CodeBlock key={`b${k++}`} code={buf.join("\n")} lang={lang} />);
       continue;
     }
 

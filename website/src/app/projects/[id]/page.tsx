@@ -98,7 +98,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <div className="container-page py-10">
       <JsonLd data={productJsonLd} />
       <JsonLd
         data={breadcrumbJsonLd([

@@ -1,5 +1,8 @@
-import CmsLegalPage from "@/components/CmsLegalPage";
-export const metadata = { title: "Refund Policy" };
+import { LegalDocView } from "@/legal/LegalDocView";
+import { legalMetadata } from "@/legal/seo";
+
+export const metadata = legalMetadata("refund-policy");
+
 export default function Page() {
-  return <CmsLegalPage cmsKey="refund_policy" fallbackTitle="Refund Policy" />;
+  return <LegalDocView docId="refund-policy" />;
 }
