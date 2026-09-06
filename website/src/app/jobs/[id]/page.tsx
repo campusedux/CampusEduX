@@ -4,25 +4,22 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { Building2, MapPin, Clock, Wallet } from "lucide-react";
-import { getPublicSupabase } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/format";
 import JsonLd from "@/components/JsonLd";
 import { TagPill } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { getCachedJobDetail, getCachedRecentJobIds } from "@/lib/cache";
 import JobApplyPanel from "./JobApplyPanel";
 
 export const revalidate = 300;
 
-const getJob = cache(async (id: string) => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const { data } = await supabase
-    .from("jobs")
-    .select("*, company:companies(id, name, logo_url, about)")
-    .eq("id", id)
-    .single();
-  return data;
-});
+// See the note in projects/[id]/page.tsx — registering generateStaticParams is
+// what turns this route into ISR instead of per-request dynamic rendering.
+export async function generateStaticParams() {
+  return (await getCachedRecentJobIds(40)).map((id) => ({ id }));
+}
+
+const getJob = cache((id: string) => getCachedJobDetail(id));
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const job = await getJob(params.id);

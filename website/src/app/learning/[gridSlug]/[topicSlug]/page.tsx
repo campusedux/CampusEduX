@@ -14,6 +14,15 @@ import { TopicPractice } from "./_components/TopicPractice";
 export const revalidate = 300;
 export const dynamicParams = true;
 
+// Returning [] (not the full topic list) still registers this route for ISR —
+// on-demand renders are then full-route cached for `revalidate` seconds. The
+// grid can hold 150+ topics; prerendering them all would run that many RPCs at
+// build time. Raise this to `getLearningTopicParams()` (or a bounded slice)
+// once build infra can absorb it.
+export function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata({
   params,
 }: {

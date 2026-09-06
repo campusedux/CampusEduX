@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
-import { getLearningTree, getLearningGridBrief, firstTopicOf } from "@/lib/learning";
+import { getLearningTree, getLearningGridBrief, getLearningGridSlugs, firstTopicOf } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { DocsShell } from "../_components/DocsShell";
@@ -11,6 +11,10 @@ import { TopicSection } from "../_components/TopicSection";
 
 export const revalidate = 300;
 export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  return (await getLearningGridSlugs()).map((gridSlug) => ({ gridSlug }));
+}
 
 export async function generateMetadata({ params }: { params: { gridSlug: string } }): Promise<Metadata> {
   const grid = await getLearningGridBrief(params.gridSlug);
@@ -31,11 +35,11 @@ export async function generateMetadata({ params }: { params: { gridSlug: string 
 }
 
 export default async function GridOverviewPage({ params }: { params: { gridSlug: string } }) {
-  const brief = await getLearningGridBrief(params.gridSlug);
-  if (!brief) notFound();
-
-  const tree = await getLearningTree(params.gridSlug);
-  if (!tree) notFound();
+  const [brief, tree] = await Promise.all([
+    getLearningGridBrief(params.gridSlug),
+    getLearningTree(params.gridSlug),
+  ]);
+  if (!brief || !tree) notFound();
   const { grid, sections } = tree;
   const start = firstTopicOf(tree);
   const topicTotal = sections.reduce((n, s) => n + s.topics.length, 0);

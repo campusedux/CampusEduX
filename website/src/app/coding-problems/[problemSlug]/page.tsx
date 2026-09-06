@@ -11,6 +11,12 @@ import { CodingProblemPremiumGate } from "./CodingProblemPremiumGate";
 export const revalidate = 300;
 export const dynamicParams = true;
 
+// [] still registers the route for ISR (on-demand renders are cached for
+// `revalidate` seconds) without prerendering every problem at build time.
+export function generateStaticParams() {
+  return [];
+}
+
 const DIFF_CLASS: Record<string, string> = {
   Easy: "bg-emerald-50 text-emerald-700",
   Medium: "bg-amber-50 text-amber-700",

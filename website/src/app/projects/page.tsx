@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { X } from "lucide-react";
-import { getPublicSupabase } from "@/lib/supabase/server";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
+import { getCachedProjectsPage, getCachedCategories } from "@/lib/cache";
 import {
-  PROJECT_LIST_FIELDS,
   PROJECT_PAGE_SIZE,
   PROJECT_SORTS,
   cleanParams,
@@ -30,42 +29,31 @@ type SP = {
 };
 
 export default async function ProjectsPage({ searchParams }: { searchParams: SP }) {
-  const supabase = getPublicSupabase();
   const page = parsePage(searchParams.page);
   const sort = projectSort(searchParams.sort);
   const min = parsePrice(searchParams.min);
   const max = parsePrice(searchParams.max);
   const flag = searchParams.flag === "premium" || searchParams.flag === "bestseller" ? searchParams.flag : undefined;
 
-  let projects: ProjectCardData[] = [];
-  let count: number | null = 0;
-  let categories: { id: string; name: string }[] = [];
-
-  if (supabase) {
-    const from = (page - 1) * PROJECT_PAGE_SIZE;
-    const s = PROJECT_SORTS[sort];
-
-    let query = supabase
-      .from("projects")
-      .select(PROJECT_LIST_FIELDS, { count: "exact" })
-      .order(s.column, { ascending: s.ascending })
-      .range(from, from + PROJECT_PAGE_SIZE - 1);
-
-    if (searchParams.q) query = query.ilike("title", `%${searchParams.q}%`);
-    if (searchParams.category) query = query.eq("category_id", searchParams.category);
-    if (min !== undefined) query = query.gte("price", min);
-    if (max !== undefined) query = query.lte("price", max);
-    if (flag === "premium") query = query.eq("is_premium", true);
-    if (flag === "bestseller") query = query.eq("is_best_seller", true);
-
-    const [{ data, count: c }, { data: cats }] = await Promise.all([
-      query,
-      supabase.from("categories").select("id,name").order("name"),
-    ]);
-    projects = (data ?? []) as ProjectCardData[];
-    count = c;
-    categories = cats ?? [];
-  }
+  const s = PROJECT_SORTS[sort];
+  // Data is served from a per-filter cross-request cache (lib/cache.ts) — this
+  // route stays dynamic to read the URL, but no longer hits Supabase per visit.
+  const [{ projects: rows, count }, categories] = await Promise.all([
+    getCachedProjectsPage({
+      page,
+      from: (page - 1) * PROJECT_PAGE_SIZE,
+      size: PROJECT_PAGE_SIZE,
+      sortColumn: s.column,
+      sortAscending: s.ascending,
+      q: searchParams.q,
+      category: searchParams.category,
+      min,
+      max,
+      flag,
+    }),
+    getCachedCategories(),
+  ]);
+  const projects = rows as ProjectCardData[];
 
   const pages = totalPages(count, PROJECT_PAGE_SIZE);
   const filterState = {

@@ -1,49 +1,34 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getPublicSupabase } from "@/lib/supabase/server";
 import JsonLd from "@/components/JsonLd";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import { Badge, Rating, PriceDisplay, TagPill, ReviewCard, SectionHeader, EmptyState } from "@/components/ui";
-import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { getCachedProjectDetail, getCachedTopProjectIds } from "@/lib/cache";
 import ProjectPurchasePanel from "./ProjectPurchasePanel";
 import Gallery from "./Gallery";
 
 export const revalidate = 300;
 
+// Registering generateStaticParams (even a bounded list) is what flips this
+// dynamic-segment route from "rendered on every request" to ISR: the params
+// below are prerendered at build, and `dynamicParams` (default true) renders
+// the long tail on demand and then caches it for `revalidate` seconds.
+export async function generateStaticParams() {
+  return (await getCachedTopProjectIds(40)).map((id) => ({ id }));
+}
+
+type RawProfile = { full_name: string | null } | { full_name: string | null }[] | null;
+
+// Thin per-request memo (shared by generateMetadata + the page) over the
+// cross-request cached read in lib/cache.ts.
 const getProject = cache(async (id: string) => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
+  const result = await getCachedProjectDetail(id);
+  if (!result) return null;
+  if (!result.project) return { project: null, reviews: [], related: [] as ProjectCardData[] };
 
-  const { data: project } = await supabase
-    .from("projects")
-    .select(
-      "id,title,category_id,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller,description,images,license,platform_fee_percent",
-    )
-    .eq("id", id)
-    .single();
-  if (!project) return { project: null, reviews: [], related: [] };
-
-  const [{ data: reviews }, { data: related }] = await Promise.all([
-    supabase
-      .from("reviews")
-      .select("id,rating,comment,created_at,profile:profiles(full_name)")
-      .eq("project_id", id)
-      .order("created_at", { ascending: false })
-      .limit(10),
-    project.category_id
-      ? supabase
-          .from("projects")
-          .select(PROJECT_LIST_FIELDS)
-          .eq("category_id", project.category_id)
-          .neq("id", id)
-          .limit(4)
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  type RawProfile = { full_name: string | null } | { full_name: string | null }[] | null;
-  const mappedReviews = ((reviews ?? []) as Array<{
+  const mappedReviews = (result.reviews as Array<{
     id: string;
     rating: number;
     comment: string | null;
@@ -60,7 +45,7 @@ const getProject = cache(async (id: string) => {
     };
   });
 
-  return { project, reviews: mappedReviews, related: (related ?? []) as ProjectCardData[] };
+  return { project: result.project, reviews: mappedReviews, related: result.related as ProjectCardData[] };
 });
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {

@@ -40,6 +40,10 @@ const nextConfig = {
   // features (unused here, but still resolved at import time).
   experimental: {
     serverComponentsExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
+    // Barrel-file optimization: `@/components/ui` re-exports ~20 modules incl.
+    // client ones (Modal, Drawer, FilterSheet, Reveal). This makes an import of
+    // one symbol pull only that symbol's module, not evaluate the whole barrel.
+    optimizePackageImports: ["@/components/ui"],
   },
   // Placement / Placement Prep / Placement Preparation are consolidated into the
   // single "Learning" system. Permanent (308) redirects preserve SEO equity.
@@ -63,6 +67,22 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "Content-Security-Policy", value: csp },
+        ],
+      },
+      {
+        // `/projects` and `/jobs` are dynamically rendered (they read
+        // `searchParams`), but their data is served from a per-filter
+        // cross-request cache (src/lib/cache.ts) and the HTML is identical for
+        // every visitor with the same query string. Let a CDN/edge hold the
+        // full response briefly, keyed by URL. Hosts that respect this (Vercel)
+        // turn these into edge hits; `next start` still sends its own
+        // `no-store` and ignores this — that's expected.
+        source: "/:path(projects|jobs)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=60, stale-while-revalidate=300",
+          },
         ],
       },
     ];

@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { FileText, Wrench, Gift, ArrowRight } from "lucide-react";
-import { getPublicSupabase } from "@/lib/supabase/server";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import { SectionHeader, Rating, Reveal, Button } from "@/components/ui";
@@ -14,12 +13,9 @@ import { ModuleGrid } from "@/components/home/ModuleGrid";
 import { HeroVisual } from "@/components/home/HeroVisual";
 import { BRAND } from "@/lib/brand";
 import { inWindow } from "@/lib/home";
+import { getCachedHomeData } from "@/lib/cache";
 
 export const revalidate = 300; // 5-min ISR — catalog + CMS change via the admin panel, not per request
-
-const PROJECT_FIELDS =
-  "id,title,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller";
-const JOB_FIELDS = "id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at";
 
 interface HomeBanner {
   id: string;
@@ -29,52 +25,16 @@ interface HomeBanner {
   target_url: string | null;
 }
 
+// Per-request memo (shared by generateMetadata + the page) over the
+// cross-request cached rows in lib/cache.ts.
 const getHomeData = cache(async () => {
-  const supabase = getPublicSupabase();
-  if (!supabase) {
-    return {
-      trending: [] as ProjectCardData[],
-      jobs: [] as JobCardData[],
-      testimonials: [] as TestimonialRow[],
-      faqs: [] as FaqRow[],
-      banner: null as HomeBanner | null,
-      offers: [] as OfferBanner[],
-    };
-  }
-
-  const [trending, jobs, testimonials, faqs, banners, offers] = await Promise.all([
-    supabase.from("projects").select(PROJECT_FIELDS).order("sales_count", { ascending: false }).limit(8),
-    supabase.from("jobs").select(JOB_FIELDS).order("posted_at", { ascending: false }).limit(6),
-    supabase
-      .from("testimonials")
-      .select("id,author_name,author_role,quote,rating")
-      .eq("status", "active")
-      .order("sort_order")
-      .limit(6),
-    supabase.from("faqs").select("id,question,answer").eq("status", "active").order("sort_order").limit(5),
-    supabase
-      .from("banners")
-      .select("id,title,subtitle,image_url,target_url,placement,status,priority,starts_at,ends_at")
-      .eq("placement", "home")
-      .eq("status", "active")
-      .order("priority", { ascending: false })
-      .limit(5),
-    supabase
-      .from("offer_banners")
-      .select("id,title,description,discount_label,coupon_code,is_active,sort_order")
-      .eq("is_active", true)
-      .order("sort_order")
-      .limit(8),
-  ]);
-
-  const activeBanner =
-    (banners.data ?? []).find((b) => inWindow(b.starts_at, b.ends_at)) ?? null;
-
+  const raw = await getCachedHomeData();
+  const activeBanner = raw.banners.find((b) => inWindow(b.starts_at, b.ends_at)) ?? null;
   return {
-    trending: (trending.data ?? []) as ProjectCardData[],
-    jobs: (jobs.data ?? []) as JobCardData[],
-    testimonials: (testimonials.data ?? []) as TestimonialRow[],
-    faqs: (faqs.data ?? []) as FaqRow[],
+    trending: raw.trending as ProjectCardData[],
+    jobs: raw.jobs as JobCardData[],
+    testimonials: raw.testimonials as TestimonialRow[],
+    faqs: raw.faqs as FaqRow[],
     banner: activeBanner
       ? {
           id: activeBanner.id,
@@ -83,8 +43,8 @@ const getHomeData = cache(async () => {
           image_url: activeBanner.image_url,
           target_url: activeBanner.target_url,
         }
-      : null,
-    offers: (offers.data ?? []) as OfferBanner[],
+      : (null as HomeBanner | null),
+    offers: raw.offers as OfferBanner[],
   };
 });
 

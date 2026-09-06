@@ -1,9 +1,9 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getPublicSupabase } from "@/lib/supabase/server";
 import type { ProjectCardData } from "@/components/ProjectCard";
 import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
-import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
+import { getCachedCategoryPreview, getCachedCategoryIds } from "@/lib/cache";
 
 export const revalidate = 300;
 
@@ -11,20 +11,15 @@ export const revalidate = 300;
 // fully paginated marketplace view (/projects?category=<id>) for the rest.
 const CATEGORY_PREVIEW_LIMIT = 48;
 
-async function getData(categoryId: string) {
-  const supabase = getPublicSupabase();
-  if (!supabase) return { name: categoryId, projects: [] as ProjectCardData[] };
-  const [{ data: cat }, { data }] = await Promise.all([
-    supabase.from("categories").select("name").eq("id", categoryId).maybeSingle(),
-    supabase
-      .from("projects")
-      .select(PROJECT_LIST_FIELDS)
-      .eq("category_id", categoryId)
-      .order("created_at", { ascending: false })
-      .limit(CATEGORY_PREVIEW_LIMIT),
-  ]);
-  return { name: cat?.name ?? categoryId, projects: (data ?? []) as ProjectCardData[] };
+// ISR: prerender every category page; long tail renders on demand + caches.
+export async function generateStaticParams() {
+  return (await getCachedCategoryIds()).map((category) => ({ category }));
 }
+
+const getData = cache(async (categoryId: string) => {
+  const res = await getCachedCategoryPreview(categoryId);
+  return { name: res.name, projects: res.projects as ProjectCardData[] };
+});
 
 export async function generateMetadata({ params }: { params: { category: string } }): Promise<Metadata> {
   const { name } = await getData(params.category);

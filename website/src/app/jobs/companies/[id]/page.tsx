@@ -1,35 +1,26 @@
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Image from "next/image";
 import { Building2, Star } from "lucide-react";
-import { getPublicSupabase } from "@/lib/supabase/server";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import JsonLd from "@/components/JsonLd";
 import { EmptyState } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { getCachedCompanyDetail, getCachedCompanyIds } from "@/lib/cache";
 
 export const revalidate = 300;
 
-// "Open roles" is a section of the company profile, not a paginated board —
-// bound it so the query can't grow without limit. Any overflow is still on the
-// main /jobs board.
-const COMPANY_JOBS_LIMIT = 50;
-
-async function getCompany(id: string) {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const [{ data: company }, { data: jobs }] = await Promise.all([
-    supabase.from("companies").select("id,name,logo_url,about,employee_count,rating").eq("id", id).single(),
-    supabase
-      .from("jobs")
-      .select("id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at")
-      .eq("company_id", id)
-      .order("posted_at", { ascending: false })
-      .limit(COMPANY_JOBS_LIMIT),
-  ]);
-  if (!company) return null;
-  return { company, jobs: (jobs ?? []) as JobCardData[] };
+// Registering generateStaticParams makes this ISR rather than per-request
+// dynamic (see projects/[id]/page.tsx). Company set is small — prerender all.
+export async function generateStaticParams() {
+  return (await getCachedCompanyIds()).map((id) => ({ id }));
 }
+
+const getCompany = cache(async (id: string) => {
+  const res = await getCachedCompanyDetail(id);
+  return res ? { company: res.company, jobs: res.jobs as JobCardData[] } : null;
+});
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const res = await getCompany(params.id);

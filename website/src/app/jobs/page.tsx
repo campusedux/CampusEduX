@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { X } from "lucide-react";
-import { getPublicSupabase } from "@/lib/supabase/server";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { JobFilters } from "@/components/marketplace/JobFilters";
-import { JOB_LIST_FIELDS, JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobSort, parsePage, totalPages } from "@/lib/marketplace";
+import { getCachedJobsPage } from "@/lib/cache";
+import { JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobSort, parsePage, totalPages } from "@/lib/marketplace";
 
 export const metadata: Metadata = { title: "Jobs & Internships" };
 export const revalidate = 120;
@@ -13,31 +13,21 @@ export const revalidate = 120;
 type SP = { q?: string; location?: string; type?: string; sort?: string; page?: string };
 
 export default async function JobsPage({ searchParams }: { searchParams: SP }) {
-  const supabase = getPublicSupabase();
   const page = parsePage(searchParams.page);
   const sort = jobSort(searchParams.sort);
+  const s = JOB_SORTS[sort];
 
-  let jobs: JobCardData[] = [];
-  let count: number | null = 0;
-
-  if (supabase) {
-    const from = (page - 1) * JOB_PAGE_SIZE;
-    const s = JOB_SORTS[sort];
-
-    let query = supabase
-      .from("jobs")
-      .select(JOB_LIST_FIELDS, { count: "exact" })
-      .order(s.column, { ascending: s.ascending, nullsFirst: false })
-      .range(from, from + JOB_PAGE_SIZE - 1);
-
-    if (searchParams.q) query = query.ilike("title", `%${searchParams.q}%`);
-    if (searchParams.location) query = query.ilike("location", `%${searchParams.location}%`);
-    if (searchParams.type) query = query.eq("job_type", searchParams.type);
-
-    const { data, count: c } = await query;
-    jobs = (data ?? []) as JobCardData[];
-    count = c;
-  }
+  // Per-filter cross-request cache (lib/cache.ts) — dynamic route, cached data.
+  const { jobs: rows, count } = await getCachedJobsPage({
+    from: (page - 1) * JOB_PAGE_SIZE,
+    size: JOB_PAGE_SIZE,
+    sortColumn: s.column,
+    sortAscending: s.ascending,
+    q: searchParams.q,
+    location: searchParams.location,
+    type: searchParams.type,
+  });
+  const jobs = rows as JobCardData[];
 
   const pages = totalPages(count, JOB_PAGE_SIZE);
   const filterState = { q: searchParams.q, location: searchParams.location, type: searchParams.type, sort: searchParams.sort };

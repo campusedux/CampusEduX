@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import type {
   LearningGridCard,
@@ -147,6 +148,48 @@ export const getLearningGridBrief = cache(async (slug: string): Promise<Learning
   if (error || !data) return null;
   return data as LearningGridBrief;
 });
+
+/**
+ * `generateStaticParams` sources. Cross-request cached (`unstable_cache`, tag
+ * `learning`) so the build and every on-demand ISR render reuse one round-trip.
+ * The `learning_sitemap` / `coding_problems_sitemap` RPCs (migration 0042 /
+ * 0048) already return exactly the published + website-visible slugs.
+ */
+export const getLearningGridSlugs = unstable_cache(
+  async (): Promise<string[]> => {
+    const supabase = getPublicSupabase();
+    if (!supabase) return [];
+    const { data } = await supabase.rpc("learning_grids_list", { p_platform: PLATFORM });
+    return Array.isArray(data) ? (data as LearningGridCard[]).map((g) => g.slug).filter(Boolean) : [];
+  },
+  ["learning:grid-slugs"],
+  { revalidate: 300, tags: ["learning"] },
+);
+
+export const getLearningTopicParams = unstable_cache(
+  async (): Promise<{ gridSlug: string; topicSlug: string }[]> => {
+    const supabase = getPublicSupabase();
+    if (!supabase) return [];
+    const { data } = await supabase.rpc("learning_sitemap", { p_platform: PLATFORM });
+    const rows = (data ?? []) as { grid_slug: string; topic_slug: string | null }[];
+    return rows
+      .filter((r) => r.grid_slug && r.topic_slug)
+      .map((r) => ({ gridSlug: r.grid_slug, topicSlug: r.topic_slug as string }));
+  },
+  ["learning:topic-params"],
+  { revalidate: 300, tags: ["learning"] },
+);
+
+export const getCodingProblemSlugs = unstable_cache(
+  async (): Promise<string[]> => {
+    const supabase = getPublicSupabase();
+    if (!supabase) return [];
+    const { data } = await supabase.rpc("coding_problems_sitemap", { p_platform: PLATFORM });
+    return ((data ?? []) as { slug: string }[]).map((r) => r.slug).filter(Boolean);
+  },
+  ["learning:coding-problem-slugs"],
+  { revalidate: 300, tags: ["learning"] },
+);
 
 export async function searchLearning(q: string, limit = 20): Promise<LearningSearchHit[]> {
   const term = q.trim();
