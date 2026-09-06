@@ -1,9 +1,11 @@
-# CampusEduX / ProjectHub — Full-Project Audit (Phase 1, read-only)
+# CampusEduX / ProjectHub — Full-Project Audit (Phase 1 report + Phase 2 cleanup)
 
 **Date:** 2026-09-06
 **Branch:** `audit/full-project-review` (checkpoint commit `34d05e0`, forked from `website-mobile-ui-sync` @ `4a736cb`)
 **Scope:** `mobile-app/` (Expo / React Native), `website/` (Next.js 14), `admin-panel/` (Next.js 14) — all on one Supabase project.
-**Method:** `tsc --noEmit`, `eslint` / `next lint`, production build (`next build`; `expo export --platform web` as the read-only proxy for the mobile build), `jest` / `vitest`, plus static scans for TODO/stub patterns, dead files, dependency usage, cross-file duplication, and committed secrets. **Nothing was modified.** Native `expo prebuild` / EAS builds were not run (they generate `ios/`/`android/` — a write); the web export exercises the same Metro bundle graph.
+**Method:** `tsc --noEmit`, `eslint` / `next lint`, production build (`next build`; `expo export --platform web` as the read-only proxy for the mobile build), `jest` / `vitest`, plus static scans for TODO/stub patterns, dead files, dependency usage, cross-file duplication, and committed secrets. Native `expo prebuild` / EAS builds were not run (they generate `ios/`/`android/` — a write); the web export exercises the same Metro bundle graph.
+
+> **Status: Phase 2 cleanup complete** (approved 2026-09-06). Sections 0–G below are the original Phase 1 findings, left as the record. **Section P2 (immediately below the Headline)** lists exactly what was changed, the before/after numbers, and what was deliberately left for you to decide.
 
 ---
 
@@ -28,6 +30,56 @@
 - **`zod` major drift:** `^4.1.5` (mobile) vs `^3.23.0` (website).
 - **`ANTHROPIC_API_KEY`** (used by website resume AI-assist) is **not documented** in `website/.env.example`.
 - Repo root holds 3 large historical analysis `.md` files (245 KB total) plus an empty `node_modules/.vite` cache dir.
+
+---
+---
+
+# P2. Phase 2 — Cleanup outcomes (2026-09-06, approved)
+
+Executed as small, revertable commits on `audit/full-project-review`:
+
+| Commit | Scope | Change |
+|---|---|---|
+| `34d05e0` | — | checkpoint snapshot of the working tree (Phase 1 safety net) |
+| `be610fa` | — | this audit report (Phase 1) |
+| `075c7cd` | website | **delete dead files** — `src/components/CmsLegalPage.tsx`, `src/lib/resumeBuilder/sampleResume.ts` (0 inbound refs each) |
+| `a8cedea` | website + admin | **deps** — bump declared `@supabase/supabase-js` floor `^2.43.0` → `^2.57.0` to match mobile (both already resolve to `2.112.4`; no tree change) |
+| `2e31b10` | website | **docs** — add optional `ANTHROPIC_API_KEY` to `.env.example`; add a precise `TODO` at the `/compiler` "Ask AI to fix" stub |
+| `49e0c59` | repo / website | **ci** — add `.github/workflows/website-ci.yml` (typecheck · lint · test · build); verified `next build` is green with no Supabase env |
+| `bf38452` | admin | **docs** — fix stale `admin.ts` service-role comment in `lib/supabase/server.ts`; add a precise `TODO` on `createBackup()` (records a request, produces no artifact) |
+| `f6bb5da` | mobile | **lint** — targeted `eslint-disable` + comment on the `ReactNavigation` global augmentation in `navigation.types.ts:215` |
+
+Also: removed the stray repo-root `node_modules/.vite` cache dir (gitignored, untracked — no commit).
+
+## Before → After
+
+| Metric | Mobile | Website | Admin |
+|---|---|---|---|
+| TypeScript errors | 0 → **0** | 0 → **0** | 0 → **0** |
+| ESLint errors / **warnings** | 0 / **1** → **0 / 0** | 0 / 0 → **0 / 0** | 0 / 0 → **0 / 0** |
+| Production build | ✅ → ✅ (`expo export` web) | ✅ 57 routes → ✅ 57 routes | ✅ 97 routes → ✅ 97 routes |
+| Tests | 288 pass → **288 pass** | 278 pass / 12 skip → **278 / 12** | 104 pass → **104 pass** |
+| Dead files | 0 → 0 | **2 → 0** | 0 → 0 |
+| Removable unused deps | 0 → 0 | 0 → 0 | 0 → 0 |
+| CI workflow | ✅ → ✅ | **❌ → ✅** | ✅ → ✅ |
+| Undocumented required/optional secret | — | **1 → 0** | — |
+| `@supabase/supabase-js` floor drift | baseline `^2.57.0` | **`^2.43` → `^2.57`** | **`^2.43` → `^2.57`** |
+
+The build gates were **already green** in Phase 1, so there was no error count to "bring down". The net measurable result: **−1 lint warning, −2 dead files, +1 CI pipeline, −1 undocumented secret, −1 version drift, +3 precise TODOs** on features that were quietly incomplete — and every gate on every project is still green (re-run end-to-end after the last commit).
+
+## Deliberately NOT auto-fixed — needs a decision from you, not a code change
+
+1. **Mobile duplicate Settings / About / Notification screens** — `src/profile/SettingsScreen.tsx` vs `src/settings/SettingsScreen.tsx` (both routed, 186 differing lines); same for `AboutScreen` (profile vs settings) and `NotificationScreen` (home vs settings). Deleting a *routed* screen requires you to choose which flow — the **Profile tab** or the **drawer "SettingsModule"** — is canonical. No safe mechanical fix. *(Phase 1 §E · Mobile)*
+2. **Mobile `SAMPLE_*` fallback in 8 catalog services** — intentional offline/demo resilience that masks backend errors with fixture data (fake projects/jobs/prices) on any Supabase error *or* empty result. Money paths already `throw` and are unaffected. The fix is a product call: gate behind a `__DEV__`/demo flag, show a "sample data" banner, or remove. Left as documented. *(Phase 1 §A · Mobile)*
+3. **Cross-app duplication — legal JSON (9 identical files) + résumé engine (5 modules), mobile ↔ website.** Extracting to a shared module needs npm/pnpm **workspaces** set up at the repo root (there is no root `package.json`), which risks breaking Metro *and* Next module resolution. The legal copy is already guarded by `scripts/sync-legal.mjs` + a drift-guard test. Deferred as an infrastructure decision. *(Phase 1 §E)*
+4. **Admin `CategoryManager` ×3** — the three copies have diverged 100–176 lines (≈80% different); a shared component would need heavy per-resource config props for little gain. Left in place (Phase 1 rated this low priority). *(Phase 1 §E · Admin)*
+5. **Website `/compiler` "Ask AI to fix"** — flagged with a precise `TODO` (`2e31b10`). Wiring it is a feature build (new `/api/compiler/assist` route + prompt + rate limit + accept/reject diff UI), not cleanup. *(Phase 1 §A · Website)*
+6. **Admin `createBackup()`** — flagged with a precise `TODO` (`bf38452`). Producing a real dump/artifact is a product/ops decision (mechanism, retention, cost); the DB itself is covered by Supabase PITR and the page copy is already honest. *(Phase 1 §A · Admin)*
+7. **`zod` major drift (mobile `^4` vs website `^3`)** — cannot be aligned mechanically: mobile's `@hookform/resolvers@5.9.1` **requires** zod v4, and migrating the website's 9 zod files to v4 is a breaking-change pass with no current functional payoff. Needs a planned migration. *(Phase 1 §D)*
+8. **`typescript` / `eslint` minor drift** (mobile TS 5.9 / ESLint 9 flat-config vs Next apps TS 5.4 / ESLint 8) — harmonising is optional and risks surfacing fresh diagnostics in a currently-green tree; belongs in a dedicated toolchain-bump PR. *(Phase 1 §D)*
+9. **`expo-constants` / `expo-splash-screen` (mobile)** — evaluated for removal, **kept**. `expo-constants` is pulled in transitively by 5+ Expo packages (`expo-linking`, `expo-notifications`, `expo-asset`, `@expo/router-server`, `expo`) and should stay pinned for Expo's dependency validation. `expo-splash-screen` is consumed by Expo's native splash **config plugin** (`app.json` `splash` block) even though no JS imports it — removing it risks a native-splash regression not verifiable without an EAS/prebuild run. *(Phase 1 §D · Mobile — revises the "2 candidates" line to "0 safely removable")*
+10. **Full table-by-table RLS verification** — still recommended as a separate security pass; out of scope for cleanup. *(Phase 1 §G)*
+11. **Repo-root historical docs** (`LEARNING_UNIFICATION_AUDIT.md`, `LEGAL_COMPLIANCE_AUDIT.md`, `WEBSITE_MOBILE_SYNC_ANALYSIS.md` — 245 KB) — left untouched. Whether they move to `docs/` or are deleted is your call, and `WEBSITE_MOBILE_SYNC_ANALYSIS.md` is git-tracked so removing it is a history decision. *(Phase 1 §C)*
 
 ---
 ---
