@@ -291,6 +291,15 @@ export async function saveRoleMatrix(role: AdminRole, _p: Result, fd: FormData):
 }
 
 // --- backup --------------------------------------------
+// TODO: this records a backup *request* only — it does not produce a database
+// dump or a downloadable artifact (hence status is hard-coded 'completed',
+// size_bytes/download_url stay null, and the UI shows "not available"). The
+// actual database is backed up by Supabase's own PITR. To make this real:
+// trigger pg_dump / the Supabase Management API from a server context, upload
+// the result to a private Storage bucket, then write size_bytes + a signed
+// download_url back to the row. Left as-is in the Phase 2 cleanup because
+// which mechanism to use (and its retention/cost) is a product/ops decision,
+// not a code fix. The backup page copy is already honest about the limitation.
 export async function createBackup(): Promise<Result> {
   await requirePermission('backup', 'add');
   const supabase = createClient();
