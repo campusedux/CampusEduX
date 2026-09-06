@@ -10,16 +10,22 @@ import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 
 export const revalidate = 300;
 
+// "Open roles" is a section of the company profile, not a paginated board —
+// bound it so the query can't grow without limit. Any overflow is still on the
+// main /jobs board.
+const COMPANY_JOBS_LIMIT = 50;
+
 async function getCompany(id: string) {
   const supabase = getPublicSupabase();
   if (!supabase) return null;
   const [{ data: company }, { data: jobs }] = await Promise.all([
-    supabase.from("companies").select("*").eq("id", id).single(),
+    supabase.from("companies").select("id,name,logo_url,about,employee_count,rating").eq("id", id).single(),
     supabase
       .from("jobs")
       .select("id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at")
       .eq("company_id", id)
-      .order("posted_at", { ascending: false }),
+      .order("posted_at", { ascending: false })
+      .limit(COMPANY_JOBS_LIMIT),
   ]);
   if (!company) return null;
   return { company, jobs: (jobs ?? []) as JobCardData[] };

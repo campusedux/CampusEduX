@@ -29,7 +29,9 @@ export default async function Page({ params }: Params) {
 
   const { data: request } = await supabase
     .from("custom_project_requests")
-    .select("*")
+    .select(
+      "id,request_code,title,objective,problem_statement,description,target_users,technology_preference,project_type,project_level,platform,custom_requirements,base_price,platform_charge,feature_total,estimated_total,token_amount,status,created_at",
+    )
     .eq("id", params.id)
     .maybeSingle();
   if (!request) notFound();
@@ -62,13 +64,16 @@ export default async function Page({ params }: Params) {
       .order("created_at", { ascending: true }),
   ]);
 
-  // Signed URLs for reference files (private uploads bucket).
-  const fileLinks = await Promise.all(
-    (files ?? []).map(async (f) => {
-      const { data } = await supabase.storage.from(CP_UPLOADS_BUCKET).createSignedUrl(f.storage_path, CP_SIGNED_URL_TTL);
-      return { ...f, url: data?.signedUrl ?? null };
-    }),
-  );
+  // Signed URLs for reference files (private uploads bucket) — one batched
+  // Storage call for all of them instead of one round-trip per file.
+  const fileRows = files ?? [];
+  const fileSigned = fileRows.length
+    ? (await supabase.storage.from(CP_UPLOADS_BUCKET).createSignedUrls(
+        fileRows.map((f) => f.storage_path),
+        CP_SIGNED_URL_TTL,
+      )).data ?? []
+    : [];
+  const fileLinks = fileRows.map((f, i) => ({ ...f, url: fileSigned[i]?.signedUrl ?? null }));
 
   // Delivery assets + signed URLs (only resolvable once status = 'delivered' — RLS).
   let deliveryAssets: { id: string; kind: string; label: string; file_name: string; size_mb: number; url: string | null }[] = [];
@@ -78,19 +83,21 @@ export default async function Page({ params }: Params) {
       .select("id,kind,label,file_name,size_mb,storage_path")
       .eq("delivery_id", delivery.id)
       .order("sort_order", { ascending: true });
-    deliveryAssets = await Promise.all(
-      (assets ?? []).map(async (a) => {
-        const { data } = await supabase.storage.from(CP_DELIVERIES_BUCKET).createSignedUrl(a.storage_path, CP_SIGNED_URL_TTL);
-        return {
-          id: a.id,
-          kind: a.kind,
-          label: a.label,
-          file_name: a.file_name,
-          size_mb: Number(a.size_mb) || 0,
-          url: data?.signedUrl ?? null,
-        };
-      }),
-    );
+    const assetRows = assets ?? [];
+    const assetSigned = assetRows.length
+      ? (await supabase.storage.from(CP_DELIVERIES_BUCKET).createSignedUrls(
+          assetRows.map((a) => a.storage_path),
+          CP_SIGNED_URL_TTL,
+        )).data ?? []
+      : [];
+    deliveryAssets = assetRows.map((a, i) => ({
+      id: a.id,
+      kind: a.kind,
+      label: a.label,
+      file_name: a.file_name,
+      size_mb: Number(a.size_mb) || 0,
+      url: assetSigned[i]?.signedUrl ?? null,
+    }));
   }
 
   const pct = CUSTOM_PROJECT_PROGRESS[request.status as CustomProjectStatus] ?? 0;

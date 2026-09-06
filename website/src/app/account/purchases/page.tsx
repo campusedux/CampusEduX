@@ -13,7 +13,10 @@ export default async function PurchasesPage() {
     .from("purchases")
     .select("id,status,total_amount,created_at,project:projects(id,title,thumbnail_url,category_name)")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // This un-paginated list is bounded to the 100 most recent purchases so the
+    // query can't grow without limit; realistic accounts are far below this.
+    .limit(100);
 
   return (
     <div>

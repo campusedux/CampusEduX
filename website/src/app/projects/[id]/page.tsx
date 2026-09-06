@@ -16,7 +16,13 @@ const getProject = cache(async (id: string) => {
   const supabase = getPublicSupabase();
   if (!supabase) return null;
 
-  const { data: project } = await supabase.from("projects").select("*").eq("id", id).single();
+  const { data: project } = await supabase
+    .from("projects")
+    .select(
+      "id,title,category_id,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller,description,images,license,platform_fee_percent",
+    )
+    .eq("id", id)
+    .single();
   if (!project) return { project: null, reviews: [], related: [] };
 
   const [{ data: reviews }, { data: related }] = await Promise.all([

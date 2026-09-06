@@ -14,7 +14,9 @@ export default async function BestSellersPage() {
       .from("projects")
       .select(PROJECT_LIST_FIELDS)
       .eq("is_best_seller", true)
-      .order("sales_count", { ascending: false });
+      .order("sales_count", { ascending: false })
+      // Landing page, no pagination of its own — bound the query.
+      .limit(48);
     projects = (data ?? []) as ProjectCardData[];
   }
   return (

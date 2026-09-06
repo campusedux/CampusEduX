@@ -14,7 +14,11 @@ export default async function ReferralPage() {
     bonus_validity_days?: number;
   } | null = null;
   if (supabase) {
-    const { data } = await supabase.from("reward_settings").select("*").eq("id", 1).maybeSingle();
+    const { data } = await supabase
+      .from("reward_settings")
+      .select("bonus_type,bonus_value,max_payout,reward_on_signup,bonus_validity_days")
+      .eq("id", 1)
+      .maybeSingle();
     settings = data;
   }
 

@@ -47,8 +47,8 @@ function NewResumeStrip({ templates }: { templates: ResolvedTemplate[] }) {
 }
 
 export default async function ResumeBuilderPage() {
-  const user = await getOptionalUser();
-  const templates = await loadTemplates();
+  // Independent: the session check and the public template catalog.
+  const [user, templates] = await Promise.all([getOptionalUser(), loadTemplates()]);
 
   if (!user) {
     return (
@@ -105,19 +105,24 @@ export default async function ResumeBuilderPage() {
 
   const supabase = createAuthedServerSupabase();
   const publicSupabase = getPublicSupabase();
-  const [{ data: rows }, { data: versionRows }, { data: downloadRows }, { data: downloads }] = await Promise.all([
-    supabase
-      .from("resumes_builder")
-      .select("id, title, template, design, is_demo, personal_details, content, education, skills, sections, ats_score, layout, updated_at")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false }),
-    supabase.from("resume_versions").select("resume_id").eq("user_id", user.id),
-    supabase.from("resume_downloads").select("resume_id").eq("user_id", user.id),
-    supabase.from("resume_downloads").select("id, resume_title, downloaded_at").eq("user_id", user.id).order("downloaded_at", { ascending: false }).limit(10),
-  ]);
+  const [{ data: rows }, { data: versionRows }, { data: downloadRows }, { data: downloads }, { data: templateRows }] =
+    await Promise.all([
+      supabase
+        .from("resumes_builder")
+        .select("id, title, template, design, is_demo, personal_details, content, education, skills, sections, ats_score, layout, updated_at")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false }),
+      supabase.from("resume_versions").select("resume_id").eq("user_id", user.id),
+      supabase.from("resume_downloads").select("resume_id").eq("user_id", user.id),
+      supabase.from("resume_downloads").select("id, resume_title, downloaded_at").eq("user_id", user.id).order("downloaded_at", { ascending: false }).limit(10),
+      publicSupabase
+        ? publicSupabase.from("resume_templates").select("id, name")
+        : Promise.resolve({ data: null }),
+    ]);
 
-  const { data: templateRows } = publicSupabase ? await publicSupabase.from("resume_templates").select("id, name") : { data: null };
-  const templateName = new Map((templateRows ?? []).map((t: { id: string; name: string }) => [t.id, t.name]));
+  const templateName = new Map(
+    ((templateRows ?? []) as { id: string; name: string }[]).map((t) => [t.id, t.name]),
+  );
   const versionCount = tally(versionRows);
   const downloadCount = tally(downloadRows);
 

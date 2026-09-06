@@ -9,7 +9,7 @@ export default async function AccountReferralPage() {
   const supabase = createAuthedServerSupabase();
 
   const [{ data: code }, { data: referrals }] = await Promise.all([
-    supabase.from("referral_codes").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("referral_codes").select("code,total_referrals,total_earned").eq("user_id", user.id).maybeSingle(),
     supabase
       .from("referrals")
       .select("id,status,reward_amount,created_at,completed_at,referred_user:profiles!referrals_referred_user_id_fkey(full_name,email)")

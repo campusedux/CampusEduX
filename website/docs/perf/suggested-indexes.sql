@@ -1,0 +1,103 @@
+-- ============================================================================
+-- CampusEduX website — Batch 2A proposed database changes
+--
+--   PROPOSED / NOT APPLIED
+--
+-- Nothing in this file has been run. No migration was created. The live
+-- database was not touched. These are the DB-side changes that the app-side
+-- work in Batch 2A could NOT safely make on its own, written down so the
+-- database owner can review and decide.
+--
+-- Review each block independently. Column names below are inferred from the
+-- application code (src/app/account/*, src/app/projects/*, src/app/jobs/*) and
+-- MUST be checked against the real schema before anything is applied.
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- P-5 — /account overview wallet balance : DB-SIDE AGGREGATION REQUIRED
+-- ----------------------------------------------------------------------------
+-- File:  src/app/account/page.tsx
+-- Query: supabase.from("wallet_transactions").select("type,amount").eq("user_id", <uid>)
+--        then, in JS:
+--        balance = rows.reduce((s,t) => s + (t.type === "credit" ? +t.amount : -t.amount), 0)
+--
+-- Why this could NOT be fixed in application code:
+--   * The card is a LIFETIME balance ("Wallet balance" / hint "Lifetime
+--     balance"). Correctness needs SUM(credit) - SUM(debit) over EVERY row for
+--     the user. A .limit() would silently under/over-count the balance, so it
+--     is not a safe change.
+--   * The SELECT is already column-minimal ("type,amount"); both columns are
+--     consumed by the reduce. There is nothing left to trim.
+--   * There is no status/pending flag applied today; adding a WHERE filter
+--     would change what "balance" means, which is a business-logic decision,
+--     not a perf fix.
+--   * There is no wallet-balance column and no balance RPC in the schema today
+--     (grep: no "wallet_balance", no wallet-summary rpc anywhere in src/).
+--
+-- The root cause is transferring every transaction row to the app just to add
+-- them up. That belongs in the database. Two options, pick ONE:
+
+-- Option A — a SECURITY DEFINER function that returns the scalar balance.
+--   The app would then call: supabase.rpc("wallet_balance")   (no args; the
+--   function pins auth.uid() itself, same shape as record_legal_consent).
+--
+--   CREATE OR REPLACE FUNCTION public.wallet_balance()
+--   RETURNS numeric
+--   LANGUAGE sql
+--   STABLE
+--   SECURITY DEFINER
+--   SET search_path = public
+--   AS $$
+--     SELECT COALESCE(
+--       SUM(CASE WHEN type = 'credit' THEN amount ELSE -amount END), 0)
+--     FROM public.wallet_transactions
+--     WHERE user_id = auth.uid();
+--   $$;
+--
+--   -- Supporting index for the aggregate (also helps /account/wallet):
+--   CREATE INDEX IF NOT EXISTS wallet_transactions_user_id_idx
+--     ON public.wallet_transactions (user_id);
+--
+--   -- Lock it down: only let a signed-in user read their own balance.
+--   REVOKE ALL ON FUNCTION public.wallet_balance() FROM public, anon;
+--   GRANT EXECUTE ON FUNCTION public.wallet_balance() TO authenticated;
+
+-- Option B — a maintained balance column on profiles, updated by a trigger on
+--   wallet_transactions INSERT/UPDATE/DELETE. Lowest read cost (the /account
+--   overview already selects the profiles row via requireUser()), but adds
+--   write-path complexity and a backfill. Only worth it if the overview is hot.
+--
+--   ALTER TABLE public.profiles
+--     ADD COLUMN IF NOT EXISTS wallet_balance numeric NOT NULL DEFAULT 0;
+--   -- + a trigger function on public.wallet_transactions that keeps it in sync
+--   -- + a one-time backfill:
+--   --   UPDATE public.profiles p SET wallet_balance = COALESCE(x.bal, 0)
+--   --   FROM (SELECT user_id,
+--   --                SUM(CASE WHEN type='credit' THEN amount ELSE -amount END) bal
+--   --         FROM public.wallet_transactions GROUP BY user_id) x
+--   --   WHERE x.user_id = p.id;
+
+-- NOTE: /account/wallet/page.tsx currently sums only its last 50 transactions,
+-- so the balance it shows can already disagree with a true lifetime balance.
+-- That is a pre-existing correctness question for the owner, not part of this
+-- batch, but Option A's function would let both pages show the same number.
+
+
+-- ----------------------------------------------------------------------------
+-- P-13 — supporting indexes for the newly-bounded category / company lists
+-- ----------------------------------------------------------------------------
+-- Batch 2A added ORDER BY + LIMIT to these two reads in application code
+-- (no schema change needed for the fix itself). These composite indexes would
+-- let Postgres satisfy "latest N for this parent" from the index directly
+-- instead of scan+sort. Optional; the LIMIT is the actual bug fix.
+--
+-- src/app/projects/category/[category]/page.tsx
+--   .eq("category_id", <id>).order("created_at", { ascending: false }).limit(...)
+--   CREATE INDEX IF NOT EXISTS projects_category_id_created_at_idx
+--     ON public.projects (category_id, created_at DESC);
+--
+-- src/app/jobs/companies/[id]/page.tsx
+--   .eq("company_id", <id>).order("posted_at", { ascending: false }).limit(...)
+--   CREATE INDEX IF NOT EXISTS jobs_company_id_posted_at_idx
+--     ON public.jobs (company_id, posted_at DESC);

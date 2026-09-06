@@ -14,7 +14,9 @@ export default async function PremiumProjectsPage() {
       .from("projects")
       .select(PROJECT_LIST_FIELDS)
       .eq("is_premium", true)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      // Landing page, no pagination of its own — bound the query.
+      .limit(48);
     projects = (data ?? []) as ProjectCardData[];
   }
   return (

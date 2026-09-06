@@ -13,7 +13,10 @@ export default async function SavedProjectsPage() {
     .from("wishlists")
     .select("project:projects(id,title,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller)")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // This un-paginated list is bounded to the 100 most recently saved projects
+    // so the query can't grow without limit.
+    .limit(100);
 
   const projects = (data ?? [])
     .map((r) => (Array.isArray(r.project) ? r.project[0] : r.project))

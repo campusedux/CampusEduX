@@ -11,7 +11,10 @@ export default async function SavedJobsPage() {
     .from("saved_jobs")
     .select("job:jobs(id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at)")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // This un-paginated list is bounded to the 100 most recently saved jobs so
+    // the query can't grow without limit.
+    .limit(100);
 
   const jobs = (data ?? [])
     .map((r) => (Array.isArray(r.job) ? r.job[0] : r.job))

@@ -78,16 +78,19 @@ export default async function ResumeAtsPage({ params }: { params: { id: string }
   const user = await requireUser();
   const supabase = createAuthedServerSupabase();
 
-  const { data: row } = await supabase
-    .from("resumes_builder")
-    .select("id, title, template, design, is_demo, personal_details, content, education, skills, sections, ats_score, layout, updated_at")
-    .eq("id", params.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // The resume row and the ATS computation both key off params.id and don't
+  // depend on each other — run them together.
+  const [{ data: row }, { data, error }] = await Promise.all([
+    supabase
+      .from("resumes_builder")
+      .select("id, title, template, design, is_demo, personal_details, content, education, skills, sections, ats_score, layout, updated_at")
+      .eq("id", params.id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase.rpc("compute_ats_breakdown", { p_resume_id: params.id }),
+  ]);
   if (!row) notFound();
   const resume = mapResumeRow(row);
-
-  const { data, error } = await supabase.rpc("compute_ats_breakdown", { p_resume_id: params.id });
   const breakdown = error ? null : (data as ATSBreakdown);
   const analysis = breakdown ? buildAtsAnalysis(breakdown, resume.content, resume.personalDetails) : null;
 

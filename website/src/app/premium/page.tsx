@@ -1,5 +1,4 @@
 import { getPublicSupabase } from "@/lib/supabase/server";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { PremiumCard, SectionHeader, EmptyState } from "@/components/ui";
 import { formatINR } from "@/lib/format";
 import PremiumSubscribeButton from "@/components/PremiumSubscribeButton";
@@ -27,14 +26,15 @@ export default async function PremiumPage() {
   let features: Feature[] = [];
   if (supabase) {
     const [{ data: p }, { data: f }] = await Promise.all([
-      supabase.from("premium_plans").select("*").order("sort_order"),
-      supabase.from("premium_features").select("*").order("sort_order"),
+      supabase
+        .from("premium_plans")
+        .select("id,name,monthly_price,yearly_price,yearly_discount_percent,features,is_popular")
+        .order("sort_order"),
+      supabase.from("premium_features").select("id,title,subtitle").order("sort_order"),
     ]);
     plans = (p ?? []) as Plan[];
     features = (f ?? []) as Feature[];
   }
-
-  const { data: { user } } = await createAuthedServerSupabase().auth.getUser();
 
   return (
     <div className="container-page py-10 sm:py-12">
@@ -93,7 +93,7 @@ export default async function PremiumPage() {
                   is_popular: p.is_popular ?? false,
                 }}
                 subNote={`or ${formatINR(p.yearly_price)}/yr${p.yearly_discount_percent > 0 ? ` · save ${p.yearly_discount_percent}%` : ""}`}
-                cta={<PremiumSubscribeButton planId={p.id} planName={p.name} isSignedIn={!!user} />}
+                cta={<PremiumSubscribeButton planId={p.id} planName={p.name} />}
               />
             ))}
           </div>

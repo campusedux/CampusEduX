@@ -25,7 +25,10 @@ export default async function ApplicationsPage() {
     .from("applications")
     .select("id,status,created_at,job:jobs(id,title,company_name)")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // This un-paginated list is bounded to the 100 most recent applications so
+    // the query can't grow without limit; realistic accounts are far below this.
+    .limit(100);
 
   return (
     <div>

@@ -25,7 +25,10 @@ export default async function Page() {
     .from("custom_project_requests")
     .select("id,request_code,title,project_type,project_level,platform,estimated_total,token_amount,status,created_at")
     .eq("token_payment_status", "paid")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // This un-paginated list is bounded to the 100 most recent requests so the
+    // query can't grow without limit; realistic accounts are far below this.
+    .limit(100);
 
   return (
     <div className="container-prose py-12">

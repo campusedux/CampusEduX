@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
@@ -10,18 +10,37 @@ import { interpretVerifyResponse } from "@/lib/payments";
 export default function PremiumSubscribeButton({
   planId,
   planName,
-  isSignedIn,
 }: {
   planId: string;
   planName: string;
-  isSignedIn: boolean;
 }) {
   const router = useRouter();
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [status, setStatus] = useState<"idle" | "processing" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Resolved client-side so /premium can stay statically cached (ISR) — the
+  // page no longer reads the session on the server. Mirrors the same pattern
+  // ProjectPurchasePanel uses on the ISR-cached /projects/[id] page.
+  const [authState, setAuthState] = useState<"loading" | "anon" | "signed-in">("loading");
 
-  if (!isSignedIn) {
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const {
+        data: { user },
+      } = await createBrowserSupabase().auth.getUser();
+      if (active) setAuthState(user ? "signed-in" : "anon");
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (authState === "loading") {
+    return <div className="mt-4 h-11 w-full animate-pulse rounded-xl bg-line/70" aria-hidden />;
+  }
+
+  if (authState === "anon") {
     return (
       <Link href={`/login?next=/premium`} className="btn-primary mt-4 w-full">
         Sign in to subscribe

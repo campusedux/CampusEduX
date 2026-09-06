@@ -1,4 +1,5 @@
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { getAuthUser } from "@/lib/auth";
 import { CURRENT_LEGAL_VERSION, LEGAL_VERSIONS } from "@/legal/config";
 
 /**
@@ -25,12 +26,12 @@ export function legalConsentArgs(source: string) {
  */
 export async function ensureLegalConsent(source = "website"): Promise<void> {
   try {
-    const supabase = createAuthedServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Shares the request-memoised auth check with the account layout / page
+    // (see lib/auth.ts) instead of making its own getUser() round-trip.
+    const user = await getAuthUser();
     if (!user) return;
 
+    const supabase = createAuthedServerSupabase();
     const { data, error } = await supabase
       .from("legal_consents")
       .select("id")
