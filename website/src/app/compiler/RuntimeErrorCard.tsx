@@ -73,6 +73,14 @@ export function RuntimeErrorCard({
   const reason =
     kind === "runtime" ? explainRuntimeError(detail) : "Your code didn't compile — check the syntax error below.";
 
+  // TODO: "Ask AI to fix" has no backend. To finish it, add a POST
+  // /api/compiler/assist route modelled on /api/resume/assist (server-side
+  // ANTHROPIC_API_KEY via src/lib/resumeBuilder/aiAssist.ts, a compiler-fix
+  // system prompt, per-user rate limiting, and COMPILER_REQUIRE_AUTH-aware
+  // auth), then render the returned suggestion as an accept/reject diff.
+  // Left as a flagged stub in the Phase 2 cleanup: it's a feature build, not
+  // a mechanical fix. Until then the click only acknowledges (label → "Coming
+  // soon…" for 2s).
   function askAiToFix() {
     setAskedAi(true);
     setTimeout(() => setAskedAi(false), 2000);
