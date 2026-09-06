@@ -212,6 +212,10 @@ export type RootStackParamList = {
 
 declare global {
   namespace ReactNavigation {
+    // Must be an `interface … extends` (not a type alias) to merge into
+    // React Navigation's global RootParamList. The empty body is the
+    // documented pattern, so the no-empty-object-type rule doesn't apply.
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     interface RootParamList extends RootStackParamList {}
   }
 }
