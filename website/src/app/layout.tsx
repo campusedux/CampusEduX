@@ -46,9 +46,31 @@ export const metadata: Metadata = {
   },
 };
 
+// Origin of the Supabase project — the browser opens a connection to it on
+// every page (client session check, announcements, storage image hosts). Warm
+// the DNS + TLS handshake in <head> so the first client Supabase call isn't
+// paying for it. Razorpay only loads on a checkout click, so a cheap
+// dns-prefetch (no handshake cost) is enough there.
+const supabaseOrigin = (() => {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").origin;
+  } catch {
+    return null;
+  }
+})();
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        {supabaseOrigin && (
+          <>
+            <link rel="preconnect" href={supabaseOrigin} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={supabaseOrigin} />
+          </>
+        )}
+        <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
+      </head>
       <body className="bg-white font-sans text-ink antialiased">
         <a
           href="#main-content"

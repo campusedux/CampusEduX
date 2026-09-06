@@ -44,8 +44,19 @@ export function MobileNav() {
             <div className="flex items-center gap-3">
               <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 border-white/40 bg-white/20">
                 {profile?.avatarUrl ? (
+                  // Raw <img>: the avatar host (Google / GitHub / Supabase) is
+                  // not in next.config `remotePatterns` on purpose. 56px, in a
+                  // fixed-size parent (no CLS), below the fold in the drawer.
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={profile.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  <img
+                    src={profile.avatarUrl}
+                    alt=""
+                    width={56}
+                    height={56}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <span className="text-lg font-bold">{(profile?.fullName || "G").charAt(0).toUpperCase()}</span>
                 )}

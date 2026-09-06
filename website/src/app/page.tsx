@@ -14,6 +14,7 @@ import { HeroVisual } from "@/components/home/HeroVisual";
 import { BRAND } from "@/lib/brand";
 import { inWindow } from "@/lib/home";
 import { getCachedHomeData } from "@/lib/cache";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image";
 
 export const revalidate = 300; // 5-min ISR — catalog + CMS change via the admin panel, not per request
 
@@ -86,11 +87,14 @@ export default async function HomePage() {
                 </span>
               </div>
               {banner.image_url && (
-                <div className="relative aspect-[16/10] overflow-hidden rounded-xl">
+                <div className="relative aspect-[16/10] overflow-hidden rounded-xl bg-primary-50">
                   <Image
                     src={banner.image_url}
                     alt=""
                     fill
+                    priority
+                    placeholder="blur"
+                    blurDataURL={IMAGE_BLUR_DATA_URL}
                     className="object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transform-none"
                     sizes="(max-width:768px) 100vw, 50vw"
                   />

@@ -30,6 +30,16 @@ const csp = [
 const nextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**.supabase.co" }],
+    // Serve AVIF first (≈20–30% smaller than WebP), WebP fallback. Every
+    // catalog image goes through the /_next/image optimizer, so the browser
+    // never receives a full-size Storage original.
+    formats: ["image/avif", "image/webp"],
+    // Catalog images change rarely and get a fresh URL on re-upload — let the
+    // optimizer hold its resized output for a day instead of re-running hourly.
+    minimumCacheTTL: 86400,
+    // The widest image on the site is the ~800px project gallery / hero; drop
+    // the 2048/3840 breakpoints the optimizer would otherwise pre-generate.
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
   },
   // pdf-parse's pdfjs-dist dependency ships a Node/legacy build that
   // webpack's RSC bundling layer can't evaluate (crashes with

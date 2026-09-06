@@ -76,8 +76,19 @@ export function AuthMenu() {
         className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-bold text-white transition hover:opacity-90"
       >
         {profile.avatarUrl ? (
+          // Raw <img>: avatar host (Google / GitHub / Supabase) intentionally
+          // not in next.config `remotePatterns`. 36px, fixed-size parent (no
+          // CLS), in the header — never the LCP element.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={profile.avatarUrl} alt="" className="h-full w-full object-cover" />
+          <img
+            src={profile.avatarUrl}
+            alt=""
+            width={36}
+            height={36}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover"
+          />
         ) : (
           initial
         )}

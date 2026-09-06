@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/cn";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image";
 
 /**
  * Project preview gallery. The server page still renders `images[0]` as the main
@@ -22,6 +23,8 @@ export function Gallery({ images, title }: { images: string[]; title: string }) 
             alt={title}
             fill
             priority
+            placeholder="blur"
+            blurDataURL={IMAGE_BLUR_DATA_URL}
             className="object-cover animate-fade-in"
             sizes="(max-width:1024px) 100vw, 55vw"
           />

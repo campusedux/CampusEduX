@@ -4,6 +4,7 @@ import { ArrowRight, Box, Gem } from "lucide-react";
 import { Rating } from "@/components/ui/Rating";
 import { PriceDisplay } from "@/components/ui/PriceDisplay";
 import { cn } from "@/lib/cn";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image";
 
 export type ProjectCardData = {
   id: string;
@@ -43,6 +44,8 @@ export function ProjectCard({ project, rank, className }: { project: ProjectCard
             src={project.thumbnail_url}
             alt={project.title}
             fill
+            placeholder="blur"
+            blurDataURL={IMAGE_BLUR_DATA_URL}
             className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04] motion-reduce:transform-none"
             sizes="(max-width: 768px) 100vw, 25vw"
           />
