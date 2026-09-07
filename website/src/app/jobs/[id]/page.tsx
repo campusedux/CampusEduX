@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Building2, MapPin, Clock, Wallet } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import JsonLd from "@/components/JsonLd";
-import { TagPill } from "@/components/ui";
+import { TagPill, Breadcrumb } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { getCachedJobDetail, getCachedRecentJobIds } from "@/lib/cache";
 import JobApplyPanel from "./JobApplyPanel";
@@ -60,7 +60,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
   }
 
   return (
-    <div className="container-prose py-10">
+    <div className="container-prose py-8 sm:py-10">
       <JsonLd data={jobJsonLd} />
       <JsonLd
         data={breadcrumbJsonLd([
@@ -68,6 +68,8 @@ export default async function JobDetailPage({ params }: { params: { id: string }
           { name: job.title, path: `/jobs/${job.id}` },
         ])}
       />
+
+      <Breadcrumb className="mb-6" items={[{ label: "Jobs", href: "/jobs" }, { label: job.title }]} />
 
       <div className="flex items-start gap-4">
         <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary-50">
@@ -136,7 +138,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
       )}
 
       {job.company?.about && (
-        <section className="mt-8 rounded-2xl border border-line bg-surface p-5">
+        <section className="mt-8 rounded-2xl border border-line bg-white p-5 shadow-card">
           <h2 className="text-lg font-bold text-ink">About {company}</h2>
           <p className="mt-2 text-sm text-ink-muted">{job.company.about}</p>
         </section>

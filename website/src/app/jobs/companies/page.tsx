@@ -16,7 +16,7 @@ export default async function CompaniesPage() {
     companies = (data ?? []) as CompanyCardData[];
   }
   return (
-    <div className="container-page py-10">
+    <div className="container-page py-8 sm:py-10 lg:py-12">
       <h1 className="text-3xl font-bold text-ink">Companies</h1>
       <p className="mt-2 text-ink-muted">Employers hiring CampusEduX students.</p>
       {companies.length === 0 ? (

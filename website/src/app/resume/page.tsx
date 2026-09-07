@@ -52,13 +52,11 @@ export default async function ResumeBuilderPage() {
 
   if (!user) {
     return (
-      <div className="container-page py-10 sm:py-12">
-        <section className="overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 sm:px-10 sm:py-12">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">CampusEduX Résumé Builder</p>
-          <h1 className="mt-4 max-w-2xl text-3xl font-bold leading-tight tracking-tight text-ink sm:text-4xl">
-            Pick a template, start from a real résumé, ship a PDF.
-          </h1>
-          <p className="mt-4 max-w-2xl text-ink-muted">
+      <div className="container-page py-8 sm:py-12">
+        <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-12 sm:px-10 sm:py-16">
+          <p className="eyebrow">CampusEduX Résumé Builder</p>
+          <h1 className="h-hero mt-4 max-w-2xl">Pick a template, start from a real résumé, ship a PDF.</h1>
+          <p className="lede mt-4 max-w-2xl">
             Choose a design and you get a complete demo résumé to edit — not a blank form. Structured sections, a live
             A4 preview, a real ATS score, job-description matching, and one-click PDF/DOCX export.
           </p>
@@ -80,7 +78,7 @@ export default async function ResumeBuilderPage() {
           ].map((f) => {
             const Icon = f.icon;
             return (
-              <div key={f.title} className="rounded-2xl border border-line bg-white p-5 shadow-card">
+              <div key={f.title} className="card p-5">
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50">
                   <Icon className="h-5 w-5 text-primary" aria-hidden />
                 </span>

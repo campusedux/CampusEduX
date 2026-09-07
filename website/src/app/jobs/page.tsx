@@ -52,10 +52,14 @@ export default async function JobsPage({ searchParams }: { searchParams: SP }) {
   const clearAllHref = searchParams.q ? `/jobs?q=${encodeURIComponent(searchParams.q)}` : "/jobs";
 
   return (
-    <div className="container-page py-10">
-      <PageHeader title="Jobs & Internships" />
+    <div className="container-page py-8 sm:py-10 lg:py-12">
+      <PageHeader
+        eyebrow="Careers"
+        title="Jobs & Internships"
+        description="Full-time roles and internships from companies hiring students and recent graduates — filter by location and type."
+      />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[240px_1fr]">
+      <div className="mt-8 grid gap-8 lg:grid-cols-[250px_1fr] lg:items-start">
         <FilterSheet title="Filters" activeCount={activeCount}>
           <JobFilters state={filterState} />
         </FilterSheet>
@@ -78,9 +82,15 @@ export default async function JobsPage({ searchParams }: { searchParams: SP }) {
               </Link>
             </div>
           )}
-          <div className="mb-4 text-sm text-ink-muted">
-            {count ?? 0} role{(count ?? 0) === 1 ? "" : "s"}
-            {page > 1 ? ` · page ${page} of ${pages}` : ""}
+          <div className="mb-5 flex items-center justify-between gap-3 border-b border-line pb-3 text-sm">
+            <span className="font-semibold text-ink">
+              {count ?? 0} role{(count ?? 0) === 1 ? "" : "s"}
+            </span>
+            {page > 1 ? (
+              <span className="text-ink-faint">
+                Page {page} of {pages}
+              </span>
+            ) : null}
           </div>
 
           {jobs.length === 0 ? (

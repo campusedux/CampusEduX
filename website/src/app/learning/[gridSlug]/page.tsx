@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 import { getLearningTree, getLearningGridBrief, getLearningGridSlugs, firstTopicOf } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
+import { Breadcrumb } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { DocsShell } from "../_components/DocsShell";
 import { CourseHeader } from "../_components/CourseHeader";
@@ -71,13 +70,7 @@ export default async function GridOverviewPage({ params }: { params: { gridSlug:
         }}
       />
       <DocsShell tree={tree} gridSlug={grid.slug}>
-        <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1 text-sm text-ink-faint">
-          <Link href="/learning" className="hover:text-ink">
-            Learning
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          <span className="text-ink-muted">{grid.name}</span>
-        </nav>
+        <Breadcrumb className="mb-4" items={[{ label: "Learning", href: "/learning" }, { label: grid.name }]} />
 
         <CourseHeader grid={grid} sectionCount={sections.length} topicCount={topicTotal} start={start} />
 

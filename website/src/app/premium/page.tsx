@@ -37,14 +37,12 @@ export default async function PremiumPage() {
   }
 
   return (
-    <div className="container-page py-10 sm:py-12">
+    <div className="container-page py-8 sm:py-12">
       {/* Hero */}
-      <section className="overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 text-center sm:px-10 sm:py-12">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Premium</p>
-        <h1 className="mx-auto mt-4 max-w-2xl text-3xl font-bold leading-tight tracking-tight text-ink sm:text-4xl">
-          Go further, faster.
-        </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-ink-muted">
+      <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-12 text-center sm:px-10 sm:py-16">
+        <p className="eyebrow">Premium</p>
+        <h1 className="h-hero mx-auto mt-4 max-w-2xl">Go further, faster.</h1>
+        <p className="lede mx-auto mt-4 max-w-2xl">
           An optional tier on top of everything already free in CampusEduX — priority access, extra prep material and
           faster support.
         </p>
@@ -59,7 +57,7 @@ export default async function PremiumPage() {
             {features.map((f, i) => {
               const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
               return (
-                <div key={f.id} className="flex gap-3 rounded-2xl border border-line bg-white p-4 shadow-card">
+                <div key={f.id} className="card flex gap-3 p-4">
                   <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
                     <Icon className="h-5 w-5 text-primary" aria-hidden />
                   </span>

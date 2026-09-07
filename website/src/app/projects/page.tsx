@@ -99,10 +99,14 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
   const clearAllHref = searchParams.q ? `/projects?q=${encodeURIComponent(searchParams.q)}` : "/projects";
 
   return (
-    <div className="container-page py-10">
-      <PageHeader title="Project Marketplace" />
+    <div className="container-page py-8 sm:py-10 lg:py-12">
+      <PageHeader
+        eyebrow="Marketplace"
+        title="Project Marketplace"
+        description="Browse ready-to-use final-year and portfolio projects with source code, documentation and support — filter by category, price and type."
+      />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[240px_1fr]">
+      <div className="mt-8 grid gap-8 lg:grid-cols-[250px_1fr] lg:items-start">
         <FilterSheet title="Filters" activeCount={activeCount}>
           <ProjectFilters categories={categories} state={filterState} />
         </FilterSheet>
@@ -125,9 +129,15 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
               </Link>
             </div>
           )}
-          <div className="mb-4 text-sm text-ink-muted">
-            {count ?? 0} project{(count ?? 0) === 1 ? "" : "s"}
-            {page > 1 ? ` · page ${page} of ${pages}` : ""}
+          <div className="mb-5 flex items-center justify-between gap-3 border-b border-line pb-3 text-sm">
+            <span className="font-semibold text-ink">
+              {count ?? 0} project{(count ?? 0) === 1 ? "" : "s"}
+            </span>
+            {page > 1 ? (
+              <span className="text-ink-faint">
+                Page {page} of {pages}
+              </span>
+            ) : null}
           </div>
 
           {projects.length === 0 ? (
@@ -136,7 +146,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
               subtitle="Try widening the price range, clearing a filter, or a different search term."
             />
           ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {projects.map((p) => (
                 <ProjectCard key={p.id} project={p} />
               ))}

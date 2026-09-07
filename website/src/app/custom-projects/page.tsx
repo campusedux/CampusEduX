@@ -56,7 +56,7 @@ export default async function CustomProjectsPage() {
   }
 
   return (
-    <div className="container-page py-10">
+    <div className="container-page py-8 sm:py-10 lg:py-12">
       <h1 className="text-3xl font-bold text-ink">Custom Projects</h1>
       <p className="mt-3 max-w-2xl text-ink-muted">
         Need something the marketplace doesn&apos;t have yet? Describe what you need, pay a small token to start, and the

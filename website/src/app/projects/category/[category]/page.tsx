@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: { params: { category: string 
 export default async function CategoryPage({ params }: { params: { category: string } }) {
   const { name, projects } = await getData(params.category);
   return (
-    <div className="container-page py-10">
+    <div className="container-page py-8 sm:py-10 lg:py-12">
       <h1 className="text-3xl font-bold text-ink">{name}</h1>
       <p className="mt-2 text-ink-muted">Projects listed under {name}.</p>
       <ProjectGrid projects={projects} emptyTitle="No projects in this category yet" />

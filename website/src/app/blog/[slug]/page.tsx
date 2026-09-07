@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, CalendarDays, ChevronRight, Clock, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, Clock, RefreshCw } from "lucide-react";
 import {
   getBlogPost,
   getAllBlogSlugs,
@@ -14,6 +14,7 @@ import {
   stripMarkdown,
 } from "@/lib/blog";
 import { Markdown } from "@/components/learning/Markdown";
+import { Breadcrumb } from "@/components/ui";
 import { BlogCard } from "@/components/blog/BlogCard";
 import { BlogImage } from "@/components/blog/BlogImage";
 import { ArticleToc } from "@/components/blog/ArticleToc";
@@ -103,18 +104,7 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
       <div className="container-page py-8 sm:py-10">
         <div className="mx-auto flex max-w-5xl gap-10">
           <article className="min-w-0 max-w-[44rem] flex-1">
-            {/* Breadcrumb */}
-            <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-sm text-ink-faint">
-              <Link href="/" className="hover:text-ink">
-                Home
-              </Link>
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-              <Link href="/blog" className="hover:text-ink">
-                Blog
-              </Link>
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-              <span className="truncate text-ink-faint">{post.title}</span>
-            </nav>
+            <Breadcrumb items={[{ label: "Blog", href: "/blog" }, { label: post.title }]} />
 
             <header className="mt-5">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">

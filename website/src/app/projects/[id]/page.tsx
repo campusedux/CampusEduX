@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import JsonLd from "@/components/JsonLd";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
-import { Badge, Rating, PriceDisplay, TagPill, ReviewCard, SectionHeader, EmptyState } from "@/components/ui";
+import { Badge, Rating, PriceDisplay, TagPill, ReviewCard, SectionHeader, EmptyState, Breadcrumb } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { getCachedProjectDetail, getCachedTopProjectIds } from "@/lib/cache";
 import ProjectPurchasePanel from "./ProjectPurchasePanel";
@@ -89,7 +89,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
   }
 
   return (
-    <div className="container-page py-10">
+    <div className="container-page py-8 sm:py-10">
       <JsonLd data={productJsonLd} />
       <JsonLd
         data={breadcrumbJsonLd([
@@ -97,6 +97,8 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
           { name: project.title, path: `/projects/${project.id}` },
         ])}
       />
+
+      <Breadcrumb className="mb-6" items={[{ label: "Projects", href: "/projects" }, { label: project.title }]} />
 
       <div className="grid gap-8 lg:grid-cols-[1.15fr_1fr] lg:items-start">
         {/* Gallery */}
@@ -121,7 +123,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
             </div>
           )}
 
-          <div className="mt-5 rounded-2xl border border-line bg-white p-5 shadow-card">
+          <div className="card mt-5 p-5">
             <PriceDisplay price={project.price} size="lg" />
             <p className="mt-1 text-xs text-ink-faint">
               License: {project.license || "Standard"} · Platform fee {project.platform_fee_percent ?? 0}%

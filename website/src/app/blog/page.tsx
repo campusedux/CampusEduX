@@ -10,7 +10,8 @@ import {
 } from "@/lib/blog";
 import type { BlogPostCard } from "@/lib/blog";
 import { BlogCard } from "@/components/blog/BlogCard";
-import { EmptyState, Pagination } from "@/components/ui";
+import { EmptyState, Pagination, PageHeader } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { BRAND } from "@/lib/brand";
@@ -35,6 +36,14 @@ export const metadata: Metadata = {
 };
 
 type SP = { page?: string; q?: string; category?: string; tag?: string };
+
+const chipCls = (active: boolean) =>
+  cn(
+    "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
+    active
+      ? "border-primary bg-primary text-white"
+      : "border-line bg-white text-ink-muted hover:border-primary/40 hover:text-ink",
+  );
 
 export default async function BlogIndexPage({ searchParams }: { searchParams: SP }) {
   const page = Math.max(1, Number(searchParams.page ?? "1") || 1);
@@ -74,13 +83,13 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
         ? `#${tag}`
         : "Latest articles";
 
+  const [lead, ...restFeatured] = featured;
+
   return (
-    <div className="container-page py-10">
+    <div className="container-page py-8 sm:py-10 lg:py-12">
       <JsonLd data={breadcrumbJsonLd([{ name: "Blog", path: "/blog" }])} />
 
-      <h1 className="max-w-2xl text-3xl font-bold leading-tight tracking-tight text-ink sm:text-4xl">
-        {HERO_TITLE}
-      </h1>
+      <PageHeader eyebrow="CampusEduX Blog" title={HERO_TITLE} description={DESCRIPTION} />
 
       {missing ? (
         <EmptyState
@@ -91,24 +100,40 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
         />
       ) : (
         <>
+          {categories.length > 0 ? (
+            <nav aria-label="Blog categories" className="mt-6 flex flex-wrap gap-2">
+              <Link href="/blog" className={chipCls(!category && !tag && !q)}>
+                All
+              </Link>
+              {categories.map((c) => (
+                <Link key={c.slug} href={`/blog?category=${c.slug}`} className={chipCls(category === c.slug)}>
+                  {c.name}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
+
           {showFeatured && featured.length > 0 ? (
-            <section className="mt-8">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">Featured articles</h2>
-                <p className="mt-1 text-sm text-ink-muted">The latest thinking from the {BRAND.name} team.</p>
-              </div>
-              <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {featured.map((p, i) => (
-                  <BlogCard key={p.id} post={p} priority={i < 3} />
-                ))}
+            <section className="mt-10">
+              <h2 className="h-section">Featured articles</h2>
+              <p className="mt-1 text-sm text-ink-muted">The latest thinking from the {BRAND.name} team.</p>
+              <div className="mt-6 space-y-6">
+                {lead ? <BlogCard post={lead} priority featured /> : null}
+                {restFeatured.length > 0 ? (
+                  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {restFeatured.map((p, i) => (
+                      <BlogCard key={p.id} post={p} priority={i < 2} />
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </section>
           ) : null}
 
           {hideLatest ? null : (
-            <section className="mt-8">
+            <section className="mt-12">
               <div className="flex items-baseline justify-between gap-4">
-                <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">{latestHeading}</h2>
+                <h2 className="h-section">{latestHeading}</h2>
                 {isFiltered ? (
                   <Link
                     href="/blog"

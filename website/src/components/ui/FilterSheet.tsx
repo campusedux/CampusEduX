@@ -24,8 +24,8 @@ export function FilterSheet({
 
   return (
     <>
-      {/* Desktop: inline sidebar */}
-      <aside className="hidden lg:block">
+      {/* Desktop: inline sidebar, sticky alongside the results column */}
+      <aside className="hidden self-start lg:block lg:sticky lg:top-20">
         <div className="rounded-2xl border border-line bg-white p-5 shadow-card">
           <div className="mb-4 font-bold text-ink">{title}</div>
           {children}

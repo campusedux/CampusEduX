@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BookOpen, FileText, LayoutGrid } from "lucide-react";
 import { getLearningGrids, searchLearning } from "@/lib/learning";
 import type { LearningGridCard } from "@/lib/learning";
-import { EmptyState, Badge, ResourceCard } from "@/components/ui";
+import { EmptyState, Badge, ResourceCard, PageHeader } from "@/components/ui";
 import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
@@ -44,8 +44,12 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
   const [grids, hits] = await Promise.all([getLearningGrids(), q ? searchLearning(q, 30) : Promise.resolve([])]);
 
   return (
-    <div className="container-page py-10">
-      <h1 className="text-3xl font-bold tracking-tight text-ink">Learning</h1>
+    <div className="container-page py-8 sm:py-10 lg:py-12">
+      <PageHeader
+        eyebrow="Free resources"
+        title="Learning"
+        description="Structured tutorials, notes and documentation across programming, DSA, web development, databases and more — free to read."
+      />
 
       {q ? (
         <section className="mt-8">

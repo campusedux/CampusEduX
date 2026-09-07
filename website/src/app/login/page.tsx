@@ -15,7 +15,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-12 sm:px-6">
       <div className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
         <Link href="/" className="flex items-center gap-2" aria-label="CampusEduX home">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary text-base font-black text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-base font-black text-white">
             C
           </span>
           <span className="text-[15px] font-bold tracking-tight text-ink">

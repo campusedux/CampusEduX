@@ -2,13 +2,16 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { FileText, Wrench, Gift, ArrowRight } from "lucide-react";
+import { FileText, Wrench, Gift, ArrowRight, Sparkles } from "lucide-react";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import JobCard, { JobCardData } from "@/components/JobCard";
-import { SectionHeader, Rating, Reveal, Button } from "@/components/ui";
+import { SectionHeader, Rating, Reveal, Button, SearchBar } from "@/components/ui";
 import { LearningResources } from "@/components/home/LearningResources";
 import { ModuleGrid } from "@/components/home/ModuleGrid";
 import { HeroVisual } from "@/components/home/HeroVisual";
+import { BlogCard } from "@/components/blog/BlogCard";
+import { getLatestPosts } from "@/lib/blog";
+import type { BlogPostCard } from "@/lib/blog";
 import { BRAND } from "@/lib/brand";
 import { inWindow } from "@/lib/home";
 import { getCachedHomeData } from "@/lib/cache";
@@ -64,12 +67,17 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const { trending, jobs, testimonials, faqs, banner } = await getHomeData();
+  const [{ trending, jobs, testimonials, faqs, banner }, latestPosts] = await Promise.all([
+    getHomeData(),
+    // Same cross-request-cached helper `/blog` uses for its Featured strip.
+    getLatestPosts(3),
+  ]);
+  const posts = latestPosts as BlogPostCard[];
 
   return (
     <div className="pb-16 sm:pb-20">
       {/* Hero — an admin `banners` row for placement 'home' overrides the default copy. */}
-      <header className="container-page pb-8 pt-8 sm:pb-10 sm:pt-10">
+      <header className="container-page pb-8 pt-8 sm:pb-10 sm:pt-12">
         {banner ? (
           <Link
             href={banner.target_url || "/projects"}
@@ -113,13 +121,9 @@ export default async function HomePage() {
             />
             <div className="relative grid items-center gap-10 lg:grid-cols-[1.08fr_0.92fr] lg:gap-14">
               <div>
-                <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-                  {BRAND.tagline}
-                </span>
-                <h1 className="mt-5 max-w-xl text-[1.75rem] font-bold leading-[1.15] tracking-tight text-ink sm:text-4xl lg:text-[2.7rem]">
-                  Everything a student needs for a career, in one place.
-                </h1>
-                <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-ink-muted sm:text-base">
+                <span className="eyebrow inline-flex rounded-full bg-primary/10 px-3 py-1">{BRAND.tagline}</span>
+                <h1 className="h-hero mt-5 max-w-xl">Everything a student needs for a career, in one place.</h1>
+                <p className="lede mt-4 max-w-lg">
                   Buy or sell final-year projects, apply to jobs and internships, prepare for placements, build a
                   resume, and get a custom project built — all on one account, shared with the CampusEduX app.
                 </p>
@@ -128,6 +132,9 @@ export default async function HomePage() {
                   <Button href="/learning" variant="ghost">
                     Explore learning
                   </Button>
+                </div>
+                <div className="mt-6 max-w-md">
+                  <SearchBar action="/search" placeholder="Search projects, jobs, learning…" />
                 </div>
               </div>
               <div className="hidden lg:block">
@@ -140,13 +147,9 @@ export default async function HomePage() {
 
       <ModuleGrid />
 
-      <Reveal>
-        <LearningResources />
-      </Reveal>
-
       {trending.length > 0 && (
         <Reveal>
-          <section className="container-page pt-10 sm:pt-14">
+          <section className="container-page pt-12 sm:pt-16">
             <SectionHeader title="Trending projects" viewAllHref="/projects/trending" />
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {trending.map((p, i) => (
@@ -157,9 +160,13 @@ export default async function HomePage() {
         </Reveal>
       )}
 
+      <Reveal>
+        <LearningResources />
+      </Reveal>
+
       {jobs.length > 0 && (
         <Reveal>
-          <section className="container-page pt-10 sm:pt-14">
+          <section className="container-page pt-12 sm:pt-16">
             <SectionHeader title="Latest jobs" viewAllHref="/jobs" />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {jobs.map((j) => (
@@ -170,9 +177,23 @@ export default async function HomePage() {
         </Reveal>
       )}
 
+      {posts.length > 0 && (
+        <Reveal>
+          <section className="container-page pt-12 sm:pt-16">
+            <SectionHeader title="Latest from the blog" viewAllHref="/blog" viewAllLabel="All articles" />
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {posts.map((p, i) => (
+                <BlogCard key={p.id} post={p} priority={i < 3} />
+              ))}
+            </div>
+          </section>
+        </Reveal>
+      )}
+
       {/* Static module overview — links into the dynamic sections above/below. */}
       <Reveal>
-        <section className="container-page pt-10 sm:pt-14">
+        <section className="container-page pt-12 sm:pt-16">
+          <SectionHeader title="More on CampusEduX" />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { href: "/resume", title: "Resume Builder", body: "Guided sections, ATS scoring, PDF export.", icon: FileText },
@@ -181,11 +202,7 @@ export default async function HomePage() {
             ].map((m) => {
               const Icon = m.icon;
               return (
-                <Link
-                  key={m.href}
-                  href={m.href}
-                  className="group flex items-start gap-4 rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none"
-                >
+                <Link key={m.href} href={m.href} className="card card-hover group flex items-start gap-4 p-5">
                   <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
                     <Icon className="h-5 w-5 text-primary" aria-hidden />
                   </span>
@@ -206,13 +223,36 @@ export default async function HomePage() {
         </section>
       </Reveal>
 
+      {/* Premium promotion */}
+      <Reveal>
+        <section className="container-page pt-12 sm:pt-16">
+          <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/40 px-6 py-10 sm:px-12 sm:py-12">
+            <div className="relative flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+              <div className="max-w-xl">
+                <span className="eyebrow inline-flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                  CampusEduX Premium
+                </span>
+                <h2 className="h-section mt-2">Go further, faster with Premium.</h2>
+                <p className="lede mt-2">
+                  Priority access, extra placement material and faster support — everything already free stays free.
+                </p>
+              </div>
+              <Button href="/premium" size="lg" rightIcon={ArrowRight} className="flex-shrink-0">
+                See plans
+              </Button>
+            </div>
+          </div>
+        </section>
+      </Reveal>
+
       {testimonials.length > 0 && (
         <Reveal>
-          <section className="container-page pt-10 sm:pt-14">
+          <section className="container-page pt-12 sm:pt-16">
             <SectionHeader title="What students say" />
             <div className="grid gap-5 md:grid-cols-3">
               {testimonials.map((t) => (
-                <figure key={t.id} className="rounded-2xl border border-line bg-white p-5 shadow-card">
+                <figure key={t.id} className="card p-5">
                   {t.rating > 0 && <Rating value={t.rating} showCount={false} />}
                   <blockquote className="mt-2 text-sm text-ink-muted">“{t.quote}”</blockquote>
                   <figcaption className="mt-3 text-sm font-semibold text-ink">
@@ -228,7 +268,7 @@ export default async function HomePage() {
 
       {faqs.length > 0 && (
         <Reveal>
-          <section className="container-page pt-10 sm:pt-14">
+          <section className="container-page pt-12 sm:pt-16">
             <SectionHeader title="Frequently asked questions" viewAllHref="/faq" viewAllLabel="All FAQs" />
             <div className="divide-y divide-line border-y border-line">
               {faqs.map((f) => (
@@ -246,6 +286,31 @@ export default async function HomePage() {
           </section>
         </Reveal>
       )}
+
+      {/* Final CTA */}
+      <Reveal>
+        <section className="container-page pt-12 sm:pt-16">
+          <div className="rounded-3xl bg-primary px-6 py-10 text-center text-white sm:px-12 sm:py-14">
+            <h2 className="mx-auto max-w-2xl text-2xl font-bold tracking-tight sm:text-3xl">
+              Start with one account — the web and the app stay in sync.
+            </h2>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Link
+                href="/register"
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-white px-6 text-sm font-semibold text-primary transition hover:bg-white/90 active:scale-[.98] motion-reduce:active:scale-100"
+              >
+                Create your account
+              </Link>
+              <Link
+                href="/projects"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-white/40 px-6 text-sm font-semibold text-white transition hover:bg-white/10 active:scale-[.98] motion-reduce:active:scale-100"
+              >
+                Browse the marketplace
+              </Link>
+            </div>
+          </div>
+        </section>
+      </Reveal>
     </div>
   );
 }

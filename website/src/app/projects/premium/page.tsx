@@ -20,7 +20,7 @@ export default async function PremiumProjectsPage() {
     projects = (data ?? []) as ProjectCardData[];
   }
   return (
-    <div className="container-page py-10">
+    <div className="container-page py-8 sm:py-10 lg:py-12">
       <h1 className="text-3xl font-bold text-ink">Premium Projects</h1>
       <p className="mt-2 text-ink-muted">Curated, higher-tier projects — included with a CampusEduX Premium membership.</p>
       <ProjectGrid projects={projects} emptyTitle="No premium projects listed yet" />

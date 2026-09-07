@@ -6,31 +6,48 @@ import type { BlogPostCard as BlogPostCardData } from "@/lib/blog.types";
 import { BlogImage } from "./BlogImage";
 
 /**
- * The single blog listing tile — shared by the Featured grid, the Latest grid
- * and the "Related articles" strip so every card in the blog reads the same.
- * Surface language matches `ResourceCard` (rounded-2xl, `border-line`,
- * `shadow-card`, hover lift). `h-full` + the flex column let a CSS-grid row
- * equalise every card's height regardless of title / excerpt length.
+ * The blog listing tile — shared by the Featured block, the Latest grid and the
+ * "Related articles" strip so every card in the blog reads the same. Surface
+ * language matches `.card` (rounded-2xl, `border-line`, `shadow-card`, hover
+ * lift). `h-full` + the flex column let a CSS-grid row equalise card heights.
+ *
+ * `featured` switches to a wide two-column layout (image left, text right) from
+ * `sm` up — used for the single lead article on the blog index. Presentation
+ * only; same href, same data.
  */
 export function BlogCard({
   post,
   priority = false,
+  featured = false,
 }: {
   post: BlogPostCardData;
   priority?: boolean;
+  featured?: boolean;
 }) {
   return (
     <Link
       href={`/blog/${post.slug}`}
-      className="card card-hover group flex h-full flex-col overflow-hidden"
+      className={cn(
+        "card card-hover group flex h-full flex-col overflow-hidden",
+        featured && "sm:flex-row",
+      )}
     >
-      <div className="relative aspect-[16/9] flex-shrink-0 overflow-hidden bg-primary-50">
+      <div
+        className={cn(
+          "relative flex-shrink-0 overflow-hidden bg-primary-50",
+          featured ? "aspect-[16/9] sm:aspect-auto sm:w-[46%]" : "aspect-[16/9]",
+        )}
+      >
         {post.featured_image ? (
           <BlogImage
             src={post.featured_image}
             alt={post.featured_image_alt || post.title}
             priority={priority}
-            sizes="(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw"
+            sizes={
+              featured
+                ? "(min-width: 1024px) 560px, (min-width: 640px) 46vw, 100vw"
+                : "(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw"
+            }
             className="h-full w-full"
             imgClassName="transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none"
           />
@@ -41,7 +58,7 @@ export function BlogCard({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col p-5">
+      <div className={cn("flex flex-1 flex-col p-5", featured && "sm:p-7")}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           {post.category_name ? (
             <span className="inline-flex items-center rounded-full bg-primary-50 px-2.5 py-1 font-semibold uppercase tracking-wide text-primary">
@@ -56,12 +73,24 @@ export function BlogCard({
           ) : null}
         </div>
 
-        <h3 className="mt-3 line-clamp-2 text-lg font-bold leading-snug text-ink group-hover:text-primary">
+        <h3
+          className={cn(
+            "mt-3 line-clamp-2 font-bold leading-snug text-ink group-hover:text-primary",
+            featured ? "text-xl sm:text-2xl" : "text-lg",
+          )}
+        >
           {post.title}
         </h3>
 
         {post.excerpt ? (
-          <p className="mt-2 line-clamp-2 flex-1 text-sm text-ink-muted">{post.excerpt}</p>
+          <p
+            className={cn(
+              "mt-2 flex-1 text-sm text-ink-muted",
+              featured ? "line-clamp-3" : "line-clamp-2",
+            )}
+          >
+            {post.excerpt}
+          </p>
         ) : (
           <span className="flex-1" />
         )}
