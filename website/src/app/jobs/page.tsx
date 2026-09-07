@@ -53,11 +53,7 @@ export default async function JobsPage({ searchParams }: { searchParams: SP }) {
 
   return (
     <div className="container-page py-10">
-      <PageHeader
-        eyebrow="Careers"
-        title="Jobs & Internships"
-        description="Roles posted for CampusEduX students — filter by location and type, and apply from the web or the app with the same account."
-      />
+      <PageHeader title="Jobs & Internships" />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[240px_1fr]">
         <FilterSheet title="Filters" activeCount={activeCount}>

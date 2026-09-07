@@ -29,7 +29,8 @@ export const CACHE_TAGS = {
   learning: "learning",
   premium: "premium",
   resumeTemplates: "resume-templates",
-  cms: "cms", // faqs / testimonials / banners / offers / reward_settings
+  cms: "cms", // faqs / testimonials / banners / reward_settings
+  blog: "blog", // blog_posts / blog_categories
 } as const;
 
 const FIVE_MIN = 300;
@@ -82,7 +83,7 @@ export const getCachedCategoryIds = unstable_cache(
 );
 
 // ---- Home page ------------------------------------------------------------
-// The home route is ISR (`revalidate = 300`) but its 6 queries still run on
+// The home route is ISR (`revalidate = 300`) but its 5 queries still run on
 // every cold/background render. Cache the raw rows (tags: home + cms) so a
 // revalidation is one cache read, and an admin edit can bust it immediately.
 
@@ -100,16 +101,15 @@ export interface HomeRawData {
     starts_at: string | null;
     ends_at: string | null;
   }[];
-  offers: unknown[];
 }
 
 export const getCachedHomeData = unstable_cache(
   async (): Promise<HomeRawData> => {
-    const empty: HomeRawData = { trending: [], jobs: [], testimonials: [], faqs: [], banners: [], offers: [] };
+    const empty: HomeRawData = { trending: [], jobs: [], testimonials: [], faqs: [], banners: [] };
     const supabase = getPublicSupabase();
     if (!supabase) return empty;
 
-    const [trending, jobs, testimonials, faqs, banners, offers] = await Promise.all([
+    const [trending, jobs, testimonials, faqs, banners] = await Promise.all([
       supabase
         .from("projects")
         .select(PROJECT_LIST_FIELDS)
@@ -130,12 +130,6 @@ export const getCachedHomeData = unstable_cache(
         .eq("status", "active")
         .order("priority", { ascending: false })
         .limit(5),
-      supabase
-        .from("offer_banners")
-        .select("id,title,description,discount_label,coupon_code,is_active,sort_order")
-        .eq("is_active", true)
-        .order("sort_order")
-        .limit(8),
     ]);
 
     return {
@@ -144,7 +138,6 @@ export const getCachedHomeData = unstable_cache(
       testimonials: testimonials.data ?? [],
       faqs: faqs.data ?? [],
       banners: banners.data ?? [],
-      offers: offers.data ?? [],
     };
   },
   ["catalog:home"],

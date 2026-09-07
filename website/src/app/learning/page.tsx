@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BookOpen, FileText, LayoutGrid, Code2 } from "lucide-react";
+import { BookOpen, FileText, LayoutGrid } from "lucide-react";
 import { getLearningGrids, searchLearning } from "@/lib/learning";
 import type { LearningGridCard } from "@/lib/learning";
 import { EmptyState, Badge, ResourceCard } from "@/components/ui";
@@ -45,30 +45,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
 
   return (
     <div className="container-page py-10">
-      <div className="max-w-2xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Free resources</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Learning</h1>
-        <p className="mt-2 text-ink-muted">
-          Structured, documentation-style learning resources — published by the CampusEduX team and kept up to date.
-          Pick a resource to start reading.
-        </p>
-      </div>
-
-      <Link
-        href="/compiler"
-        className="group mt-6 flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition hover:border-primary/30 hover:shadow-card-lg"
-      >
-        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary">
-          <Code2 className="h-5 w-5" aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-ink group-hover:text-primary">Code Compiler</span>
-          <span className="block text-sm text-ink-muted">
-            Write and run Java, Python, JavaScript, C and C++ in your browser — no setup.
-          </span>
-        </span>
-        <ArrowRight className="h-4 w-4 flex-shrink-0 text-primary transition-transform group-hover:translate-x-0.5" aria-hidden />
-      </Link>
+      <h1 className="text-3xl font-bold tracking-tight text-ink">Learning</h1>
 
       {q ? (
         <section className="mt-8">
@@ -114,7 +91,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
       ) : null}
 
       {grids.length === 0 ? (
-        <section className="mt-10">
+        <section className="mt-8">
           <h2 className="sr-only">All learning resources</h2>
           <EmptyState
             className="mt-4"
@@ -124,7 +101,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
           />
         </section>
       ) : (
-        <section className="mt-10">
+        <section className="mt-8">
           {!q ? (
             <h2 className="sr-only">All learning resources</h2>
           ) : (

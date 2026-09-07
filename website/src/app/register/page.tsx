@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { emitSessionChange } from "@/lib/sessionSignal";
 import { Field, Input } from "@/components/ui";
 import { CURRENT_LEGAL_VERSION, LEGAL_VERSIONS } from "@/legal/config";
 
@@ -72,6 +73,8 @@ function RegisterForm() {
             p_source: "website_register",
           })
           .then(undefined, () => undefined);
+        // Session cookie is set — flip the header nav to signed-in without a reload.
+        emitSessionChange();
         router.push("/account");
         router.refresh();
       } else {

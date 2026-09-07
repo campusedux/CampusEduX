@@ -25,6 +25,14 @@ const csp = [
   "connect-src 'self' https://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com",
   "frame-src https://api.razorpay.com https://checkout.razorpay.com",
   "frame-ancestors 'none'",
+  // Nothing on the site uses <object>/<embed>/<applet>, and there is no
+  // <base> tag — lock both down so an injected one can't repoint relative
+  // URLs or load a plugin. `form-action` keeps a submitted <form> pointed at
+  // our own origin (Razorpay is an iframe/redirect flow, not a cross-origin
+  // form POST from our pages).
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
 ].join("; ");
 
 const nextConfig = {
@@ -77,6 +85,15 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "Content-Security-Policy", value: csp },
+          // The site is HTTPS-only in production (Vercel). Pin browsers to
+          // HTTPS for two years so a downgrade/SSL-strip MITM can't reach a
+          // plaintext first hop. `includeSubDomains` covers api./www.; add
+          // `; preload` once every subdomain is confirmed HTTPS. Ignored over
+          // plain HTTP (`next start` / local dev), so it is safe to always send.
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          // CSP `frame-ancestors 'none'` already blocks framing in modern
+          // browsers; this is the legacy-browser backstop against clickjacking.
+          { key: "X-Frame-Options", value: "DENY" },
         ],
       },
       {

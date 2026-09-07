@@ -2,8 +2,7 @@ import Link from "next/link";
 import { BRAND } from "@/lib/brand";
 import { MobileNav } from "./MobileNav";
 import { HeaderLinks } from "./HeaderLinks";
-import { HeaderSearch } from "./HeaderSearch";
-import { HeaderSearchButton } from "./HeaderSearchButton";
+import { GlobalSearchField, GlobalSearchTrigger } from "@/components/search/GlobalSearch";
 import { NotificationBell } from "./NotificationBell";
 import { AuthMenu } from "./AuthMenu";
 
@@ -40,8 +39,10 @@ export function Header(){
 
         {/* Right — actions */}
         <div className="flex items-center justify-end gap-1.5 sm:gap-2">
-          <HeaderSearch />
-          <HeaderSearchButton />
+          <div className="hidden lg:block">
+            <GlobalSearchField variant="header" />
+          </div>
+          <GlobalSearchTrigger />
           <NotificationBell />
           <AuthMenu />
           <MobileNav />

@@ -100,11 +100,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
 
   return (
     <div className="container-page py-10">
-      <PageHeader
-        eyebrow="Marketplace"
-        title="Project Marketplace"
-        description="Academic, personal and business projects listed by the CampusEduX community — filter by category and price, or search by title."
-      />
+      <PageHeader title="Project Marketplace" />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[240px_1fr]">
         <FilterSheet title="Filters" activeCount={activeCount}>

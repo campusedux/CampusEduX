@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { emitSessionChange } from "@/lib/sessionSignal";
 import { safeInternalPath } from "@/lib/nav";
 import { Field, Input } from "@/components/ui";
 
@@ -59,6 +60,9 @@ function LoginForm() {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw new Error(signInError.message);
 
+      // The session cookie is set now — tell the header islands to re-check
+      // `/api/session` so the nav flips to the signed-in state without a reload.
+      emitSessionChange();
       router.push(safeInternalPath(searchParams.get("next")));
       router.refresh();
     } catch (err: any) {

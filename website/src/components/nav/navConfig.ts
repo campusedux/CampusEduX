@@ -19,6 +19,7 @@ import {
   HelpCircle,
   Info,
   Mail,
+  Newspaper,
 } from "lucide-react";
 
 export interface NavItem {
@@ -37,6 +38,7 @@ export const HEADER_LINKS: NavItem[] = [
   { label: "Projects", href: "/projects", icon: LayoutGrid, tint: "#4F39F6", bg: "#EEF0FF" },
   { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
   { label: "Learning", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
+  { label: "Blog", href: "/blog", icon: Newspaper, tint: "#7C3AED", bg: "#EDE9FE" },
   { label: "Resume", href: "/resume", icon: FileText, tint: "#16A34A", bg: "#DCFCE7" },
   { label: "Compiler", href: "/compiler", icon: TerminalSquare, tint: "#0D9488", bg: "#CCFBF1" },
 ];
@@ -50,6 +52,7 @@ export const DRAWER_LINKS: NavItem[] = [
   { label: "My Custom Projects", href: "/custom-projects/my-projects", icon: Boxes, tint: "#0D9488", bg: "#CCFBF1", authOnly: true },
   { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
   { label: "Learning", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
+  { label: "Blog", href: "/blog", icon: Newspaper, tint: "#7C3AED", bg: "#EDE9FE" },
   { label: "Resume Builder", href: "/resume", icon: FileText, tint: "#16A34A", bg: "#DCFCE7" },
   { label: "Compiler", href: "/compiler", icon: TerminalSquare, tint: "#0D9488", bg: "#CCFBF1" },
   { label: "Companies", href: "/jobs/companies", icon: Building2, tint: "#0D9488", bg: "#CCFBF1" },

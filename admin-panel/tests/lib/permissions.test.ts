@@ -55,6 +55,25 @@ describe('editor', () => {
     expect(can('editor', 'orders', 'edit')).toBe(false);
     expect(can('editor', 'students', 'edit')).toBe(false);
   });
+
+  it('manages the Blog (view/add/edit) but cannot delete posts', () => {
+    expect(can('editor', 'blog', 'view')).toBe(true);
+    expect(can('editor', 'blog', 'add')).toBe(true);
+    expect(can('editor', 'blog', 'edit')).toBe(true);
+    expect(can('editor', 'blog', 'delete')).toBe(false);
+  });
+});
+
+describe('blog module', () => {
+  it('is a gate-able module with sensible per-role defaults', () => {
+    expect(MODULES).toContain('blog');
+    expect(can('super_admin', 'blog', 'delete')).toBe(true);
+    expect(can('admin', 'blog', 'delete')).toBe(true);
+    expect(can('support', 'blog', 'view')).toBe(true);
+    expect(can('support', 'blog', 'edit')).toBe(false);
+    expect(can('viewer', 'blog', 'view')).toBe(true);
+    expect(can('viewer', 'blog', 'add')).toBe(false);
+  });
 });
 
 describe('support', () => {

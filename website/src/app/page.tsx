@@ -6,8 +6,6 @@ import { FileText, Wrench, Gift, ArrowRight } from "lucide-react";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import { SectionHeader, Rating, Reveal, Button } from "@/components/ui";
-import { OffersStrip, type OfferBanner } from "@/components/home/OffersStrip";
-import { PremiumPromo } from "@/components/home/PremiumPromo";
 import { LearningResources } from "@/components/home/LearningResources";
 import { ModuleGrid } from "@/components/home/ModuleGrid";
 import { HeroVisual } from "@/components/home/HeroVisual";
@@ -45,7 +43,6 @@ const getHomeData = cache(async () => {
           target_url: activeBanner.target_url,
         }
       : (null as HomeBanner | null),
-    offers: raw.offers as OfferBanner[],
   };
 });
 
@@ -67,7 +64,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const { trending, jobs, testimonials, faqs, banner, offers } = await getHomeData();
+  const { trending, jobs, testimonials, faqs, banner } = await getHomeData();
 
   return (
     <div className="pb-16 sm:pb-20">
@@ -142,12 +139,6 @@ export default async function HomePage() {
       </header>
 
       <ModuleGrid />
-
-      <OffersStrip offers={offers} />
-
-      <section className="container-page pt-10">
-        <PremiumPromo />
-      </section>
 
       <Reveal>
         <LearningResources />

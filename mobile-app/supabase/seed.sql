@@ -103,6 +103,8 @@ on conflict (id) do nothing;
 --    SEARCH_PROJECTS by title -> SAMPLE_ALL_PROJECTS). salesCount = reviewCount*2.
 --    Shared detail fields come from sampleProjectDetail() / sampleOwnedProjectDetail().
 -- ---------------------------------------------------------------------------
+-- [2026-09-07] Marketplace/Jobs/Companies demo data removed — block disabled.
+/*
 insert into public.projects
   (id, title, category_id, category_name, tech_stack, price, rating, review_count,
    is_premium, is_best_seller, sales_count, description, live_demo_url,
@@ -140,6 +142,7 @@ from (values
   ('se-5', 'E-Commerce with Payment Gateway','web-development',    'Web Development',    array['React','Node.js','Razorpay'],     549, 4.6, 102, false, false, 28)
 ) as v(id, title, category_id, category_name, tech_stack, price, rating, review_count, is_premium, is_best_seller, age_days)
 on conflict (id) do nothing;
+*/
 
 -- GitHub / repo metadata for the "owned project" flow (sampleOwnedProjectDetail).
 update public.projects set
@@ -154,6 +157,8 @@ where id = 'tr-1';
 -- 3. Project deliverables for the demo "owned" project tr-1
 --    (sampleProjectFiles / sampleVersionHistory)
 -- ---------------------------------------------------------------------------
+-- [2026-09-07] Marketplace/Jobs/Companies demo data removed — block disabled.
+/*
 insert into public.project_files (id, project_id, category, label, file_name, size_mb, storage_path, sort_order) values
   ('tr-1-main-1', 'tr-1', 'main',          'Source Code (Full Project)',        'source-code.zip',        245,   'tr-1/source-code.zip',        1),
   ('tr-1-main-2', 'tr-1', 'main',          'Admin Panel',                       'admin-panel.zip',         89,   'tr-1/admin-panel.zip',        2),
@@ -179,10 +184,13 @@ insert into public.project_versions (id, project_id, version, is_latest, release
   ('a1000000-0000-0000-0000-000000000010', 'tr-1', '1.0', false, now() - interval '43 days', 120,
    '["Project Setup","Basic Structure"]', 4)
 on conflict (id) do nothing;
+*/
 
 -- ---------------------------------------------------------------------------
 -- 4. Reviews for tr-1   (sampleReviews)
 -- ---------------------------------------------------------------------------
+-- [2026-09-07] Marketplace/Jobs/Companies demo data removed — block disabled.
+/*
 insert into public.reviews (id, project_id, user_id, rating, comment, created_at) values
   ('b1000000-0000-0000-0000-000000000001', 'tr-1', '44444444-4444-4444-4444-444444444444', 5,
    'Great project! Well structured and easy to customize.', now() - interval '2 days'),
@@ -191,11 +199,14 @@ insert into public.reviews (id, project_id, user_id, rating, comment, created_at
   ('b1000000-0000-0000-0000-000000000003', 'tr-1', '22222222-2222-2222-2222-222222222222', 5,
    'Perfect for learning. Recommended!', now() - interval '14 days')
 on conflict (id) do nothing;
+*/
 
 -- ---------------------------------------------------------------------------
 -- 5. Wishlist / purchases / downloads for the demo user
 --    (sampleWishlist / samplePurchased / sampleDownloads)
 -- ---------------------------------------------------------------------------
+-- [2026-09-07] Marketplace/Jobs/Companies demo data removed — block disabled.
+/*
 insert into public.wishlists (user_id, project_id, created_at) values
   ('11111111-1111-1111-1111-111111111111', 'tr-1', now() - interval '5 days'),
   ('11111111-1111-1111-1111-111111111111', 'pr-3', now() - interval '8 days'),
@@ -219,10 +230,13 @@ insert into public.downloads (id, user_id, project_id, file_label, file_size_mb,
   ('d2000000-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', 'pr-3', 'Documentation (PDF)',  12.1, now() - interval '32 days'),
   ('d2000000-0000-0000-0000-000000000004', '11111111-1111-1111-1111-111111111111', 'tr-3', 'Source Code (ZIP)',     8.9, now() - interval '47 days')
 on conflict (id) do nothing;
+*/
 
 -- ---------------------------------------------------------------------------
 -- 6. Companies + recruiter   (SAMPLE_COMPANIES + SAMPLE_PLACEMENT_COMPANIES)
 -- ---------------------------------------------------------------------------
+-- [2026-09-07] Marketplace/Jobs/Companies demo data removed — block disabled.
+/*
 insert into public.companies (id, name, logo_url, website, rating, review_count, employee_count, about, open_jobs_count) values
   ('google',    'Google',    null, 'www.google.com',    4.4, 12500, '10k+', 'Google''s mission is to organize the world''s information and make it universally accessible and useful.', 123),
   ('microsoft', 'Microsoft', null, 'www.microsoft.com', 4.3,  9800, '10k+', 'Microsoft empowers every person and organization on the planet to achieve more.', 98),
@@ -241,10 +255,13 @@ insert into public.recruiters (id, company_id, name, title, rating, review_count
    'neha.verma@example.com', '+91 98765 12345', 'Mumbai, India',
    'Neha has 6+ years of experience in hiring top tech talent across India. She specializes in full-cycle recruitment for IT roles.')
 on conflict (id) do nothing;
+*/
 
 -- ---------------------------------------------------------------------------
 -- 7. Jobs   (SAMPLE_JOBS + generic detail from sampleJobDetail)
 -- ---------------------------------------------------------------------------
+-- [2026-09-07] Marketplace/Jobs/Companies demo data removed — block disabled.
+/*
 insert into public.jobs
   (id, title, company_id, company_name, recruiter_id, location, salary_range,
    salary_min_lpa, salary_max_lpa, job_type, description, requirements, skills,
@@ -271,6 +288,7 @@ from (values
   ('job-10', 'Data Scientist',       'microsoft', 'Microsoft', null,    'Hyderabad, India', '₹12-20 LPA', 12, 20, 5)
 ) as v(id, title, company_id, company_name, recruiter_id, location, salary_range, smin, smax, age_days)
 on conflict (id) do nothing;
+*/
 
 -- ---------------------------------------------------------------------------
 -- 8. Uploaded resume + job applications for the demo user
@@ -280,6 +298,8 @@ insert into public.resumes (id, user_id, file_name, file_url, uploaded_at) value
   ('bb000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'My Resume.pdf', '', now() - interval '8 days')
 on conflict (id) do nothing;
 
+-- [2026-09-07] Marketplace/Jobs/Companies demo data removed — block disabled.
+/*
 insert into public.applications (id, user_id, job_id, resume_id, status, created_at) values
   ('cc000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'job-6', 'bb000000-0000-0000-0000-000000000001', 'in_review',   now() - interval '7 days'),
   ('cc000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'job-5', 'bb000000-0000-0000-0000-000000000001', 'shortlisted', now() - interval '12 days'),
@@ -310,6 +330,7 @@ insert into public.saved_jobs (user_id, job_id, created_at) values
   ('11111111-1111-1111-1111-111111111111', 'job-8', now() - interval '10 days'),
   ('11111111-1111-1111-1111-111111111111', 'job-9', now() - interval '14 days')
 on conflict (user_id, job_id) do nothing;
+*/
 
 insert into public.job_alerts (user_id, enabled, job_role, location, experience, salary_range, job_type) values
   ('11111111-1111-1111-1111-111111111111', true, 'Frontend Developer', 'Bangalore, India', '1 - 5 Years', '₹5 LPA - ₹15 LPA', 'Full Time')

@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
  *   { "path": "/learning", "type": "layout" }// re-render a subtree
  *
  * Known tags: projects, jobs, categories, companies, home, learning, premium,
- * resume-templates, cms.
+ * resume-templates, cms, blog.
  *
  * No secret configured → disabled (404). Wrong secret → 401. Never returns
  * data, never mutates anything but the cache.
@@ -33,6 +33,7 @@ const ALLOWED_TAGS = new Set([
   "premium",
   "resume-templates",
   "cms",
+  "blog",
 ]);
 
 export async function POST(req: Request) {

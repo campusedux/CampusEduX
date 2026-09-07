@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Megaphone, X } from "lucide-react";
-import { createBrowserSupabase } from "@/lib/supabase/browser";
-import { inWindow } from "@/lib/home";
 
 interface Announcement {
   id: string;
@@ -17,6 +15,10 @@ const DISMISS_KEY = "cex_announcement_dismissed";
  * Site-wide announcement strip driven by the `announcements` table
  * (status='active', within its date window). Dismissable per browser session.
  * Renders nothing when there is no active announcement.
+ *
+ * The active-announcement lookup (status + date window) runs server-side in
+ * `/api/announcements` — an anon, CDN-cacheable endpoint — so this island no
+ * longer needs a browser Supabase client.
  */
 export function AnnouncementBar() {
   const [item, setItem] = useState<Announcement | null>(null);
@@ -24,25 +26,22 @@ export function AnnouncementBar() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const supabase = createBrowserSupabase();
-      const { data } = await supabase
-        .from("announcements")
-        .select("id,title,body,status,starts_at,ends_at")
-        .eq("status", "active")
-        .order("updated_at", { ascending: false })
-        .limit(5);
-      if (!active || !data) return;
-      const now = Date.now();
-      const first = data.find((a) => inWindow(a.starts_at, a.ends_at, now));
-      if (!first) return;
-      let dismissed: string | null = null;
       try {
-        dismissed = sessionStorage.getItem(DISMISS_KEY);
+        const res = await fetch("/api/announcements");
+        if (!active || !res.ok) return;
+        const { announcement } = (await res.json()) as { announcement: Announcement | null };
+        if (!active || !announcement) return;
+        let dismissed: string | null = null;
+        try {
+          dismissed = sessionStorage.getItem(DISMISS_KEY);
+        } catch {
+          /* storage blocked — show it */
+        }
+        if (dismissed === announcement.id) return;
+        setItem(announcement);
       } catch {
-        /* storage blocked — show it */
+        /* offline / network error — no bar (same as no active announcement) */
       }
-      if (dismissed === first.id) return;
-      setItem({ id: first.id, title: first.title, body: first.body });
     })();
     return () => {
       active = false;

@@ -2,7 +2,7 @@
 
 import { Label, Input, Select, Textarea } from '@/components/ui/primitives';
 import { CODING_LANGUAGES, CODING_LANGUAGE_LABEL, DIFFICULTIES } from '@/lib/learning/constants';
-import { MarkdownEditor } from './MarkdownEditor';
+import { MarkdownEditor } from '@/components/learning/MarkdownEditor';
 import type { TopicCodingProblem } from '@/lib/learning/queries';
 
 const j = (v: unknown) => (v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v, null, 2));

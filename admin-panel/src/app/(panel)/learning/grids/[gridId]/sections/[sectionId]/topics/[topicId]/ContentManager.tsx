@@ -11,7 +11,7 @@ import { CONTENT_TYPES, CONTENT_TYPE_LABEL, DIFFICULTIES } from '@/lib/learning/
 import type { LearningContent } from '@/lib/learning/queries';
 import { ReorderButtons, useActionToast, type ActionResult } from '@/app/(panel)/learning/_components/shared';
 import { createContent, updateContent, deleteContent, reorderContent } from '@/app/(panel)/learning/actions';
-import { MarkdownEditor } from './MarkdownEditor';
+import { MarkdownEditor } from '@/components/learning/MarkdownEditor';
 
 type Perms = { add: boolean; edit: boolean; delete: boolean };
 

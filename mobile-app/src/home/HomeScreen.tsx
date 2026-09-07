@@ -186,6 +186,24 @@ export function HomeScreen() {
         )}
       </View>
 
+      {/* Learning section — sits directly above Latest Jobs and uses the same card as jobs. */}
+      <View className="mt-3">
+        <SectionHeader title="Learning" onViewAll={openLearn} />
+        {learning.isLoading ? (
+          <LoadingState label="Loading learning resources..." />
+        ) : learning.isError ? (
+          <ErrorState message="Couldn't load learning resources." onRetry={() => learning.refetch()} />
+        ) : learning.data && learning.data.length > 0 ? (
+          learning.data
+            .slice(0, 4)
+            .map((grid) => (
+              <LearningCard key={grid.id} grid={grid} onPress={() => openGrid(grid.slug, grid.name)} />
+            ))
+        ) : (
+          <EmptyState title="No learning resources yet" />
+        )}
+      </View>
+
       <View className="mt-3">
         <SectionHeader title="Latest Jobs" onViewAll={() => (navigation as any).navigate("LatestJobs")} />
         {jobs.isLoading ? (
@@ -199,49 +217,48 @@ export function HomeScreen() {
         )}
       </View>
 
-      {/* Learning section — sits below Jobs by design (bottom of the Home feed). */}
-      <View className="mt-3">
-        <SectionHeader title="Learning" onViewAll={openLearn} />
-        {learning.isLoading ? (
-          <LoadingState label="Loading learning resources..." />
-        ) : learning.isError ? (
-          <ErrorState message="Couldn't load learning resources." onRetry={() => learning.refetch()} />
-        ) : learning.data && learning.data.length > 0 ? (
-          <View className="mb-2">
-            {learning.data.slice(0, 4).map((grid) => (
-              <LearningRow key={grid.id} grid={grid} onPress={() => openGrid(grid.slug, grid.name)} />
-            ))}
-          </View>
-        ) : (
-          <EmptyState title="No learning resources yet" />
-        )}
-      </View>
-
       <View className="h-6" />
     </Screen>
   );
 }
 
-function LearningRow({ grid, onPress }: { grid: LearningGridCard; onPress: () => void }) {
+/**
+ * Learning card — mirrors {@link JobCard} exactly: same width, corner radius,
+ * padding, vertical spacing, shadow and bottom margin, so the Learning section
+ * reads as a full content feed rather than a compact list. Book icon + title +
+ * a two-line description, then a bottom row with a topic-count badge (same style
+ * as the job-type pill) and a right-aligned arrow.
+ */
+function LearningCard({ grid, onPress }: { grid: LearningGridCard; onPress: () => void }) {
+  const topicLabel = `${grid.topic_count} Topic${grid.topic_count === 1 ? "" : "s"}`;
   return (
     <PressableScale
       onPress={onPress}
-      className="flex-row items-center bg-white rounded-2xl border border-gray-100 p-3 mb-3"
+      className="bg-white rounded-2xl border border-gray-100 p-4 mb-3"
       style={CARD_SHADOW}
     >
-      <View className="w-11 h-11 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: "#EEF0FF" }}>
-        <Ionicons name="library-outline" size={20} color="#4F39F6" />
+      <View className="flex-row items-start">
+        <View className="w-12 h-12 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: "#EEF0FF" }}>
+          <Ionicons name="book-outline" size={22} color="#4F39F6" />
+        </View>
+
+        <View className="flex-1">
+          <Text className="font-bold text-gray-900" numberOfLines={1}>
+            {grid.name}
+          </Text>
+          <Text className="text-gray-500 text-sm mt-0.5" numberOfLines={2}>
+            {topicLabel}
+            {grid.description ? ` • ${grid.description}` : ""}
+          </Text>
+        </View>
       </View>
-      <View className="flex-1">
-        <Text className="font-semibold text-gray-900" numberOfLines={1}>
-          {grid.name}
-        </Text>
-        <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
-          {grid.topic_count} topic{grid.topic_count === 1 ? "" : "s"}
-          {grid.description ? ` • ${grid.description}` : ""}
-        </Text>
+
+      <View className="flex-row items-center justify-between mt-3">
+        <View className="rounded-lg px-2.5 py-1" style={{ backgroundColor: "#EEF0FF" }}>
+          <Text className="text-primary text-[11px] font-semibold">{topicLabel}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
       </View>
-      <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
     </PressableScale>
   );
 }

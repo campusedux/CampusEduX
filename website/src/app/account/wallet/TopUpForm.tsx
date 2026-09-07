@@ -14,6 +14,11 @@ export default function TopUpForm() {
   const [error, setError] = useState<string | null>(null);
 
   async function handleTopUp() {
+    if (!Number.isFinite(amount) || amount < 10 || amount > 100000) {
+      setStatus("error");
+      setError("Enter an amount between ₹10 and ₹1,00,000.");
+      return;
+    }
     setStatus("processing");
     setError(null);
     const supabase = createBrowserSupabase();
@@ -79,7 +84,13 @@ export default function TopUpForm() {
         min={10}
         max={100000}
         value={amount}
-        onChange={(e) => setAmount(Number(e.target.value))}
+        onChange={(e) => {
+          // A cleared/invalid field parses to NaN — coerce to 0 so it never
+          // reaches the Edge Function (which rejects anything under ₹10). The
+          // min/max attributes still guide valid input while typing.
+          const next = Number(e.target.value);
+          setAmount(Number.isFinite(next) ? next : 0);
+        }}
         className="w-28 rounded-lg border border-line bg-white px-3 py-2 text-sm"
       />
       <Button onClick={handleTopUp} loading={status === "processing"}>

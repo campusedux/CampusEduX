@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 import { CodeBlock } from "./CodeBlock";
+import { slugId } from "@/lib/blogText";
+
+export { slugId } from "@/lib/blogText";
 
 /** Allow only safe URL schemes for admin-authored Markdown links / images.
  *  Blocks `javascript:`, `vbscript:`, `data:` (except images), unknown schemes.
@@ -21,8 +24,22 @@ function safeUrl(raw: string, kind: "link" | "image"): string {
  * The admin panel ships the same subset in its editor preview, so what an
  * author sees there is what ships here.
  */
-export function Markdown({ source, className }: { source: string; className?: string }) {
-  return <div className={className}>{renderBlocks(source ?? "")}</div>;
+export function Markdown({
+  source,
+  className,
+  headingLevelOffset = 1,
+}: {
+  source: string;
+  className?: string;
+  /**
+   * How much to bump each source heading level when rendering. Default `1`
+   * (Learning: `##` → `<h3>` under the page's own `<h2>` block heading). Long-
+   * form pages that own the `<h1>` and want `##` to render as a real `<h2>`
+   * section (e.g. the blog article body) pass `0`.
+   */
+  headingLevelOffset?: number;
+}) {
+  return <div className={className}>{renderBlocks(source ?? "", headingLevelOffset)}</div>;
 }
 
 // --- inline ----------------------------------------------------------------
@@ -70,7 +87,7 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
 }
 
 // --- blocks --------------------------------------------------------------
-function renderBlocks(src: string): ReactNode[] {
+function renderBlocks(src: string, headingLevelOffset = 1): ReactNode[] {
   const lines = src.replace(/\r\n/g, "\n").split("\n");
   const out: ReactNode[] = [];
   let i = 0;
@@ -101,7 +118,7 @@ function renderBlocks(src: string): ReactNode[] {
     const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
       const level = h[1].length;
-      const Tag = `h${Math.min(level + 1, 6)}` as unknown as keyof JSX.IntrinsicElements;
+      const Tag = `h${Math.min(Math.max(level + headingLevelOffset, 1), 6)}` as unknown as keyof JSX.IntrinsicElements;
       const cls = [
         "mt-8 mb-3 text-2xl font-bold text-ink",
         "mt-7 mb-2.5 text-xl font-bold text-ink",
@@ -232,12 +249,5 @@ function renderBlocks(src: string): ReactNode[] {
   return out;
 }
 
-function slugId(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-}
 
 export default Markdown;

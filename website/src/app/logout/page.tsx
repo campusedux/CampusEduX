@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { emitSessionChange } from "@/lib/sessionSignal";
 
 export default function LogoutPage() {
   const router = useRouter();
@@ -10,6 +11,9 @@ export default function LogoutPage() {
     createBrowserSupabase()
       .auth.signOut()
       .finally(() => {
+        // Session cookie is cleared — flip the header nav to signed-out
+        // (this tab and any others) without a reload.
+        emitSessionChange();
         router.push("/");
         router.refresh();
       });

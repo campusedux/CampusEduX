@@ -114,8 +114,14 @@ export default function ResumeEditor({
   async function handleTemplateChange(next: string) {
     setTemplate(next);
     setStatus("saving");
-    const result = await updateResumeTemplateAction(resume.id, next);
-    setStatus("ok" in result ? "saved" : "error");
+    try {
+      const result = await updateResumeTemplateAction(resume.id, next);
+      setStatus("ok" in result ? "saved" : "error");
+    } catch {
+      // Transport failure calling the Server Action — don't leave the status
+      // pinned on "Saving…" (and don't throw an unhandled rejection).
+      setStatus("error");
+    }
   }
 
   function apply(next: ResumeContent) {

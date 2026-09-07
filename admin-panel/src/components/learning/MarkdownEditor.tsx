@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Bold,
   Italic,
@@ -15,9 +15,20 @@ import {
   Table,
   Eye,
   Pencil,
+  ImagePlus,
+  Loader2,
 } from 'lucide-react';
 import { MarkdownPreview } from '@/components/learning/MarkdownPreview';
 import { cn } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
+import { useToast } from '@/components/ui/toast';
+import {
+  DEFAULT_MAX_IMAGE_MB,
+  IMAGE_ACCEPT,
+  compressImage,
+  randomImageKey,
+  validateImageFile,
+} from '@/lib/storage/image';
 
 type Wrap = { before: string; after?: string; block?: boolean; placeholder?: string };
 
@@ -51,6 +62,11 @@ const TOOLS: { icon: typeof Bold; label: string; wrap: Wrap }[] = [
  * toggle. Emits a plain <textarea name={name}> so it drops straight into a
  * <form action={serverAction}>. `onDirty` lets the parent show an unsaved
  * warning.
+ *
+ * Pass `imageUpload` to add an "Insert image" button: it validates + downscales
+ * the file to WebP client-side, uploads it to Storage as the signed-in admin,
+ * and inserts an `![alt](publicUrl)` at the caret. Omit it and the toolbar is
+ * unchanged (the Learning content editor does not set it).
  */
 export function MarkdownEditor({
   name,
@@ -58,21 +74,43 @@ export function MarkdownEditor({
   disabled,
   minRows = 12,
   onDirty,
+  imageUpload,
 }: {
   name: string;
   defaultValue?: string;
   disabled?: boolean;
   minRows?: number;
   onDirty?: (dirty: boolean) => void;
+  imageUpload?: { bucket: string; pathPrefix: string };
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(defaultValue);
   const [mode, setMode] = useState<'write' | 'preview'>('write');
+  const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
 
   const update = (next: string) => {
     setValue(next);
     onDirty?.(next !== defaultValue);
   };
+
+  const spliceAtCaret = useCallback(
+    (text: string, caretBackBy = 0) => {
+      const el = ref.current;
+      const start = el ? el.selectionStart : value.length;
+      const end = el ? el.selectionEnd : value.length;
+      const next = value.slice(0, start) + text + value.slice(end);
+      update(next);
+      requestAnimationFrame(() => {
+        el?.focus();
+        const caret = start + text.length - caretBackBy;
+        el?.setSelectionRange(caret, caret);
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [value],
+  );
 
   const insert = (w: Wrap) => {
     const el = ref.current;
@@ -81,7 +119,7 @@ export function MarkdownEditor({
     const end = el.selectionEnd;
     const selected = value.slice(start, end) || w.placeholder || '';
     let insertText = `${w.before}${selected}${w.after ?? ''}`;
-    let prefix = value.slice(0, start);
+    const prefix = value.slice(0, start);
     if (w.block && prefix && !prefix.endsWith('\n\n')) {
       insertText = (prefix.endsWith('\n') ? '\n' : '\n\n') + insertText;
     }
@@ -93,6 +131,60 @@ export function MarkdownEditor({
       el.setSelectionRange(caret, caret);
     });
   };
+
+  const handleImageFile = useCallback(
+    async (file: File | undefined | null) => {
+      if (!file || !imageUpload || uploading) return;
+      const check = validateImageFile(file, DEFAULT_MAX_IMAGE_MB);
+      if (!check.ok) {
+        toast({ title: 'Invalid image', description: check.error, variant: 'error' });
+        return;
+      }
+      setUploading(true);
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session) throw new Error('Your session expired — sign in again and retry.');
+        const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if (!base) throw new Error('Storage is not configured.');
+
+        const prepared = await compressImage(file);
+        const prefix = imageUpload.pathPrefix.replace(/^\/+|\/+$/g, '');
+        const path = `${prefix}/${randomImageKey(prepared.ext)}`;
+        const endpoint = `${base}/storage/v1/object/${imageUpload.bucket}/${path
+          .split('/')
+          .map(encodeURIComponent)
+          .join('/')}`;
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${session.access_token}`,
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+            'x-upsert': 'true',
+            'cache-control': '3600',
+            'content-type': prepared.contentType,
+          },
+          body: prepared.blob,
+        });
+        if (!res.ok) {
+          throw new Error(res.status === 403 ? 'You do not have permission to upload here.' : `Upload failed (${res.status}).`);
+        }
+        const publicUrl = supabase.storage.from(imageUpload.bucket).getPublicUrl(path).data.publicUrl;
+        const alt = file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]+/g, ' ').trim() || 'image';
+        spliceAtCaret(`\n\n![${alt}](${publicUrl})\n\n`);
+        toast({ title: 'Image inserted', description: prepared.compressed ? 'Optimised to WebP.' : undefined, variant: 'success' });
+      } catch (e) {
+        toast({ title: 'Upload failed', description: (e as Error).message, variant: 'error' });
+      } finally {
+        setUploading(false);
+        if (fileRef.current) fileRef.current.value = '';
+      }
+    },
+    [imageUpload, uploading, toast, spliceAtCaret],
+  );
 
   return (
     <div className="rounded-lg border border-border">
@@ -109,6 +201,17 @@ export function MarkdownEditor({
             <t.icon size={15} />
           </button>
         ))}
+        {imageUpload ? (
+          <button
+            type="button"
+            title="Insert image"
+            disabled={disabled || mode === 'preview' || uploading}
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-muted hover:bg-white hover:text-ink disabled:opacity-40"
+          >
+            {uploading ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
+          </button>
+        ) : null}
         <div className="ml-auto flex overflow-hidden rounded-md border border-border">
           <button
             type="button"
@@ -151,6 +254,16 @@ export function MarkdownEditor({
           </div>
         </>
       )}
+
+      {imageUpload ? (
+        <input
+          ref={fileRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          className="hidden"
+          onChange={(e) => handleImageFile(e.target.files?.[0])}
+        />
+      ) : null}
     </div>
   );
 }

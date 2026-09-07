@@ -28,9 +28,17 @@ export function useAutosaveField<T>(
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       onStatusChange("saving");
-      save(latestValue.current).then((result) => {
-        onStatusChange("ok" in result ? "saved" : "error");
-      });
+      // A Server Action call also *rejects* on a transport failure (offline,
+      // action-infra 5xx), not just resolves with `{ error }`. Without the
+      // `.catch` that becomes an unhandled rejection and the field is stuck
+      // on "Saving…" forever — surface it as a normal save error instead.
+      save(latestValue.current)
+        .then((result) => {
+          onStatusChange(result && typeof result === "object" && "ok" in result ? "saved" : "error");
+        })
+        .catch(() => {
+          onStatusChange("error");
+        });
     }, delayMs);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
