@@ -31,7 +31,10 @@ const config: Config = {
           800: "#3730A3",
           900: "#312E81",
         },
-        surface: "#F8F9FC",
+        surface: "#F8F9FC", // interior fills (inputs, tinted rows, empty states)
+        // Page ground — a very light indigo/lavender tint so pure-white cards
+        // lift off the page. Mood cue from the mobile brief; kept subtle.
+        canvas: "#F7F8FD",
         ink: {
           DEFAULT: "#111827", // textPrimary
           muted: "#6B7280", // textSecondary — AA on white (4.8:1)
@@ -41,6 +44,17 @@ const config: Config = {
         success: "#16A34A",
         danger: "#DC2626",
         warning: "#F59E0B",
+        // Fixed pastel accent set for category / module tiles, so those stop
+        // hard-coding hex + opacity in inline styles. Use with an opacity
+        // suffix for the soft fill, solid for the icon/label.
+        accent: {
+          violet: "#7C3AED",
+          sky: "#3B82F6",
+          emerald: "#16A34A",
+          amber: "#F59E0B",
+          pink: "#EC4899",
+          teal: "#0D9488",
+        },
       },
       fontFamily: {
         // The app uses the platform system font. `serif` is aliased to the same

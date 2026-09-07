@@ -33,14 +33,18 @@ export interface NavItem {
   authOnly?: boolean;
 }
 
-/** Primary modules shown in the desktop header. */
+/**
+ * Primary modules shown in the desktop header. Compiler is intentionally not
+ * here — it stays reachable from the drawer (`DRAWER_LINKS`) and the footer.
+ */
 export const HEADER_LINKS: NavItem[] = [
+  { label: "Home", href: "/", icon: Home, tint: "#4F39F6", bg: "#EEF0FF" },
   { label: "Projects", href: "/projects", icon: LayoutGrid, tint: "#4F39F6", bg: "#EEF0FF" },
-  { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
   { label: "Learning", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
+  { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
   { label: "Blog", href: "/blog", icon: Newspaper, tint: "#7C3AED", bg: "#EDE9FE" },
   { label: "Resume", href: "/resume", icon: FileText, tint: "#16A34A", bg: "#DCFCE7" },
-  { label: "Compiler", href: "/compiler", icon: TerminalSquare, tint: "#0D9488", bg: "#CCFBF1" },
+  { label: "Premium", href: "/premium", icon: Star, tint: "#F59E0B", bg: "#FEF3C7" },
 ];
 
 /** Full destination list for the mobile drawer — mirrors the app's DrawerContent. */

@@ -17,10 +17,7 @@ export function CompanyCard({ company, className }: { company: CompanyCardData; 
   return (
     <Link
       href={`/jobs/companies/${company.id}`}
-      className={cn(
-        "group flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none",
-        className,
-      )}
+      className={cn("card card-hover group flex items-center gap-3 p-4", className)}
     >
       <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary-50">
         {company.logo_url ? (

@@ -71,7 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
         <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
       </head>
-      <body className="bg-white font-sans text-ink antialiased">
+      <body className="bg-canvas font-sans text-ink antialiased">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"

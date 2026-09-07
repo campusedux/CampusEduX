@@ -22,7 +22,7 @@ export function BlogCard({
   return (
     <Link
       href={`/blog/${post.slug}`}
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-card transition duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+      className="card card-hover group flex h-full flex-col overflow-hidden"
     >
       <div className="relative aspect-[16/9] flex-shrink-0 overflow-hidden bg-primary-50">
         {post.featured_image ? (

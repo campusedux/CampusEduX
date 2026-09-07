@@ -31,10 +31,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
   return (
     <Link
       href={`/jobs/${job.id}`}
-      className={cn(
-        "group block rounded-2xl border border-line bg-white p-4 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none",
-        className,
-      )}
+      className={cn("card card-hover group block p-4", className)}
     >
       <div className="flex items-start gap-3">
         <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary-50">

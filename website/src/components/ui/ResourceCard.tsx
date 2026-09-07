@@ -29,10 +29,7 @@ export function ResourceCard({ resource, className }: { resource: ResourceCardDa
   return (
     <Link
       href={resource.href}
-      className={cn(
-        "group flex h-full flex-col rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none",
-        className,
-      )}
+      className={cn("card card-hover group flex h-full flex-col p-5", className)}
     >
       <div className="flex items-start gap-3">
         <span

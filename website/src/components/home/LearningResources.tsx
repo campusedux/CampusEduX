@@ -20,7 +20,7 @@ export async function LearningResources() {
           <Link
             key={g.id}
             href={`/learning/${g.slug}`}
-            className="group flex flex-col rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none"
+            className="card card-hover group flex flex-col p-5"
           >
             <span
               className="flex h-11 w-11 items-center justify-center rounded-xl text-lg font-bold text-primary"

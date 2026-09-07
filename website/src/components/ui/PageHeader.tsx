@@ -21,11 +21,16 @@ export function PageHeader({
 }) {
   return (
     <div className={cn("max-w-2xl", className)}>
-      {eyebrow && (
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">{eyebrow}</p>
-      )}
-      <h1 className={cn("text-3xl font-bold tracking-tight text-ink", eyebrow && "mt-2")}>{title}</h1>
-      {description && <p className="mt-2 text-ink-muted">{description}</p>}
+      {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+      <h1
+        className={cn(
+          "text-[1.75rem] font-bold leading-tight tracking-tight text-ink sm:text-3xl",
+          eyebrow && "mt-2.5",
+        )}
+      >
+        {title}
+      </h1>
+      {description && <p className="lede mt-3">{description}</p>}
       {children}
     </div>
   );

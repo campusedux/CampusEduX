@@ -34,7 +34,7 @@ export function ProjectCard({ project, rank, className }: { project: ProjectCard
     <Link
       href={`/projects/${project.id}`}
       className={cn(
-        "group block overflow-hidden rounded-2xl border border-line bg-white shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.99] motion-reduce:transform-none",
+        "card card-hover group block overflow-hidden",
         className,
       )}
     >

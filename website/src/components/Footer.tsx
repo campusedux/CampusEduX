@@ -176,7 +176,7 @@ export default function Footer() {
           {/* Brand — always visible, above the accordions on mobile. */}
           <div className="pb-8 sm:col-span-3 sm:pb-0 lg:col-span-1">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary text-sm font-black text-white">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-black text-white">
                 C
               </span>
               <span className="text-[15px] font-bold tracking-tight text-ink">

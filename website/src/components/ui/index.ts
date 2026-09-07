@@ -10,6 +10,8 @@ export { Chip, TagPill } from "./Chip";
 export { Input, Textarea, Select, Field, OptionChips } from "./Field";
 export type { InputProps, TextareaProps, SelectProps } from "./Field";
 export { Reveal } from "./Reveal";
+export { Breadcrumb } from "./Breadcrumb";
+export type { Crumb } from "./Breadcrumb";
 export { PageHeader } from "./PageHeader";
 export { SectionHeader } from "./SectionHeader";
 export { Rating } from "./Rating";

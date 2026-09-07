@@ -28,7 +28,7 @@ export function CategoryCard({
     <Link
       href={href}
       className={cn(
-        "group flex flex-col items-center rounded-2xl border border-line bg-white p-4 text-center shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg active:scale-[.98] motion-reduce:transform-none",
+        "card card-hover group flex flex-col items-center p-4 text-center",
         className,
       )}
     >
