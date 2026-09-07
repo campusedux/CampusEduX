@@ -31,7 +31,6 @@ export default async function CategoryPage({ params }: { params: { category: str
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
       <h1 className="text-3xl font-bold text-ink">{name}</h1>
-      <p className="mt-2 text-ink-muted">Projects listed under {name}.</p>
       <ProjectGrid projects={projects} emptyTitle="No projects in this category yet" />
       {projects.length >= CATEGORY_PREVIEW_LIMIT && (
         <p className="mt-8 text-sm">

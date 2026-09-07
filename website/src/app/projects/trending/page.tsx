@@ -20,7 +20,6 @@ export default async function TrendingPage() {
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
       <h1 className="text-3xl font-bold text-ink">Trending Projects</h1>
-      <p className="mt-2 text-ink-muted">The most-bought projects on CampusEduX right now.</p>
       <ProjectGrid projects={projects} showRank emptyTitle="No trending projects yet" />
     </div>
   );

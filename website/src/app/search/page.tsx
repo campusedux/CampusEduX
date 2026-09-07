@@ -38,10 +38,7 @@ export default async function SearchPage({ searchParams }: { searchParams: SP })
 
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
-      <PageHeader
-        title="Search"
-        description="One search across projects, learning, jobs and the blog."
-      />
+      <PageHeader title="Search" />
 
       <GlobalSearchField
         key={term}

@@ -100,11 +100,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
 
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
-      <PageHeader
-        eyebrow="Marketplace"
-        title="Project Marketplace"
-        description="Browse ready-to-use final-year and portfolio projects with source code, documentation and support — filter by category, price and type."
-      />
+      <PageHeader eyebrow="Marketplace" title="Project Marketplace" />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[250px_1fr] lg:items-start">
         <FilterSheet title="Filters" activeCount={activeCount}>
@@ -112,6 +108,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
         </FilterSheet>
 
         <div>
+          <h2 className="sr-only">Projects</h2>
           {chips.length > 0 && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
               {chips.map((c) => (

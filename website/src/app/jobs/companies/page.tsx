@@ -18,7 +18,6 @@ export default async function CompaniesPage() {
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
       <h1 className="text-3xl font-bold text-ink">Companies</h1>
-      <p className="mt-2 text-ink-muted">Employers hiring CampusEduX students.</p>
       {companies.length === 0 ? (
         <EmptyState className="mt-8" title="No companies listed yet" />
       ) : (

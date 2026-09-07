@@ -89,7 +89,7 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
     <div className="container-page py-8 sm:py-10 lg:py-12">
       <JsonLd data={breadcrumbJsonLd([{ name: "Blog", path: "/blog" }])} />
 
-      <PageHeader eyebrow="CampusEduX Blog" title={HERO_TITLE} description={DESCRIPTION} />
+      <PageHeader eyebrow="Blog" title={HERO_TITLE} />
 
       {missing ? (
         <EmptyState
@@ -116,8 +116,7 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
           {showFeatured && featured.length > 0 ? (
             <section className="mt-10">
               <h2 className="h-section">Featured articles</h2>
-              <p className="mt-1 text-sm text-ink-muted">The latest thinking from the {BRAND.name} team.</p>
-              <div className="mt-6 space-y-6">
+              <div className="mt-5 space-y-6">
                 {lead ? <BlogCard post={lead} priority featured /> : null}
                 {restFeatured.length > 0 ? (
                   <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

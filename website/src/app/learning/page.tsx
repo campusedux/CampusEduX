@@ -45,11 +45,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
 
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
-      <PageHeader
-        eyebrow="Free resources"
-        title="Learning"
-        description="Structured tutorials, notes and documentation across programming, DSA, web development, databases and more — free to read."
-      />
+      <PageHeader eyebrow="Free resources" title="Learning" />
 
       {q ? (
         <section className="mt-8">

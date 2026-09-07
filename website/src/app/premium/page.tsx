@@ -39,13 +39,9 @@ export default async function PremiumPage() {
   return (
     <div className="container-page py-8 sm:py-12">
       {/* Hero */}
-      <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-12 text-center sm:px-10 sm:py-16">
+      <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 text-center sm:px-10 sm:py-12">
         <p className="eyebrow">Premium</p>
         <h1 className="h-hero mx-auto mt-4 max-w-2xl">Go further, faster.</h1>
-        <p className="lede mx-auto mt-4 max-w-2xl">
-          An optional tier on top of everything already free in CampusEduX — priority access, extra prep material and
-          faster support.
-        </p>
         <p className="mt-3 text-xs font-medium text-ink-faint">One subscription, same account across web and the app.</p>
       </section>
 

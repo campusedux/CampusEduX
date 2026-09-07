@@ -53,13 +53,9 @@ export default async function ResumeBuilderPage() {
   if (!user) {
     return (
       <div className="container-page py-8 sm:py-12">
-        <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-12 sm:px-10 sm:py-16">
+        <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 sm:px-10 sm:py-12">
           <p className="eyebrow">CampusEduX Résumé Builder</p>
           <h1 className="h-hero mt-4 max-w-2xl">Pick a template, start from a real résumé, ship a PDF.</h1>
-          <p className="lede mt-4 max-w-2xl">
-            Choose a design and you get a complete demo résumé to edit — not a blank form. Structured sections, a live
-            A4 preview, a real ATS score, job-description matching, and one-click PDF/DOCX export.
-          </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button href="/resume/templates" rightIcon={ArrowRight}>
               Browse templates

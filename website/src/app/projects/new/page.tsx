@@ -20,7 +20,6 @@ export default async function NewArrivalsPage() {
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
       <h1 className="text-3xl font-bold text-ink">New Arrivals</h1>
-      <p className="mt-2 text-ink-muted">Freshly listed projects from the CampusEduX community.</p>
       <ProjectGrid projects={projects} emptyTitle="No new projects yet" />
     </div>
   );
