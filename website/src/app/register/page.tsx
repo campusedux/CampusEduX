@@ -7,6 +7,7 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { emitSessionChange } from "@/lib/sessionSignal";
 import { Field, Input } from "@/components/ui";
 import { CURRENT_LEGAL_VERSION, LEGAL_VERSIONS } from "@/legal/config";
+import { absoluteUrl } from "@/lib/seo";
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -58,6 +59,9 @@ function RegisterForm() {
             mobile_number: mobileNumber.trim(),
             referral_code: referralCode || undefined,
           },
+          // Where the branded confirmation email's "Verify My Email" link
+          // sends the browser — see src/app/auth/confirm/page.tsx.
+          emailRedirectTo: absoluteUrl("/auth/confirm"),
         },
       });
       if (signUpError) throw new Error(signUpError.message);
