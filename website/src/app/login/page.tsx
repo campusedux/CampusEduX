@@ -98,6 +98,11 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </Field>
+        <p className="-mt-2 text-right text-sm">
+          <Link href="/forgot-password" className="font-semibold text-primary hover:underline">
+            Forgot password?
+          </Link>
+        </p>
         {error && (
           <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{error}</p>
         )}
