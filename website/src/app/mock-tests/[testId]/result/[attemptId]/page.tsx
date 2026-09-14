@@ -38,15 +38,24 @@ export default async function MockTestResultPage({
     .maybeSingle();
   if (!attempt || attempt.test_id !== params.testId) notFound();
 
-  const [{ data: answerRows }, { data: questionRows }, test] = await Promise.all([
+  const [{ data: answerRows }, test] = await Promise.all([
     supabase.from("test_attempt_answers").select("question_id,selected_index,is_correct").eq("attempt_id", attempt.id),
-    supabase
-      .from("test_questions")
-      .select("id,question_text,options,correct_index,explanation,sort_order")
-      .eq("test_id", attempt.test_id)
-      .order("sort_order", { ascending: true }),
     getMockTest(params.testId),
   ]);
+
+  // A chapter/course attempt's questions never belong to `attempt.test_id`
+  // itself (that test owns no test_questions — its pool is drawn from many
+  // topic tests, see practice_test_pool, 0091/063). test_attempt_answers
+  // always holds exactly the ids actually presented for THIS attempt, for
+  // every scope, so filtering by those ids works uniformly.
+  const answeredIds = (answerRows ?? []).map((a) => a.question_id as string);
+  const { data: questionRows } = answeredIds.length
+    ? await supabase
+        .from("test_questions")
+        .select("id,question_text,options,correct_index,explanation,sort_order")
+        .in("id", answeredIds)
+        .order("sort_order", { ascending: true })
+    : { data: [] as QRow[] };
 
   const questions = (questionRows ?? []) as QRow[];
   const answers = new Map(

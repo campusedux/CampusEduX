@@ -1,25 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import {
-  Play,
-  RotateCcw,
-  Loader2,
-  Copy,
-  Check,
-  Download,
-  Settings,
-  Minus,
-  Plus,
-  Maximize2,
-  Minimize2,
-  CheckCircle2,
-  XCircle,
-  Clock,
-} from "lucide-react";
+import { ChevronRight, CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Button, Select } from "@/components/ui";
 import {
   LANGUAGES,
   DEFAULT_LANGUAGE_ID,
@@ -27,9 +12,15 @@ import {
   starterFor,
 } from "@/lib/compiler/languages";
 import { DRAFT_STORAGE_PREFIX, HANDOFF_STORAGE_KEY } from "@/lib/compiler/handoff";
+import {
+  loadCompilerEditorTheme,
+  saveCompilerEditorTheme,
+  type CompilerEditorTheme,
+} from "@/lib/compiler/standaloneLayout";
 import type { NormalizedRun } from "@/lib/compiler/providers/types";
 import type { CursorPosition } from "./CodeEditor";
-import { CompilerPane } from "./CompilerPane";
+import { CompilerShell } from "./CompilerShell";
+import { CompilerToolbar } from "./CompilerToolbar";
 import { RuntimeErrorCard } from "./RuntimeErrorCard";
 
 const LANG_STORAGE_KEY = "campusedux:compiler:lang";
@@ -69,7 +60,6 @@ export default function CompilerWorkspace() {
   const [languageId, setLanguageId] = useState<string>(DEFAULT_LANGUAGE_ID);
   const [code, setCode] = useState<string>("");
   const [stdin, setStdin] = useState<string>("");
-  const [outputTab, setOutputTab] = useState<"output" | "input">("output");
   const [runState, setRunState] = useState<RunState>({ phase: "idle" });
   const [ready, setReady] = useState(false);
 
@@ -78,8 +68,7 @@ export default function CompilerWorkspace() {
   const [cursor, setCursor] = useState<CursorPosition>({ line: 1, column: 1 });
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
+  const [editorTheme, setEditorTheme] = useState<CompilerEditorTheme>("dark");
 
   const activeLang = useMemo(
     () => resolveLanguage(languageId) ?? LANGUAGES[0],
@@ -147,6 +136,7 @@ export default function CompilerWorkspace() {
     const initialLang = qpLang || resolveLanguage(storedLang)?.id || DEFAULT_LANGUAGE_ID;
     const parsedFont = storedFont ? Number.parseInt(storedFont, 10) : NaN;
     if (Number.isFinite(parsedFont)) setFontSize(clampFont(parsedFont));
+    setEditorTheme(loadCompilerEditorTheme());
 
     let initialCode = "";
     let usedHandoff = false;
@@ -188,23 +178,6 @@ export default function CompilerWorkspace() {
     const t = setTimeout(() => writeDraft(languageId, code), 400);
     return () => clearTimeout(t);
   }, [code, languageId, ready]);
-
-  // ---- close the font-size settings popover on outside click / Escape -----
-  useEffect(() => {
-    if (!settingsOpen) return;
-    function onPointerDown(e: PointerEvent) {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) setSettingsOpen(false);
-    }
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setSettingsOpen(false);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [settingsOpen]);
 
   // ---- fullscreen: lock page scroll, allow Escape to exit ------------------
   useEffect(() => {
@@ -253,6 +226,14 @@ export default function CompilerWorkspace() {
     });
   }
 
+  function toggleTheme() {
+    setEditorTheme((t) => {
+      const next: CompilerEditorTheme = t === "dark" ? "light" : "dark";
+      saveCompilerEditorTheme(next);
+      return next;
+    });
+  }
+
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(code);
@@ -293,168 +274,92 @@ export default function CompilerWorkspace() {
   }
 
   const running = runState.phase === "running";
+  const runNow = () => doRun(code, languageId, stdin);
+
+  const statusLeft = `Ln ${cursor.line}, Col ${cursor.column} · ${code.length.toLocaleString()} chars · ${activeLang.label}${
+    runState.phase === "done" ? ` · ${runState.run.timeMs} ms` : ""
+  }`;
 
   return (
-    <div className={fullscreen ? "fixed inset-0 z-[60] overflow-y-auto bg-white p-4 sm:p-6" : "container-page py-6"}>
-      <div className="flex flex-col gap-3">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="compiler-language" className="sr-only">
-            Language
-          </label>
-          <Select
-            id="compiler-language"
-            value={languageId}
-            onChange={(e) => switchLanguage(e.target.value)}
-            className="w-36"
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
-              </option>
-            ))}
-          </Select>
-          <Button
-            type="button"
-            onClick={() => doRun(code, languageId, stdin)}
-            loading={running}
-            leftIcon={running ? undefined : Play}
-            aria-keyshortcuts="Control+Enter"
-          >
-            {running ? "Running…" : "Run Code"}
-          </Button>
-          <Button type="button" variant="ghost" leftIcon={RotateCcw} onClick={resetToStarter} disabled={running}>
-            Reset
-          </Button>
+    <div
+      className={
+        fullscreen
+          ? "fixed inset-0 z-[60] flex flex-col bg-[#0b1120] p-2 sm:p-3"
+          : "mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8"
+      }
+    >
+      {!fullscreen ? (
+        <nav
+          aria-label="Breadcrumb"
+          className="mb-3 flex flex-wrap items-center gap-1 text-sm text-ink-faint"
+        >
+          <Link href="/practice" className="hover:text-ink">
+            Practice
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          <span className="text-ink-muted">Online Compiler</span>
+        </nav>
+      ) : null}
 
-          <div className="ml-auto flex items-center gap-1">
-            <IconButton title="Copy code" onClick={copyCode}>
-              {copiedCode ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
-            </IconButton>
-            <IconButton title="Download source file" onClick={downloadCode}>
-              <Download className="h-4 w-4" aria-hidden />
-            </IconButton>
-            <div ref={settingsRef} className="relative">
-              <IconButton
-                title="Editor settings"
-                onClick={() => setSettingsOpen((v) => !v)}
-                aria-expanded={settingsOpen}
-              >
-                <Settings className="h-4 w-4" aria-hidden />
-              </IconButton>
-              {settingsOpen ? (
-                <div
-                  aria-label="Editor settings"
-                  className="absolute right-0 top-full z-10 mt-2 w-48 rounded-xl border border-line bg-white p-3 shadow-card-lg animate-scale-in"
-                >
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Font size</p>
-                  <div className="flex items-center justify-between rounded-lg border border-line">
-                    <IconButton
-                      title="Decrease font size"
-                      onClick={() => adjustFontSize(-1)}
-                      disabled={fontSize <= FONT_MIN}
-                      className="border-0"
-                    >
-                      <Minus className="h-3.5 w-3.5" aria-hidden />
-                    </IconButton>
-                    <span className="select-none text-center text-sm font-medium text-ink" aria-hidden>
-                      {fontSize}px
-                    </span>
-                    <IconButton
-                      title="Increase font size"
-                      onClick={() => adjustFontSize(1)}
-                      disabled={fontSize >= FONT_MAX}
-                      className="border-0"
-                    >
-                      <Plus className="h-3.5 w-3.5" aria-hidden />
-                    </IconButton>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <IconButton title={fullscreen ? "Exit fullscreen" : "Fullscreen"} onClick={() => setFullscreen((v) => !v)}>
-              {fullscreen ? <Minimize2 className="h-4 w-4" aria-hidden /> : <Maximize2 className="h-4 w-4" aria-hidden />}
-            </IconButton>
-          </div>
-        </div>
-
-        <CompilerPane
-          ready={ready}
-          code={code}
-          onChange={setCode}
-          language={activeLang.prism}
-          ariaLabel={`${activeLang.label} code editor`}
-          onRun={() => doRun(code, languageId, stdin)}
-          fontSize={fontSize}
-          onCursorChange={setCursor}
-          heightClassName={fullscreen ? "h-[calc(100vh-260px)] min-h-[420px]" : "h-[68vh] min-h-[520px]"}
-          tabs={{ active: outputTab, onChange: setOutputTab, hasInput: stdin.trim().length > 0 }}
-          input={
-            <textarea
-              value={stdin}
-              onChange={(e) => setStdin(e.target.value)}
-              placeholder="Text passed to your program's standard input (Scanner, input(), cin, …)"
-              spellCheck={false}
-              aria-label="Custom input (stdin)"
-              className="h-full w-full resize-none bg-transparent font-mono text-[13px] leading-relaxed text-slate-100 outline-none placeholder:text-slate-500"
-            />
-          }
-          outputActions={
-            <IconButton
-              title="Copy output"
-              onClick={copyOutput}
-              disabled={runState.phase !== "done" || (!runState.run.stdout && !runState.run.stderr)}
-            >
-              {copiedOutput ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
-            </IconButton>
-          }
-          output={<OutputBody state={runState} />}
-        />
-
-        {/* Status bar */}
-        <div className="flex items-center justify-between px-0.5 text-xs text-ink-faint">
-          <span>
-            Ln {cursor.line}, Col {cursor.column} · {code.length.toLocaleString()} chars · {activeLang.label}
-            {runState.phase === "done" ? ` · ${runState.run.timeMs} ms` : ""}
-          </span>
-          <span className="hidden sm:inline">Ctrl+Enter to run</span>
-        </div>
-      </div>
+      <CompilerShell
+        bare={fullscreen}
+        className={fullscreen ? "flex-1" : "lg:h-[calc(100vh-11rem)] lg:min-h-[600px]"}
+        toolbar={
+          <CompilerToolbar
+            languages={LANGUAGES}
+            languageId={languageId}
+            onLanguageChange={switchLanguage}
+            theme={editorTheme}
+            onToggleTheme={toggleTheme}
+            fontSize={fontSize}
+            fontMin={FONT_MIN}
+            fontMax={FONT_MAX}
+            onFontSize={adjustFontSize}
+            fullscreen={fullscreen}
+            onToggleFullscreen={() => setFullscreen((v) => !v)}
+            onCopyCode={copyCode}
+            copiedCode={copiedCode}
+            onDownload={downloadCode}
+            onReset={resetToStarter}
+            onRun={runNow}
+            busy={running}
+          />
+        }
+        ready={ready}
+        code={code}
+        onCodeChange={setCode}
+        prismLanguage={activeLang.prism}
+        editorAriaLabel={`${activeLang.label} code editor`}
+        editorTheme={editorTheme}
+        onRun={runNow}
+        fontSize={fontSize}
+        onCursorChange={setCursor}
+        stdin={stdin}
+        onStdinChange={setStdin}
+        onClearStdin={() => setStdin("")}
+        output={<OutputBody state={runState} />}
+        onCopyOutput={copyOutput}
+        copiedOutput={copiedOutput}
+        canCopyOutput={
+          runState.phase === "done" && (!!runState.run.stdout || !!runState.run.stderr)
+        }
+        onClearOutput={() => setRunState({ phase: "idle" })}
+        canClearOutput={runState.phase !== "idle"}
+        statusLeft={statusLeft}
+      />
     </div>
   );
 }
 
-function IconButton({
-  title,
-  onClick,
+function StatusPill({
+  tone,
+  icon: Icon,
   children,
-  disabled,
-  className,
-  "aria-expanded": ariaExpanded,
 }: {
-  title: string;
-  onClick: () => void;
+  tone: "success" | "error" | "warn";
+  icon: LucideIcon;
   children: React.ReactNode;
-  disabled?: boolean;
-  className?: string;
-  "aria-expanded"?: boolean;
 }) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      aria-expanded={ariaExpanded}
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:bg-surface hover:text-ink active:scale-95 disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none ${className ?? ""}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function StatusPill({ tone, icon: Icon, children }: { tone: "success" | "error" | "warn"; icon: LucideIcon; children: React.ReactNode }) {
   const toneClass =
     tone === "success"
       ? "bg-emerald-500/15 text-emerald-400"
@@ -510,7 +415,7 @@ function RunOutput({ run, hadEmptyStdin }: { run: NormalizedRun; hadEmptyStdin: 
     isRuntimeError && hadEmptyStdin ? (
       <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-200">
         If your program reads input (<code>input()</code>, <code>Scanner</code>, <code>cin</code>, …), add it in the{" "}
-        <strong>Input</strong> tab above, then run again — it was empty for this run.
+        <strong>Input</strong> panel, then run again — it was empty for this run.
       </p>
     ) : undefined;
 

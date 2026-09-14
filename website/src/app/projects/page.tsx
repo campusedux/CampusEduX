@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { X } from "lucide-react";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
+import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
 import { getCachedProjectsPage, getCachedCategories } from "@/lib/cache";
@@ -101,6 +102,10 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
       <PageHeader eyebrow="Marketplace" title="Project Marketplace" />
+
+      <div className="mt-8">
+        <CustomProjectBanner />
+      </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[250px_1fr] lg:items-start">
         <FilterSheet title="Filters" activeCount={activeCount}>

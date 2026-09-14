@@ -83,6 +83,7 @@ export default async function MockTestPage({ params }: { params: { testId: strin
         durationMinutes={test.duration_minutes}
         isPremium={test.is_premium}
         resultBase={`/mock-tests/${test.id}`}
+        scope={test.scope}
       />
     </div>
   );

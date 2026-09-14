@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeOutput, judgeCase, type RunCase } from "@/lib/codingProblems";
+import { normalizeOutput, judgeCase, composeSubmissionSource, type RunCase } from "@/lib/codingProblems";
 import type { NormalizedRun } from "@/lib/compiler/providers/types";
 
 function run(partial: Partial<NormalizedRun>): NormalizedRun {
@@ -70,5 +70,27 @@ describe("judgeCase", () => {
     const r = judgeCase(visible, run({ status: "runtime_error", stdout: "", exitCode: 1 }));
     expect(r.passed).toBe(false);
     expect(r.note).toBe("Runtime error");
+  });
+});
+
+describe("composeSubmissionSource", () => {
+  const c = { schema_sql: "CREATE TABLE t(a int);", seed_sql: "INSERT INTO t VALUES (1);", check_sql: "SELECT a FROM t;" };
+
+  it("passes every other language's source through untouched", () => {
+    expect(composeSubmissionSource("java", "public class Main {}", c)).toBe("public class Main {}");
+    expect(composeSubmissionSource("python", "print(1)", {})).toBe("print(1)");
+  });
+
+  it("composes a sql problem as schema ; seed ; student query ; check, in order", () => {
+    expect(composeSubmissionSource("sql", "SELECT a FROM t;", c)).toBe(
+      "CREATE TABLE t(a int);;\nINSERT INTO t VALUES (1);;\nSELECT a FROM t;;\nSELECT a FROM t;",
+    );
+  });
+
+  it("drops empty/missing parts instead of leaving blank statements", () => {
+    expect(composeSubmissionSource("sql", "SELECT 1;", {})).toBe("SELECT 1;");
+    expect(composeSubmissionSource("sql", "SELECT 1;", { schema_sql: "", seed_sql: "   ", check_sql: undefined })).toBe(
+      "SELECT 1;",
+    );
   });
 });

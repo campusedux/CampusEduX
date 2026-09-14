@@ -1,6 +1,7 @@
 import { LegalPageShell } from "@/legal/LegalPageShell";
 import { LegalProse } from "@/legal/LegalProse";
 import { RelatedPolicies } from "@/legal/LegalDocView";
+import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
 import { interpolateDocument } from "@/legal/interpolate";
 import { LEGAL_VERSIONS, formatLegalDate } from "@/legal/config";
 import { composedLegalMetadata } from "@/legal/seo";
@@ -83,6 +84,16 @@ export default function Page() {
   return (
     <LegalPageShell title={doc.title} version={META.version} effectiveDate={formatLegalDate(META.effectiveDate)}>
       <LegalProse doc={doc} />
+
+      <div className="mt-8 border-t border-line pt-6">
+        <h2 className="text-lg font-bold tracking-tight text-ink">Chat on WhatsApp</h2>
+        <p className="mt-2 text-[15px] leading-relaxed text-ink-muted">
+          For a quick question you can also reach the support team on WhatsApp. A formal grievance should still be
+          emailed to the Grievance Officer (see section 2) so it is logged and tracked within the timelines above.
+        </p>
+        <WhatsAppSupport variant="card" className="mt-4" />
+      </div>
+
       <RelatedPolicies id="grievance" />
     </LegalPageShell>
   );

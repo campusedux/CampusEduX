@@ -1,390 +1,489 @@
-# CampusEduX / ProjectHub — Full-Project Audit (Phase 1 report + Phase 2 cleanup)
+# CampusEduX — Production-Readiness Audit (`website/` only)
 
-**Date:** 2026-09-06
-**Branch:** `audit/full-project-review` (checkpoint commit `34d05e0`, forked from `website-mobile-ui-sync` @ `4a736cb`)
-**Scope:** `mobile-app/` (Expo / React Native), `website/` (Next.js 14), `admin-panel/` (Next.js 14) — all on one Supabase project.
-**Method:** `tsc --noEmit`, `eslint` / `next lint`, production build (`next build`; `expo export --platform web` as the read-only proxy for the mobile build), `jest` / `vitest`, plus static scans for TODO/stub patterns, dead files, dependency usage, cross-file duplication, and committed secrets. Native `expo prebuild` / EAS builds were not run (they generate `ios/`/`android/` — a write); the web export exercises the same Metro bundle graph.
-
-> **Status: Phase 2 cleanup complete** (approved 2026-09-06). Sections 0–G below are the original Phase 1 findings, left as the record. **Section P2 (immediately below the Headline)** lists exactly what was changed, the before/after numbers, and what was deliberately left for you to decide.
+**Scope:** `website/` (Next.js 14.2.35 App Router + `@supabase/ssr` / `supabase-js`, anon key only).
+**Date:** 2026-09-09
+**Method:** read + verify only. No code was modified. Every finding cites `path:line` relative to `website/`.
+**Out of scope (as requested):** `mobile-app/`, `admin-panel/`. The website ships **no database schema of its own** except `website/supabase/migrations/0001_contact_submissions.sql`; all RLS policies, RPCs and Edge Functions live in the `mobile-app/` and `admin-panel/` migration trees and could not be read in a website-only pass. Every finding that depends on them is listed under **Needs Manual Verification**.
 
 ---
 
-## 0. Headline
+## 1. Executive Summary
 
-**The project is in unusually good health.** All three build gates are green, there is almost no dead code, no committed secrets, and no service-role key anywhere in client/app code. Findings below are overwhelmingly *polish* and *product-decision* items, not blockers. There are **0 blocking errors** across all three codebases.
+The website is, on the whole, a **carefully built, defensively coded** front end. The build is completely clean, the payment flows never trust a client-supplied price, every server action re-checks row ownership in addition to RLS, there is no service-role key anywhere in the tree, JSON-LD is escaped, the bespoke Markdown renderer uses React text nodes only, and `?next=` redirects are validated. Most of the "classic" audit findings simply are not present here.
 
-| | Mobile App | Website | Admin Panel |
-|---|---|---|---|
-| **Total errors** (tsc + lint + build) | **0 errors**, 1 lint warning | **0 errors**, 0 warnings | **0 errors**, 0 warnings |
-| Tests | 40 suites / **288 pass** (jest) | 33 files / **278 pass**, 12 skipped¹ (vitest) | 9 files / **104 pass** (vitest) |
-| Production build | ✅ `expo export` web OK (4.2 MB bundle) | ✅ `next build` — 57 routes | ✅ `next build` — 97 routes |
-| **Total unused files** | **0** | **2** (`CmsLegalPage.tsx`, `resumeBuilder/sampleResume.ts`) | **0** |
-| **Total unused dependencies** | **2 candidates** (`expo-constants`, `expo-splash-screen` — both low-risk to keep) | **0** | **0** |
-| **Duplicate-code instances** | **3–4 within-app screen pairs** + managed cross-app (legal ×9 files, resume engine ×5 modules) | shares the cross-app resume/legal duplication; **0 within-app** | **1 within-app** (`CategoryManager` ×3) |
+What remains is a **short list of real issues** — one wrong money figure shown to users, one unauthenticated code-execution proxy with weak rate limiting, a missing password-reset flow, and a consistent pattern of swallowing database errors into empty states — plus a set of lower-severity hardening items and a number of things that cannot be confirmed without the Supabase migration tree.
 
-¹ The 12 skipped website tests are `tests/lib/resumeFlowE2E.test.ts`, an opt-in live-Supabase E2E suite (`describe.skip` unless a DB socket is present). Not a defect.
+### Counts by severity
 
-**Cross-project issues (not owned by one codebase):**
-- **Website has no CI workflow.** `.github/workflows/` contains `mobile-ci.yml` and `admin-ci.yml` only.
-- **`@supabase/supabase-js` version drift:** `^2.57.0` (mobile) vs `^2.43.0` (website + admin).
-- **`zod` major drift:** `^4.1.5` (mobile) vs `^3.23.0` (website).
-- **`ANTHROPIC_API_KEY`** (used by website resume AI-assist) is **not documented** in `website/.env.example`.
-- Repo root holds 3 large historical analysis `.md` files (245 KB total) plus an empty `node_modules/.vite` cache dir.
-
----
----
-
-# P2. Phase 2 — Cleanup outcomes (2026-09-06, approved)
-
-Executed as small, revertable commits on `audit/full-project-review`:
-
-| Commit | Scope | Change |
-|---|---|---|
-| `34d05e0` | — | checkpoint snapshot of the working tree (Phase 1 safety net) |
-| `be610fa` | — | this audit report (Phase 1) |
-| `075c7cd` | website | **delete dead files** — `src/components/CmsLegalPage.tsx`, `src/lib/resumeBuilder/sampleResume.ts` (0 inbound refs each) |
-| `a8cedea` | website + admin | **deps** — bump declared `@supabase/supabase-js` floor `^2.43.0` → `^2.57.0` to match mobile (both already resolve to `2.112.4`; no tree change) |
-| `2e31b10` | website | **docs** — add optional `ANTHROPIC_API_KEY` to `.env.example`; add a precise `TODO` at the `/compiler` "Ask AI to fix" stub |
-| `49e0c59` | repo / website | **ci** — add `.github/workflows/website-ci.yml` (typecheck · lint · test · build); verified `next build` is green with no Supabase env |
-| `bf38452` | admin | **docs** — fix stale `admin.ts` service-role comment in `lib/supabase/server.ts`; add a precise `TODO` on `createBackup()` (records a request, produces no artifact) |
-| `f6bb5da` | mobile | **lint** — targeted `eslint-disable` + comment on the `ReactNavigation` global augmentation in `navigation.types.ts:215` |
-
-Also: removed the stray repo-root `node_modules/.vite` cache dir (gitignored, untracked — no commit).
-
-## Before → After
-
-| Metric | Mobile | Website | Admin |
-|---|---|---|---|
-| TypeScript errors | 0 → **0** | 0 → **0** | 0 → **0** |
-| ESLint errors / **warnings** | 0 / **1** → **0 / 0** | 0 / 0 → **0 / 0** | 0 / 0 → **0 / 0** |
-| Production build | ✅ → ✅ (`expo export` web) | ✅ 57 routes → ✅ 57 routes | ✅ 97 routes → ✅ 97 routes |
-| Tests | 288 pass → **288 pass** | 278 pass / 12 skip → **278 / 12** | 104 pass → **104 pass** |
-| Dead files | 0 → 0 | **2 → 0** | 0 → 0 |
-| Removable unused deps | 0 → 0 | 0 → 0 | 0 → 0 |
-| CI workflow | ✅ → ✅ | **❌ → ✅** | ✅ → ✅ |
-| Undocumented required/optional secret | — | **1 → 0** | — |
-| `@supabase/supabase-js` floor drift | baseline `^2.57.0` | **`^2.43` → `^2.57`** | **`^2.43` → `^2.57`** |
-
-The build gates were **already green** in Phase 1, so there was no error count to "bring down". The net measurable result: **−1 lint warning, −2 dead files, +1 CI pipeline, −1 undocumented secret, −1 version drift, +3 precise TODOs** on features that were quietly incomplete — and every gate on every project is still green (re-run end-to-end after the last commit).
-
-## Deliberately NOT auto-fixed — needs a decision from you, not a code change
-
-1. **Mobile duplicate Settings / About / Notification screens** — `src/profile/SettingsScreen.tsx` vs `src/settings/SettingsScreen.tsx` (both routed, 186 differing lines); same for `AboutScreen` (profile vs settings) and `NotificationScreen` (home vs settings). Deleting a *routed* screen requires you to choose which flow — the **Profile tab** or the **drawer "SettingsModule"** — is canonical. No safe mechanical fix. *(Phase 1 §E · Mobile)*
-2. **Mobile `SAMPLE_*` fallback in 8 catalog services** — intentional offline/demo resilience that masks backend errors with fixture data (fake projects/jobs/prices) on any Supabase error *or* empty result. Money paths already `throw` and are unaffected. The fix is a product call: gate behind a `__DEV__`/demo flag, show a "sample data" banner, or remove. Left as documented. *(Phase 1 §A · Mobile)*
-3. **Cross-app duplication — legal JSON (9 identical files) + résumé engine (5 modules), mobile ↔ website.** Extracting to a shared module needs npm/pnpm **workspaces** set up at the repo root (there is no root `package.json`), which risks breaking Metro *and* Next module resolution. The legal copy is already guarded by `scripts/sync-legal.mjs` + a drift-guard test. Deferred as an infrastructure decision. *(Phase 1 §E)*
-4. **Admin `CategoryManager` ×3** — the three copies have diverged 100–176 lines (≈80% different); a shared component would need heavy per-resource config props for little gain. Left in place (Phase 1 rated this low priority). *(Phase 1 §E · Admin)*
-5. **Website `/compiler` "Ask AI to fix"** — flagged with a precise `TODO` (`2e31b10`). Wiring it is a feature build (new `/api/compiler/assist` route + prompt + rate limit + accept/reject diff UI), not cleanup. *(Phase 1 §A · Website)*
-6. **Admin `createBackup()`** — flagged with a precise `TODO` (`bf38452`). Producing a real dump/artifact is a product/ops decision (mechanism, retention, cost); the DB itself is covered by Supabase PITR and the page copy is already honest. *(Phase 1 §A · Admin)*
-7. **`zod` major drift (mobile `^4` vs website `^3`)** — cannot be aligned mechanically: mobile's `@hookform/resolvers@5.9.1` **requires** zod v4, and migrating the website's 9 zod files to v4 is a breaking-change pass with no current functional payoff. Needs a planned migration. *(Phase 1 §D)*
-8. **`typescript` / `eslint` minor drift** (mobile TS 5.9 / ESLint 9 flat-config vs Next apps TS 5.4 / ESLint 8) — harmonising is optional and risks surfacing fresh diagnostics in a currently-green tree; belongs in a dedicated toolchain-bump PR. *(Phase 1 §D)*
-9. **`expo-constants` / `expo-splash-screen` (mobile)** — evaluated for removal, **kept**. `expo-constants` is pulled in transitively by 5+ Expo packages (`expo-linking`, `expo-notifications`, `expo-asset`, `@expo/router-server`, `expo`) and should stay pinned for Expo's dependency validation. `expo-splash-screen` is consumed by Expo's native splash **config plugin** (`app.json` `splash` block) even though no JS imports it — removing it risks a native-splash regression not verifiable without an EAS/prebuild run. *(Phase 1 §D · Mobile — revises the "2 candidates" line to "0 safely removable")*
-10. **Full table-by-table RLS verification** — still recommended as a separate security pass; out of scope for cleanup. *(Phase 1 §G)*
-11. **Repo-root historical docs** (`LEARNING_UNIFICATION_AUDIT.md`, `LEGAL_COMPLIANCE_AUDIT.md`, `WEBSITE_MOBILE_SYNC_ANALYSIS.md` — 245 KB) — left untouched. Whether they move to `docs/` or are deleted is your call, and `WEBSITE_MOBILE_SYNC_ANALYSIS.md` is git-tracked so removing it is a history decision. *(Phase 1 §C)*
-
----
----
-
-# MOBILE APP (`mobile-app/`)
-
-**Summary**
-
-- **Errors:** 0 TypeScript errors · 0 ESLint errors · **1 ESLint warning** · `expo export` web build OK · 288/288 jest tests pass.
-- **Unused files:** 0 (no orphan modules; all 4 assets referenced; no `_old`/scratch files).
-- **Unused dependencies:** 2 candidates (`expo-constants`, `expo-splash-screen`), both low-risk to keep.
-- **Duplicate code:** 3 confirmed + 1 suspected within-app near-duplicate screen pairs; shares the managed cross-app resume/legal duplication.
-
-## A. Broken / incomplete functions
-
-| Status | Location | Finding |
-|---|---|---|
-| 🟡 Design risk | `src/services/project.service.ts`, `job.service.ts`, `home.service.ts`, `referral.service.ts`, `premium.service.ts`, `myProjects.service.ts`, `academic.service.ts`, `resume.service.ts` | **Silent fallback to bundled fixtures.** Each wraps Supabase reads so that on *any* error **or empty result** it returns hard-coded `SAMPLE_*` data from `src/data/sample*Content.ts` and logs `console.info("… using sample content")`. If an RLS policy breaks, a table is renamed, or the network fails, users see plausible fake catalog data (fake projects, prices, jobs) rather than an error/empty state. **Mitigation already in place:** money paths (`payment.service.ts`, `wallet.service.ts`) correctly `throw` and never fall back (see `wallet.service.ts:60` comment). Recommend gating the catalog fallback behind `__DEV__` / an explicit "demo mode", or showing a "showing sample data" banner. *(Already on owner's review list per project memory.)* |
-| 🟡 No-op on failure | `src/services/project.service.ts:339` (`recordDownload`), `src/services/myProjects.service.ts:144` (`markVersionUpdated`), `src/services/resume.service.ts:263/325/412` | Write operations silently no-op (`"… not persisted"`) when the backend call fails — same root pattern as above. |
-| ✅ Clean | entire `src/` | **No** `TODO` / `FIXME` / `HACK` / `XXX` / `// not implemented` comments. **No** empty `catch {}` blocks. **No** dead `onPress={() => {}}` / `disabled={true}` handlers. |
-| ✅ Not an issue | `src/lib/notify.ts`, `src/auth/LoginScreen.tsx:51` | "stub" references here are *documentation* of React Native's `Alert` being a no-op on Expo Web — the code handles it correctly with an inline banner. |
-
-**DB schema references:** no automated schema diff is possible without the live database. Project memory records one open item carried forward here for owner DB verification (not a code bug): the `coding_problem_detail` RPC returns `null` on the shared live project — migration `0048`/`025` may not be applied.
-
-## B. Errors and warnings
-
-| Check | Command | Result |
-|---|---|---|
-| TypeScript | `tsc --noEmit` | **0 errors** |
-| Lint | `eslint .` | **0 errors, 1 warning** |
-| Build | `expo export --platform web` | **OK** — `_expo/static/js/web/index-*.js` 4.2 MB, no errors |
-| Unit/integration tests | `jest` | **40 suites, 288 tests, all pass** (~12 s) |
-
-**The one warning (cosmetic):**
-
-| File:line | Rule | Note |
-|---|---|---|
-| `src/types/navigation.types.ts:215` | `@typescript-eslint/no-empty-object-type` — "An interface declaring no members is equivalent to its supertype" | `interface RootParamList extends RootStackParamList {}` is the **official React Navigation** global-augmentation pattern; it *must* be an `interface` (declaration merging into a namespace), so it cannot be rewritten as a type alias. Fix = a one-line `// eslint-disable-next-line`. |
-
-**Severity breakdown:** blocking 0 · cosmetic 1.
-
-## C. Unused / unwanted files
-
-- ✅ **No orphaned modules.** Every `.ts`/`.tsx` under `src/` is reachable from a navigator or another module.
-- ✅ **No scratch/backup files** (`_old`, `copy`, `Untitled`, `.bak`, `.orig`, ` 2.tsx`).
-- ✅ **Assets:** `assets/` holds only `icon.png`, `adaptive-icon.png`, `splash.png`, `favicon.png` — all referenced from `app.json`. No unused images/fonts/icons.
-- ✅ **Config:** exactly one each of `babel.config.js`, `metro.config.js`, `eslint.config.js`, `jest.config.js`, `tailwind.config.js`, `prettier.config.js`, `tsconfig.json`. `.env` tracked as `.env.example` only; real `.env` present on disk, gitignored, untracked.
-
-## D. Unused / duplicate dependencies
-
-**Candidates for removal (verify before dropping):**
-
-| Package | Evidence | Recommendation |
-|---|---|---|
-| `expo-constants` | Not imported anywhere in `mobile-app/` | Likely a transitive peer of other `expo-*` packages — **low risk either way**; keep unless `npm ls` shows nothing depends on it. |
-| `expo-splash-screen` | Not imported; splash is driven declaratively from `app.json` | Safe to drop **unless** you plan to call `SplashScreen.preventAutoHideAsync()` for a custom splash. |
-
-**Flagged by tooling but genuinely required (keep):** `react-dom`, `react-native-web` (Expo Web), `react-native-screens` / `react-native-reanimated` (react-navigation native peers), `react-native-url-polyfill` (imported in `src/lib/supabase.ts`), `react-native-worklets` (in `babel.config.js`), `expo-font` / `expo-notifications` (in `app.json` plugins), `@babel/core`, `babel-preset-expo`, `babel-plugin-module-resolver`, `jest-expo`, `@types/*`, `prettier-plugin-tailwindcss` (in `prettier.config.js`).
-
-**Duplicate-purpose deps:** none. One data layer (`@supabase/supabase-js`), one icon set (`@expo/vector-icons`), no competing date libs (uses `Intl`/native), one form lib (`react-hook-form` + `zod`), `zustand` only where local stores are needed.
-
-**Cross-project version drift** (full table in the Website section) — mobile-owned items:
-- `@supabase/supabase-js` `^2.57.0` here vs `^2.43.0` in web/admin → **bump web+admin up** (same major).
-- `zod` `^4.1.5` here vs `^3.23.0` in website → **standardize on one major**.
-- `react` 19 / `typescript` ~5.9 / `eslint` 9 here vs 18 / ~5.4 / 8 in the Next apps → *expected* (Expo 54 / RN 0.81 requires the newer toolchain; Next 14 pins React 18). Leave, but note it.
-
-## E. Duplicate code
-
-**Within the mobile app — genuine drift (needs a product decision on which copy is canonical):**
-
-| Pair | Lines | Both routed? | Differing lines |
-|---|---|---|---|
-| `src/profile/SettingsScreen.tsx` ↔ `src/settings/SettingsScreen.tsx` | 155 / 133 | **Yes** — `ProfileNavigator` (Profile tab) vs `SettingsNavigator` (drawer "SettingsModule") | 186 |
-| `src/profile/AboutScreen.tsx` ↔ `src/settings/AboutScreen.tsx` | 66 / 70 | **Yes** — same two navigators | 50 |
-| `src/home/NotificationScreen.tsx` ↔ `src/settings/NotificationScreen.tsx` | 120 / 92 | **Yes** — `HomeNavigator` vs `SettingsNavigator` | 182 |
-| `src/project/ProjectDetailsScreen.tsx` ↔ `src/myProjects/ProjectDetailsScreen.tsx` | — | Yes — marketplace detail vs purchased-project detail | — (likely legitimately different; confirm before merging) |
-
-The drawer's **"Settings" / "Help" / "About"** links (`src/navigation/DrawerContent.tsx:35-37`) all navigate into `SettingsModule`, while the **Profile tab** carries its own Settings/About. Users get a *different* Settings screen depending on entry point. Recommend: choose one, delete the other, repoint the navigator.
-
-**Cross-app (shared with website — deliberate / managed, see Website §E):** legal JSON (9 identical files), resume engine (`atsCategories`, `templateSpecs`, `resumeDesign`, `resumeContent`, `demoResumes`).
-
-## F. Feature completeness
-
-All headline features **present** (matrix in the combined section at the bottom). Mobile-specific notes:
-- 136 `*Screen.tsx` files across 15 domains — every intended feature has screens.
-- Empty/loading/error states: `StateViews` component + per-screen handling are broadly present; however the SAMPLE-data fallback (§A) means several "backend error" states are effectively unreachable.
-- Password reset: ✅ `ForgotPasswordScreen` + `ResetPasswordScreen`.
-- Pagination: confirm long lists (`JobsDashboardScreen`, `SearchProjectsScreen`) page rather than fetch-all.
-
-## G. Security & config
-
-- ✅ **No hardcoded secrets.** Scans for service-role keys, JWTs (`eyJ…`), `sk-…`, `rzp_(live|test)_…`, PEM blocks, `AIza…` across tracked files return only: RLS `grant … to service_role` in migrations, `.env.example` placeholders, test fixtures (`rzp_test_1`), and a **defensive guard** at `src/lib/supabase.ts:33` that *throws* if a `service_role` key is ever handed to the client.
-- ✅ **`.env` hygiene.** `.gitignore` covers `.env`, `.env.local`, `.env.*.local`. Only `mobile-app/.env.example` and `supabase/functions/.env.example` are tracked; real `.env` is untracked. `.env.example` is placeholders only, and comments explicitly restrict `EXPO_PUBLIC_*` to publishable/anon keys.
-- ✅ **Client never uses the service-role key.** The only service-role usage is in `mobile-app/supabase/functions/_shared/client.ts` (Supabase Edge Functions, server-side, platform-injected env) for the payment functions — correct.
-- ✅ **RLS** enabled on ~41 tables in the migration set (`profiles`, `purchases`, `wallet_transactions`, `wallet_topup_orders`, `resumes`, `resume_shares`, `referral_earnings`, `notifications`, `legal_consents`, …). Hardening migrations present: `0037_protect_is_premium.sql`, `0038` (wallet over-withdrawal), Phase-9 resume-sharing review.
-- ⚠️ **Recommend a dedicated RLS pass** (out of scope for a read-only Phase 1): confirm every user-owned table has *both* read and write policies, and close the `test_attempts` scoring item flagged open in project memory.
-
----
----
-
-# WEBSITE (`website/`)
-
-**Summary**
-
-- **Errors:** 0 TypeScript errors · 0 ESLint errors/warnings · `next build` OK (57 routes) · 278/290 vitest pass (12 = opt-in E2E, skipped).
-- **Unused files:** 2 — `src/components/CmsLegalPage.tsx`, `src/lib/resumeBuilder/sampleResume.ts`.
-- **Unused dependencies:** 0 (everything flagged is a required runtime peer or toolchain).
-- **Duplicate code:** 0 within-app; participates in the managed cross-app resume/legal duplication.
-
-## A. Broken / incomplete functions
-
-| Status | Location | Finding |
-|---|---|---|
-| 🟡 Non-functional UI control | `src/app/compiler/RuntimeErrorCard.tsx:104` (handler `askAiToFix` at `:77-80`) | **"Ask AI to fix" button does nothing.** Clicking it flips the label to "Coming soon…" for 2 s (`setAskedAi(true); setTimeout(… , 2000)`). No backend. The docstring is candid ("there's no backend wired up for it yet"). Fix = wire to a Claude call (the pattern already exists in `src/lib/resumeBuilder/aiAssist.ts` / `POST /api/resume/assist`), or hide the button until it's built. |
-| 🟡 Permanent empty state | `src/app/referral/page.tsx:46` | `<EmptyState title="Reward terms coming soon" …>` renders until an admin publishes reward terms — no fallback copy if that never happens. |
-| 🟡 Permanent empty state | `src/app/premium/page.tsx:81` | `<EmptyState title="Plan pricing coming soon" …>` — same: depends on admin publishing plans. |
-| ✅ Clean | entire `src/` | No `TODO`/`FIXME`/`HACK` comments. No empty `catch`. No `href="#"` / dead handlers. `console.log("Hello, CampusEduX!")` at `src/lib/compiler/languages.ts:43` is the default JS snippet string for the compiler, **not** a debug leftover. `console.error(error)` in `src/app/error.tsx:10` is the standard Next error boundary. |
-
-## B. Errors and warnings
-
-| Check | Command | Result |
-|---|---|---|
-| TypeScript | `tsc --noEmit` | **0 errors** |
-| Lint | `next lint` | **✔ No ESLint warnings or errors** |
-| Build | `next build` | **✅** compiled + 57/57 static pages generated, no errors/warnings |
-| Tests | `vitest run` | **33 files, 278 pass, 12 skipped** (opt-in `resumeFlowE2E`), ~12 s |
-
-**Severity breakdown:** blocking 0 · cosmetic 0.
-
-## C. Unused / unwanted files
-
-| File | Evidence | Recommendation |
-|---|---|---|
-| `src/components/CmsLegalPage.tsx` | **0 inbound imports.** `cms_pages`-backed legal rendering was retired in favour of the synced `src/legal/` JSON. | **Delete** (Phase 2). |
-| `src/lib/resumeBuilder/sampleResume.ts` | **0 references anywhere** (untracked new file, never wired up; `demoResumes.ts` + `templateSpecs.ts` superseded it). | **Delete** (Phase 2). |
-
-- ✅ `public/` is empty — no unused images/fonts.
-- ✅ One each of `next.config.js`, `postcss.config.js`, `tailwind.config.ts`, `vitest.config.ts`, `.eslintrc.json`, `tsconfig.json`. `.env.local` untracked & gitignored; `.env.example` tracked.
-- `tsconfig.tsbuildinfo` present on disk — gitignored build cache, harmless.
-
-## D. Unused / duplicate dependencies
-
-- ✅ **No unused dependencies.** Tooling flagged `react-dom`, `@types/*`, `eslint`, `eslint-config-next`, `postcss`, `autoprefixer`, `typescript` — all are required Next.js runtime peers or build tooling.
-- ✅ **No duplicate-purpose deps.** One data layer (`@supabase/supabase-js` + `@supabase/ssr`), one icon set (`lucide-react`), one AI SDK (`@anthropic-ai/sdk`), no competing date/HTTP/state libs.
-
-**Cross-project version comparison (all shared packages):**
-
-| Package | mobile-app | website | admin-panel | Verdict |
-|---|---|---|---|---|
-| `@supabase/supabase-js` | `^2.57.0` | `^2.43.0` | `^2.43.0` | ⚠️ **Align** — bump website + admin to `^2.57.0` (same major, low risk). |
-| `zod` | `^4.1.5` | `^3.23.0` | — | ⚠️ **Standardize** — v3→v4 changed several APIs. Pick one major project-wide. |
-| `react` / `react-dom` | `19.2.0` | `18.3.1` | `18.3.1` | ✅ Expected (RN needs 19, Next 14 pins 18). Leave. |
-| `@types/react` | `~19.2.10` | `~18.2.0` | `~18.2.0` | ✅ Tracks the `react` split. Leave. |
-| `typescript` | `~5.9.2` | `~5.4.0` | `~5.4.0` | 🟢 Optional — harmonising to `~5.9` is safe and tidy. |
-| `eslint` | `^9.0.0` (flat) | `^8.57.0` | `^8.57.0` | 🟢 Optional — different config style; migrating the Next apps to v9 flat config is a nice-to-have. |
-| `tailwindcss` | `^3.4.17` | `^3.4.0` | `^3.4.0` | ✅ Same minor. Leave. |
-| `next` / `@supabase/ssr` / `lucide-react` / `vitest` / `eslint-config-next` / `postcss` / `autoprefixer` / `@types/node` / `@types/react-dom` | — | *identical* | *identical* | ✅ website & admin are fully in lockstep. |
-
-## E. Duplicate code
-
-**Cross-app — deliberate and guarded (acceptable as-is; a shared workspace package would remove the copy):**
-
-| Duplication | Detail | Guard |
-|---|---|---|
-| **Legal content** — `website/src/legal/content/*.json` vs `mobile-app/src/legal/content/*.json` | 9 of 10 files **byte-identical** (`privacy-policy`, `terms`, `refund-policy`, `project-license`, `community-guidelines`, `disclaimer`, `data-and-permissions`, `contact`, `delete-account`). `cookie-policy.json` is website-only. | `website/scripts/sync-legal.mjs` (`npm run legal:sync`) copies from the mobile source-of-truth; a drift-guard test fails if they diverge. |
-| **Resume engine** — mobile `src/services/*` vs website `src/lib/resumeBuilder/*` | `atsCategories.ts` (377/377 L, **8** differing lines), `templateSpecs.ts` (145/155 L), `resumeDesign.ts`↔`design.ts` (95/105 L), `resumeContent.ts`↔`content.ts` (467/493 L), `demoResumes.ts` (225/416 L). | Manual port; tests on both sides. `atsCategories` + `templateSpecs` are the **strongest shared-package candidates** — scores must match across platforms. |
-
-**Within the website:** none. Supabase client factories (`server.ts` anon read-only, `authed-server.ts` SSR session, `browser.ts`) look similar but serve distinct roles — not duplication.
-
-## F. Feature completeness
-
-All headline features present (matrix below). Website-specific notes:
-- ✅ Password reset via Supabase; `/register` records legal consent; `/account/*` guarded by `requireUser()` in the layout.
-- ✅ `EmptyState`, loading and error states are used throughout; `error.tsx` + `not-found` present.
-- ✅ Pagination present in list routes; admin-style `Pagination` component.
-- ⚠️ **No `website-ci.yml`** — the website is the only project without CI.
-- ⚠️ **`ANTHROPIC_API_KEY`** consumed by `src/lib/resumeBuilder/aiAssist.ts` (`POST /api/resume/assist`) but **missing from `.env.example`** — the resume AI-assist feature silently fails when it's unset. Add it (commented, no value).
-- 🟡 "Ask AI to fix" in `/compiler` is the one visibly half-built control (§A).
-
-## G. Security & config
-
-- ✅ **No hardcoded secrets** (same scan as mobile — clean).
-- ✅ **`.env` hygiene:** `.env.local` untracked & gitignored; only `.env.example` tracked, placeholders only, with explicit "Never put the service-role key in this app" comments.
-- ✅ **No service-role client.** `src/lib/supabase/server.ts` uses the **anon key**, `persistSession:false`, read-only for public catalog data. `authed-server.ts` / `browser.ts` use `@supabase/ssr` with a real user session. Account pages rely on RLS + `requireUser()`.
-- ✅ **API routes** (`/api/compiler/run`, `/api/coding-problems/judge`, `/api/resume/{assist,parse,export/*}`, `/api/revalidate`) read all secrets from `process.env` server-side; `ANTHROPIC_API_KEY` never reaches the browser. `/api/revalidate` is gated by `REVALIDATE_SECRET`; the compiler route has rate-limit + optional-auth env switches (`compiler-ratelimit.test.ts` covers it).
-- 🟢 Minor: `.env.example` should also list `ANTHROPIC_API_KEY` (see §F).
-
----
----
-
-# ADMIN PANEL (`admin-panel/`)
-
-**Summary**
-
-- **Errors:** 0 TypeScript errors · 0 ESLint errors/warnings · `next build` OK (97 routes) · 104/104 vitest pass.
-- **Unused files:** 0 (the old `legacy/` and `placement/*` trees are already staged for deletion in the checkpoint).
-- **Unused dependencies:** 0.
-- **Duplicate code:** 1 — `CategoryManager.tsx` implemented 3× (low priority).
-
-## A. Broken / incomplete functions
-
-| Status | Location | Finding |
-|---|---|---|
-| 🟡 Partial by design | `src/app/(panel)/settings/actions.ts` → `createBackup()` | Inserts a `backups` row with `status:'completed'` but performs **no actual backup** (no dump, no storage export). The page (`settings/backup/page.tsx`) is honest — subtitle: *"The database itself is backed up by Supabase; this records manual snapshot requests"* — and the Download column degrades to "not available" when `download_url` is null. Not broken, but a reader may expect a downloadable artifact. Decide: keep as a request log, or wire a real export. |
-| ✅ Clean | entire `src/` | **No** `TODO`/`FIXME`/`HACK`/`// not implemented` comments. **No** empty `catch` (the two `catch {}` in `supabase/server.ts` are the documented Next SSR cookie no-op). **No** dead handlers. The ~8 `console.warn` calls are deliberate structured error logging in `lib/audit.ts`, `lib/utils.ts`, `lib/auth.ts`, `actions/auth.ts`. |
-| ✅ Verified real | `quick-actions`, `recent-orders`, `recent-users`, `revenue`, `analytics`, `notifications`, `settings/backup` pages | Spot-checked the smallest routes — all query Supabase and render live data; none are placeholder shells. |
-
-## B. Errors and warnings
-
-| Check | Command | Result |
-|---|---|---|
-| TypeScript | `tsc --noEmit` | **0 errors** |
-| Lint | `next lint` | **✔ No ESLint warnings or errors** |
-| Build | `next build` | **✅** compiled + 97/97 pages generated, no errors/warnings |
-| Tests | `vitest run` | **9 files, 104 tests, all pass** (~2 s) |
-
-**Severity breakdown:** blocking 0 · cosmetic 0.
-
-## C. Unused / unwanted files
-
-- ✅ **No orphaned modules** in the current working tree.
-- **Already handled in the checkpoint:** `admin-panel/legacy/**` (≈70 files) and the old `src/app/(panel)/placement/{aptitude,dsa,hr,company,categories,live-tests,notes,…}` tree are staged as **deletions** (`D`) — they were removed as part of the "remove specialised grids" work and just need committing. No action needed beyond committing.
-- ✅ `public/` empty. One each of `next.config.mjs`, `postcss.config.js`, `tailwind.config.ts`, `vitest.config.ts`, `.eslintrc.json`, `tsconfig.json`. `.env.local` untracked & gitignored.
-
-## D. Unused / duplicate dependencies
-
-- ✅ **No unused dependencies.** Only 8 runtime deps (`@supabase/supabase-js`, `@supabase/ssr`, `next`, `react`, `react-dom`, `lucide-react`, `recharts`, `clsx`-ish) — all used. Tooling-flagged items (`@types/*`, `eslint`, `eslint-config-next`, `@typescript-eslint/eslint-plugin`, `postcss`, `autoprefixer`, `typescript`) are all required build/lint tooling.
-- ✅ **No duplicate-purpose deps.** `date-fns` and `zod` were already removed in an earlier cleanup (per project memory). One chart lib (`recharts`), one icon set (`lucide-react`).
-- **Version drift:** see the website §D table — admin is in lockstep with website on every shared package except the `@supabase/supabase-js` `^2.43.0` vs mobile's `^2.57.0` gap (**bump to `^2.57.0`**).
-
-## E. Duplicate code
-
-| Duplication | Locations | Recommendation |
-|---|---|---|
-| `CategoryManager.tsx` (category CRUD manager) | `src/app/(panel)/projects/categories/`, `src/app/(panel)/resume/templates/categories/`, `src/app/(panel)/custom-projects/features/categories/` | 3 near-parallel implementations. Extract one generic `<CategoryManager resource="…" />`. **Low priority** — each is small and stable. |
-| `createClient` | `src/lib/supabase/server.ts` + `client.ts` | Expected (server vs browser factory) — **not** a problem. |
-
-- **Cross-app:** admin shares the ATS-rules / resume-template concepts with the website but implements them as admin CRUD over the same tables — appropriate, not duplication.
-
-## F. Feature completeness
-
-The admin panel is the **most complete** of the three — every feature area has full CRUD + analytics + moderation (matrix below). Notes:
-- ✅ Moderation tools: reviews (approve/report/delete/testimonials), resume shares, custom-project delivery pipeline, job applications pipeline (shortlist/reject/feature), student block/unblock.
-- ✅ Pagination (`Pagination` component), search/filter bars, empty states used consistently.
-- ✅ RBAC: `requireModule()` / `requirePermission()` on every route + action, backed by `role_permissions` (migrations `001`–`002`).
-- ✅ Activity logging (`logActivity`) on mutations.
-- 🟡 `createBackup` produces no artifact (§A).
-- 🟢 `admin-ci.yml` runs typecheck + lint + test on every push touching `admin-panel/**`.
-
-## G. Security & config
-
-- ✅ **No hardcoded secrets.**
-- ✅ **`.env` hygiene:** `.env.local` untracked & gitignored; `.env.example` placeholders only, with an explicit note: *"this build uses NO service-role key. Every query runs as the signed-in admin's own session."*
-- ✅ **Zero service-role usage** — verified: there is no `admin.ts` / `createAdminClient` / `SUPABASE_SERVICE_ROLE_KEY` reference in `src/`. Writes are authorised by `is_admin()` RLS policies (`migrations/002_admin_rls_policies.sql`); transactional money moves go through `SECURITY DEFINER` RPCs. This is a strong posture.
-- 🟢 Minor: `src/lib/supabase/server.ts:8` comment still references *"the one service-role client (admin.ts)"* which no longer exists — stale doc, harmless.
-
----
----
-
-# COMBINED FEATURE MATRIX (Section F)
-
-Legend: ✅ fully working · 🟡 partially built · ❌ missing
-
-| Feature | Mobile | Website | Admin |
-|---|---|---|---|
-| **Project marketplace** | ✅ browse / search / detail / reviews / checkout / downloads / wishlist (18 screens) | ✅ `/projects` + `category/[category]` / `trending` / `premium` / `best-sellers` / `[id]` | ✅ full CRUD + images / video / documentation / source-code / versions / reviews / analytics / featured / categories / technologies |
-| **Jobs** | ✅ dashboard / search / detail / apply / alerts / companies (14 screens) | ✅ `/jobs` / `/jobs/[id]` / `companies` / `companies/[id]` | ✅ CRUD + applications pipeline (`shortlisted` / `rejected` / `featured`) + analytics |
-| **Placement / Learning** | ✅ Learning tab: grids → sections → topics → content, mock tests, coding problems, notes (9 screens) | ✅ `/learning/*` / `/mock-tests/[testId]` / `/coding-problems/[problemSlug]` / `/placement/notes` | ✅ `/learning` tree editor + `/placement` tests / questions / results |
-| **Resume builder** | ✅ editor / sections / templates / design sheet / JD-match / upload-import / versions (14 screens) | ✅ `/account/resume/[id]/{edit,ats,jd-match,versions,projects,preview}` + `import` + `/resume/templates` | ✅ `/resume`: templates / ats-rules / ai-config / shares / downloads / analytics |
-| **Custom projects** | ✅ 8-step builder wizard + token payment + my-projects (13 screens) | ✅ `/custom-projects/{start,estimate,features,checkout,my-projects}` | ✅ request pipeline + delivery + features / pricing / categories |
-| **Premium** | ✅ plans / features / checkout / success (5 screens) | ✅ `/premium` | ✅ plans + subscriptions (visible per-student) |
-| **Referral & wallet** | ✅ dashboard / history / earnings / leaderboard / share (6 screens) | ✅ `/referral` + `/account/referral` + `/account/wallet` | ✅ earnings / leaderboard / reward-settings / wallet / wallet-requests |
-| **Auth + password reset** | ✅ Login / Register / Forgot / Reset | ✅ `/login` / `/register` (+ consent) / `/logout` | ✅ `resetPasswordForEmail` |
-| **Legal / compliance** | ✅ 10 legal docs + consent recording | ✅ all legal routes + `/grievance` / `/cookie-policy` / `/data-and-permissions` | ✅ `/cms/pages` + consent tracking |
-
-**All seven headline features are ✅ on all three platforms** — an unusually complete build.
-
-**Platform-normal things that are partial or missing:**
-
-| Item | Status |
+| Severity | Count |
 |---|---|
-| Website CI | ❌ no `website-ci.yml` (mobile + admin have CI) |
-| `ANTHROPIC_API_KEY` in `website/.env.example` | ❌ undocumented required secret |
-| Web compiler "Ask AI to fix" | 🟡 placeholder button, no backend |
-| Admin `createBackup` | 🟡 records a request, produces no artifact |
-| Mobile backend-error UX | 🟡 masked by SAMPLE-data fallback on catalog reads |
-| Empty / loading / error states | ✅ present across all three (mobile caveat above) |
-| Pagination | ✅ admin + website; mobile — confirm long lists page |
-| Admin moderation tools | ✅ comprehensive |
-| Full table-by-table RLS verification | ⚠️ recommended as a separate pass (not done in read-only Phase 1) |
+| CRITICAL | 0 |
+| HIGH | 2 |
+| MEDIUM | 7 |
+| LOW | 8 |
+| Needs Manual Verification | 11 |
+
+### Build / static health (Phase 1) — all green
+
+| Check | Command | Result |
+|---|---|---|
+| Types | `npm run typecheck` (`tsc --noEmit`) | exit 0 — no errors |
+| Lint | `npm run lint` (`next lint`) | exit 0 — "No ESLint warnings or errors" |
+| Production build | `npm run build` | exit 0 — 89 routes, **no warnings**, `✓ Compiled successfully` |
+| Unit tests | `npm test` (`vitest run`) | 336 passed, 12 skipped, exit 0 |
+
+No `any`-hiding-a-bug, unresolved import, missing `await`, or unhandled-promise issue was found by `tsc`/`eslint` or by manual review of the server actions and route handlers. The one `console.log` in `src/` (`src/lib/compiler/languages.ts:43`) is inside a *sample code snippet string* shown in the editor, not real logging.
+
+### Top 5 to fix first
+
+1. **W-01 (HIGH)** — Wallet page shows a **balance summed from only the 50 most recent transactions** (`src/app/account/wallet/page.tsx:11-18`). For any account with >50 wallet rows the figure is simply wrong, and it disagrees with the account dashboard, which sums *all* rows (`src/app/account/page.tsx:13,20`). Both are labelled "Current balance" / "Lifetime balance" with no hedging.
+2. **W-02 (HIGH)** — `/api/coding-problems/judge` and `/api/practice/judge` execute untrusted code in an external sandbox **with no authentication at all** (not even the `COMPILER_REQUIRE_AUTH` gate that `/api/compiler/run` has), fan out to **up to 12 sandbox runs per request** (`MAX_JUDGE_CASES`), and are protected only by a **per-instance in-memory rate limiter** that resets on every deploy and is not shared across serverless instances (`src/lib/compiler/rateLimit.ts:10-11`).
+3. **W-03 (MEDIUM)** — There is **no password-reset / "forgot password" flow anywhere on the website**. `src/app/login/page.tsx` has no link; `resetPasswordForEmail` appears nowhere; `robots.ts` disallows `/auth` but no `/auth` route exists.
+4. **W-04 (MEDIUM)** — Every account page reads Supabase with `const { data } = await …` and **no `error` branch**, so a transient DB/RLS error renders as "No … yet" or **wallet balance ₹0** rather than an error state (`src/app/account/{wallet,purchases,applications,notifications,saved-jobs,saved-projects,referral}/page.tsx`, `src/app/account/page.tsx`).
+5. **W-08 (MEDIUM)** — Only one error boundary exists (`src/app/error.tsx`); there is **no `global-error.tsx`**, so an exception thrown in the root layout (`src/app/layout.tsx` — Header/Footer/JsonLd/AnnouncementBar) white-screens with the unstyled Next default and no recovery UI.
 
 ---
 
-## Recommended Phase 2 order (for when you approve)
+## 2. Findings Table (ordered by severity)
 
-1. **Trivial deletes** — `website/src/components/CmsLegalPage.tsx`, `website/src/lib/resumeBuilder/sampleResume.ts`, root `node_modules/.vite`, and commit the already-staged `admin-panel/legacy/**` + old `placement/*` deletions.
-2. **Dependency alignment** — bump `@supabase/supabase-js` to `^2.57.0` in website + admin; decide one `zod` major; (optional) harmonise `typescript`.
-3. **Add `website-ci.yml`**; add `ANTHROPIC_API_KEY` to `website/.env.example`.
-4. **Fix the one lint warning** — `eslint-disable-next-line` at `mobile-app/src/types/navigation.types.ts:215`.
-5. **Mobile Settings/About/Notification de-duplication** — *needs your call* on which flow (Profile tab vs drawer) is canonical.
-6. **SAMPLE-data fallback** — *needs your call*: gate behind a demo flag, or add a visible "sample data" banner.
-7. **"Ask AI to fix"** — wire to `/api/resume/assist`-style Claude call, or hide the button.
-8. **Admin `createBackup`** — *needs your call*: real export vs keep as request-log.
-9. **Separate RLS verification pass** — table-by-table, plus close `test_attempts` scoring.
+| ID | Severity | Category | File:Line | One-line description |
+|---|---|---|---|---|
+| W-01 | HIGH | Data integrity | `src/app/account/wallet/page.tsx:11-18` | Wallet balance summed from only 50 most-recent transactions → wrong for heavy accounts; disagrees with dashboard's all-rows sum |
+| W-02 | HIGH | Abuse / DoS / cost | `src/app/api/coding-problems/judge/route.ts:43-50`, `src/app/api/practice/judge/route.ts:44-51`, `src/app/api/compiler/run/route.ts:27-46` | Unauthenticated code-execution proxy, 12× fan-out per request, only an in-memory per-instance rate limiter |
+| W-03 | MEDIUM | Auth / account recovery | `src/app/login/page.tsx` (whole file) | No password-reset flow anywhere on the website |
+| W-04 | MEDIUM | Error handling / UX | `src/app/account/wallet/page.tsx:11`, `src/app/account/page.tsx:11-18`, `src/app/account/purchases/page.tsx:12`, `src/app/account/applications/page.tsx:24`, `src/app/account/notifications/page.tsx:10`, `src/app/account/saved-jobs/page.tsx:10`, `src/app/account/saved-projects/page.tsx:12`, `src/app/account/referral/page.tsx:11` | Supabase read errors silently rendered as empty / zero states (incl. wallet ₹0) |
+| W-05 | MEDIUM | Injection surface / cache bloat | `src/lib/cache.ts:182`, `src/lib/cache.ts:217-219`, `src/app/projects/page.tsx:48`, `src/app/jobs/page.tsx` | Marketplace/jobs `q` passed to `.ilike("%q%")` and used as an `unstable_cache` key with no length cap and no `% _` stripping (the global `/search` path *is* sanitized; these list paths are not) |
+| W-06 | MEDIUM | Entitlement / premium gate | `src/app/mock-tests/[testId]/MockTestRunner.tsx:67-93` | Premium mock-test gate is client-side only (0 rows from `test_questions` ⇒ "premium"); real gate depends on RLS/RPC not in this tree |
+| W-07 | MEDIUM | Cost control | `src/lib/resumeBuilder/aiAssist.ts:70-73, 96` | AI-assist daily cap counts **only successful** requests; failed Anthropic calls (still billable) don't decrement the quota |
+| W-08 | MEDIUM | Resilience | `src/app/error.tsx` (only), no `src/app/global-error.tsx` | No `global-error.tsx` and no per-segment boundaries; a root-layout error white-screens unstyled |
+| W-09 | MEDIUM | Long-lived credential exposure | `src/lib/actions/jobs.ts:122-136`, `src/lib/resume.ts:19` | A **1-year signed URL** to the private `resumes` bucket is minted and stored in a DB row (`resumes.file_url`) — a long-lived bearer link that bypasses RLS for anyone who obtains it |
+| W-10 | LOW | Stored-content trust / XSS | `src/app/learning/[gridSlug]/[topicSlug]/page.tsx:122-140` | Admin-authored `file_url` / `video_url` rendered straight into `href` with **no scheme allow-list** (the Markdown *body* is scheme-filtered; these two fields bypass `safeUrl()`) |
+| W-11 | LOW | Correctness | `src/lib/learning.ts:262`, `src/lib/learning.ts` (grid brief), `mock_test_detail` callers | `.ilike("slug", rawUrlParam)` — `%` / `_` in the path segment act as SQL-LIKE wildcards, can resolve the wrong row or a spurious match |
+| W-12 | LOW | Account enumeration | `src/app/login/page.tsx:52-57` | `email_for_mobile` RPC is a mobile-number oracle ("No account found with this mobile number." vs a password error) |
+| W-13 | LOW | Abuse | `src/app/r/[token]/ReportShareButton.tsx:19-23` | Anonymous `report_shared_resume` call with no client-side throttle — a share token's report queue can be spammed |
+| W-14 | LOW | Crash (conditional) / perf | `src/app/sitemap.ts:47-77` | `new Date(row.updated_at)` with a null/absent `updated_at` → `Invalid Date` → `RangeError` on sitemap serialization (500s `/sitemap.xml`); also 8 `.limit(1000)` queries with no `unstable_cache` |
+| W-15 | LOW | Perf | `middleware.ts:31` | `supabase.auth.getUser()` — a network round-trip to Supabase Auth — runs on **every** non-static request, including fully public catalog pages |
+| W-16 | LOW | Unvalidated client id (low impact) | `src/app/api/resume/assist/route.ts:97-104`, `src/lib/resumeBuilder/aiAssist.ts:51-53` | `resumeId` is accepted from the client and never ownership-checked; only written to the `resume_ai_requests` log row |
+| W-17 | LOW | Functional gap | `src/app/projects/[id]/ProjectPurchasePanel.tsx:132-141` | "Free — open in your account" for a `price <= 0` project just links to `/account/purchases`; nothing grants the project (may be a real gap or handled elsewhere) |
 
 ---
 
-**Phase 1 stops here. No files were deleted, fixed, or moved.** Awaiting your review of this report before any Phase 2 cleanup.
+## 3. Detailed Findings
+
+### W-01 — HIGH — Wallet balance is computed from a truncated window
+
+**Where:** `src/app/account/wallet/page.tsx:11-18`
+```ts
+const { data: txns } = await supabase
+  .from("wallet_transactions")
+  .select("id,type,category,amount,description,created_at")
+  .eq("user_id", user.id)
+  .order("created_at", { ascending: false })
+  .limit(50);                       // <-- window
+const balance = (txns ?? []).reduce((sum, t) =>
+  sum + (t.type === "credit" ? Number(t.amount) : -Number(t.amount)), 0);
+```
+The page then renders that number as **"Current balance"** in a large heading.
+
+**What's wrong:** the balance is derived by summing only the 50 newest transactions. The account dashboard computes the *same* concept differently — it sums **all** rows (`src/app/account/page.tsx:13` selects `type,amount` with no `.limit()`, `:20` reduces them) and labels it "Lifetime balance". For any user with more than 50 wallet transactions the two screens show **different balances**, and the wallet screen's figure is arbitrary (it depends only on the credit/debit mix of the last 50 rows).
+
+**Why it matters:** this is a money figure presented to the user as authoritative. A student who tops up, spends, and earns referral credit repeatedly will eventually cross 50 rows; from then on the wallet page can show a balance that is materially higher or lower than reality. That drives support load and erodes trust, and if any client code ever gates a "pay with wallet" affordance on this number the UX will be inconsistent. (Actual spend is decided server-side in an Edge Function, so this is a *display* integrity bug, not a spend bypass — hence HIGH not CRITICAL.)
+
+**Repro:**
+1. Sign in as a user with ≥ 51 rows in `wallet_transactions` (or insert test rows).
+2. Open `/account/wallet` — note the "Current balance".
+3. Open `/account` — note the "Wallet balance" card.
+4. The two differ; the wallet-page value changes as you add older-than-position-50 rows via the DB.
+
+**Suggested fix (described, not applied):** compute the balance from an authoritative source, not a windowed client-side reduce — e.g. a `wallet_balance` column on `profiles` maintained by the same trigger/Edge Function that writes `wallet_transactions`, or a dedicated `wallet_balance(user_id)` RPC / a `head:true` sum via PostgREST aggregate. Keep the 50-row `.limit()` for the *history list* only. Make the dashboard read the same source so the two screens agree.
+
+---
+
+### W-02 — HIGH — Unauthenticated code-execution proxy with fan-out and weak rate limiting
+
+**Where:**
+- `src/app/api/coding-problems/judge/route.ts:43` — `POST` handler, **no auth check**, calls `runCode()` in a loop over up to `MAX_JUDGE_CASES = 12` cases (`src/lib/codingProblems.ts:70`, loop at `:87`).
+- `src/app/api/practice/judge/route.ts:44` — identical, **no auth check**.
+- `src/app/api/compiler/run/route.ts:27-38` — single run; auth is **opt-in** via `COMPILER_REQUIRE_AUTH` which **defaults off** (`.env.example` ships `COMPILER_REQUIRE_AUTH=false`).
+- `src/lib/compiler/rateLimit.ts:10-11` — the only rate limiter: `const buckets = new Map<string, Bucket>()` in module scope, keyed by `x-forwarded-for` / UA. Its own doc comment says: *"the counter lives in the module scope of one server instance: it resets on redeploy and is not shared across lambdas."*
+
+**What's wrong:** an anonymous client can drive the external execution provider (Paiza guest by default, or a configured Judge0) at will. `/api/*/judge` amplifies each HTTP request into up to 12 sequential sandbox executions, each with a `RUN_TIMEOUT_MS` up to 12s. The in-memory limiter does essentially nothing on a serverless platform where each cold instance starts with an empty `Map` and requests are spread across instances; the code itself acknowledges this and points at `COMPILER_REQUIRE_AUTH=true` as the real control — which is off by default.
+
+**Why it matters:**
+- **Shared-quota DoS:** the Paiza guest tier is rate-limited with no SLA (per `.env.example`). A modest flood of `/api/practice/judge` calls exhausts the shared quota and the compiler / judge stops working **for every legitimate user**.
+- **Cost:** with a paid Judge0/RapidAPI backend, this is a direct spend amplifier.
+- **Function-time exhaustion:** 12 × 12s serial runs also blows past a typical serverless max duration, so the requests themselves become a resource sink even when the provider survives.
+
+**Repro:**
+1. `curl -X POST https://<site>/api/practice/judge -H 'content-type: application/json' -d '{"slug":"<any real practice slug>","language":"python","source":"print(1)"}'` — succeeds with no session.
+2. Fire it concurrently in a loop; observe provider 429s / quota errors surfaced to real users at `/practice/problems/<slug>` and `/compiler`.
+
+**Suggested fix (described):**
+- Require a session on `/api/coding-problems/judge` and `/api/practice/judge` (they already build `createAuthedServerSupabase()` for the RPC — add the `getUser()` 401 the way `/api/practice/submit` does), and/or flip `COMPILER_REQUIRE_AUTH` to `true` for production.
+- Move rate limiting to a durable store (Supabase table with a short TTL, or Upstash/Vercel KV) keyed by user id (authenticated) and IP (anon), enforced *before* the fan-out.
+- Cap total sandbox executions per client per minute (not just requests), since one request = up to 12 runs.
+
+---
+
+### W-03 — MEDIUM — No password-reset flow on the website
+
+**Where:** `src/app/login/page.tsx` (no "Forgot password?" link, no recovery path). Grep for `forgot|reset.?password|resetPasswordForEmail|recovery|updateUser` across `src/` returns nothing. `src/app/robots.ts:12` disallows `/auth` but there is no `src/app/auth/` directory.
+
+**What's wrong:** a user who signs up on the web (or uses the web as their primary client) and forgets their password has **no way to recover their account on the website**. The only route is the mobile app.
+
+**Why it matters:** account lockout with no self-service recovery is a standard production gap; it generates support tickets and blocks conversion. It also suggests an `/auth/callback` (or `/auth/confirm`) route was planned (`robots.ts`) and never built — see W-appendix / Needs Manual Verification for the related email-confirmation question.
+
+**Repro:** open `/login`, look for a recovery link — there is none. Sign up, "forget" the password, and there is no web path back in.
+
+**Suggested fix (described):** add a `/forgot-password` page that calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: <site>/auth/reset })` and a matching `/auth/reset` page that reads the recovery session and calls `supabase.auth.updateUser({ password })`. Add the "Forgot password?" link on `/login`. Add the `/auth/*` routes to the `robots.ts` disallow list (already partly anticipated).
+
+---
+
+### W-04 — MEDIUM — Database read errors are rendered as empty / zero states
+
+**Where (all follow the same shape):**
+- `src/app/account/wallet/page.tsx:11` — `const { data: txns } = …`; on error `txns` is `undefined` → balance `₹0`, "No transactions yet".
+- `src/app/account/page.tsx:11-20` — dashboard; on error the wallet card shows `₹0`, counts show `0`.
+- `src/app/account/purchases/page.tsx:12` → "No purchases yet".
+- `src/app/account/applications/page.tsx:24` → "No applications yet".
+- `src/app/account/notifications/page.tsx:10` → "No notifications yet".
+- `src/app/account/saved-jobs/page.tsx:10`, `src/app/account/saved-projects/page.tsx:12` → "No saved … yet".
+- `src/app/account/referral/page.tsx:11` → code "—", "No referrals yet".
+
+None of these destructure or check `error`.
+
+**What's wrong:** a transient Supabase error (network blip, RLS hiccup, pool exhaustion) is indistinguishable from "the user genuinely has nothing". The wallet case is the worst: a logged-in user momentarily sees **₹0 balance and no transactions**, which reads as "my money is gone".
+
+**Why it matters:** false-empty states on financial and application-status screens cause real alarm and support escalations, and they hide outages (the page looks "fine, just empty"). Public catalog pages handle the `null` client path gracefully; the authenticated pages should handle the `error` path just as deliberately.
+
+**Repro:** temporarily point `NEXT_PUBLIC_SUPABASE_URL` at an unreachable host (or block the Supabase origin) and load `/account/wallet` — it renders "₹0 / No transactions yet" with no indication anything failed.
+
+**Suggested fix (described):** destructure `{ data, error }` on these reads; on `error`, render an `ErrorState` with a retry (the component already exists — `src/components/ui`, used by `src/app/error.tsx`) instead of the empty state. Alternatively add a segment-level `src/app/account/error.tsx` and `throw` on a read error so the boundary handles it uniformly.
+
+---
+
+### W-05 — MEDIUM — Marketplace/jobs search term is unsanitized before `ilike` + cache key
+
+**Where:** `src/lib/cache.ts:182` (`if (a.q) query = query.ilike("title", `%${a.q}%`)`), `:217-219` (jobs `ilike` on `title` and `location`), reached from `src/app/projects/page.tsx:48` (`q: searchParams.q`) and the equivalent in `src/app/jobs/page.tsx`. The value is the raw `searchParams.q` — **not** passed through `sanitizeSearchTerm` (that function exists in `src/lib/searchModel.ts:74` and *is* used by `/search` and `/api/search`, but not by the list pages).
+
+**What's wrong:**
+1. **LIKE-wildcard injection:** a `q` of `%` or `_` changes match semantics (`%` matches everything). Not SQL injection — `supabase-js` parameterizes — but it lets a crafted query return the whole table or nothing.
+2. **Cache-key bloat:** `getCachedProjectsPage` / `getCachedJobsPage` are `unstable_cache` wrappers whose key is the hashed argument object, which includes `q` verbatim with no length bound. An attacker looping distinct long `q` values creates unbounded distinct cache entries in the Next data cache.
+3. There is no `.trim()` / max-length on `q` before it hits PostgREST.
+
+**Why it matters:** low individual impact, but it's an untrusted string flowing into a query filter and a cache key on a high-traffic public route. The project already has the exact hardening helper — it's just not applied here.
+
+**Repro:** `GET /projects?q=%25` returns an all-rows page; `GET /projects?q=<5KB string>` (repeated with varied content) inflates the data cache.
+
+**Suggested fix (described):** run `searchParams.q` through `sanitizeSearchTerm` (strips `% _ , ( ) " \ *`, collapses whitespace, caps at `MAX_SEARCH_TERM`) in `ProjectsPage` / `JobsPage` before building the cache args, exactly as `/search` does.
+
+---
+
+### W-06 — MEDIUM — Premium mock-test gate is client-side only
+
+**Where:** `src/app/mock-tests/[testId]/MockTestRunner.tsx:67-93`. `startTest()` selects `id,question_text,options,marks,sort_order` from `test_questions` (note: **not** `correct_index` — that part is good). If `questions.length === 0` **and** `isPremium`, it shows the "premium test" screen (`:84-86`). Submission goes to the `submit_test_attempt` RPC (`:105`).
+
+**What's wrong:** whether a non-premium user can take a premium test hinges entirely on `test_questions` RLS returning **zero rows** for them. If that RLS does not filter premium tests by entitlement, a non-premium user gets `questions.length > 0`, the client shows the quiz, and scoring integrity then depends on `submit_test_attempt` re-checking premium server-side. The website cannot enforce any of this — it trusts the row count.
+
+**Why it matters:** premium content bypass if either the `test_questions` RLS or the `submit_test_attempt` RPC omits the entitlement check. This is a different pattern from the Learning topic / Coding Problem premium gates, which correctly delegate the decision to a SECURITY DEFINER RPC that returns `locked: true` or the body (`src/app/learning/[gridSlug]/[topicSlug]/PremiumTopicContent.tsx:43-53`, `src/app/coding-problems/[problemSlug]/CodingProblemPremiumGate.tsx:54-63`).
+
+**Repro:** cannot be verified from the website tree — see Needs Manual Verification #4.
+
+**Suggested fix (described):** route the mock-test question load through a SECURITY DEFINER RPC (like `mock_test_detail` / `coding_problem_detail`) that enforces published + platform + premium and returns `locked` — don't read `test_questions` directly from the browser for gating.
+
+---
+
+### W-07 — MEDIUM — AI-assist daily cap only counts successful calls
+
+**Where:** `src/lib/resumeBuilder/aiAssist.ts`. `countTodayRequests()` (`:40-49`) counts rows in `resume_ai_requests` for today; the cap check is `:70-73` (`DAILY_REQUEST_CAP = 30`). But `logRequest()` (`:96`) is called **only after** a successful `client.messages.create(...)` — every error path (`:99-106`) returns without logging.
+
+**What's wrong:** a user whose requests error out (rate-limit from Anthropic, transient API error, empty completion) can keep calling; those calls still hit the Anthropic API and still cost money/latency, but never count against the 30/day cap. The route-level limiter (`src/app/api/resume/assist/route.ts:78`, 20 per 10 min, in-memory) is the only backstop, and it has the same per-instance weakness as W-02.
+
+**Why it matters:** the per-user spend on a paid LLM is not actually bounded. Cost, not security.
+
+**Suggested fix (described):** log the attempt **before** calling Anthropic (or in a `finally`), or count attempts separately from successes. Persist the rate-limit counter durably.
+
+---
+
+### W-08 — MEDIUM — No `global-error.tsx`; single root error boundary
+
+**Where:** only `src/app/error.tsx` exists. No `src/app/global-error.tsx`; no per-segment `error.tsx` under `/account`, `/custom-projects`, `/resume`, etc. (`find src/app -name "error.tsx" -o -name "global-error.tsx"` → one file).
+
+**What's wrong:**
+- An error thrown **in the root layout** (`src/app/layout.tsx` renders `Header`, `AnnouncementBar`, `Footer`, `JsonLd`, `BottomNav`) is *not* caught by `src/app/error.tsx` — only `global-error.tsx` catches root-layout errors. The user gets Next's default unstyled error page.
+- Errors in a deep account/custom-project page bubble all the way to the root boundary; functional, but the whole chrome is replaced rather than just the panel.
+
+**Why it matters:** resilience. `layout.tsx` does real work (reads `NEXT_PUBLIC_SUPABASE_URL` for preconnect, renders islands); any throw there is a full white-screen with no branding and no "try again".
+
+**Suggested fix (described):** add `src/app/global-error.tsx` (must render its own `<html><body>`), and consider a `src/app/account/error.tsx` so a failed account read degrades to a panel-level retry (pairs well with W-04).
+
+---
+
+### W-09 — MEDIUM — One-year signed URL to a private bucket is persisted in a DB row
+
+**Where:** `src/lib/actions/jobs.ts:122-136` — on "apply with a new upload", the action mints `createSignedUrl(newResume.storagePath, RESUME_SIGNED_URL_TTL)` and stores the result in `resumes.file_url` (`:134`). `RESUME_SIGNED_URL_TTL = 60*60*24*365` (1 year) — `src/lib/resume.ts:19`.
+
+**What's wrong:** the `resumes` bucket is private (RLS-protected), but the stored `file_url` is a **signed URL** — a bearer token valid for a year that bypasses RLS for anyone who has the string. It is copied into `applications.resume_id → resumes.file_url` and surfaces wherever an application's resume is displayed (recruiter view, admin). Anyone who obtains that URL (log line, referrer leak, a future over-broad `applications`/`resumes` read, a shared screenshot) can download the résumé for 12 months with no auth.
+
+**Why it matters:** résumés contain PII (name, phone, email, address). A long-lived, auth-free link to a private object is a weak spot; the correct pattern for a private bucket is to mint a short-lived signed URL **at view time**, not to persist one.
+
+**Suggested fix (described):** store only `storage_path` (the action already captures it — `:135`) and generate a short-TTL signed URL on demand when someone with permission views the application. If a stored URL is required for compatibility with the mobile app's schema, drop the TTL to minutes/hours and regenerate.
+
+---
+
+### W-10 — LOW — Admin content URLs rendered without a scheme allow-list
+
+**Where:** `src/app/learning/[gridSlug]/[topicSlug]/page.tsx:122` and `:133` — `<a href={block.file_url} …>` / `<a href={block.video_url} …>` straight from the `learning_topic_content` RPC payload. The Markdown *body* renderer (`src/components/learning/Markdown.tsx:10-16` `safeUrl()`) blocks `javascript:` / unknown schemes, but these two dedicated fields bypass it.
+
+**What's wrong:** a `javascript:` / `data:text/html` value in `learning_topics`/content `file_url`/`video_url` becomes a clickable link that executes in the victim's origin. Content is admin-authored, so this is a trust-boundary / defense-in-depth issue rather than an open XSS — but it's inconsistent with the care taken everywhere else (JSON-LD escaping, the Markdown URL filter, plain-text resume link rendering).
+
+**Suggested fix (described):** run `block.file_url` / `block.video_url` through the same `safeUrl(..., "link")` helper (export it or a shared `httpUrlOnly()`), rendering nothing when it doesn't pass.
+
+---
+
+### W-11 — LOW — `.ilike("slug", rawParam)` treats `%` / `_` as wildcards
+
+**Where:** `src/lib/learning.ts:262` (`getLearningGridBrief` — `.ilike("slug", slug)` where `slug` is the URL segment). Similar raw-param `ilike` usage on slug lookups elsewhere in the learning/practice read layer.
+
+**What's wrong:** `/learning/jav_/…` or `/learning/%25/…` are interpreted as LIKE patterns. Worst case: a URL resolves to a grid the author didn't intend, or a `%`-only slug matches the first published grid. Cosmetic/SEO impact, not a data leak (RLS + `status='published'` + `show_on_website` still apply).
+
+**Suggested fix (described):** use `.eq("slug", slug)` for exact slug lookups (slugs are lower-kebab already), or escape `%`/`_` before `ilike`.
+
+---
+
+### W-12 — LOW — Mobile-number account-enumeration oracle on login
+
+**Where:** `src/app/login/page.tsx:52-57` — non-email identifiers call `supabase.rpc("email_for_mobile", { p_mobile })`; a missing account throws **"No account found with this mobile number."**, distinct from the generic "Invalid login credentials" you get for a wrong password.
+
+**What's wrong:** an attacker can probe whether a given phone number has a CampusEduX account. Standard low-severity enumeration; the same class exists on most `signup`/`reset` flows.
+
+**Suggested fix (described):** return a uniform "Invalid email/mobile or password" for both the lookup-miss and the sign-in failure; keep the specific reason server-side only.
+
+---
+
+### W-13 — LOW — Anonymous resume-share reporting has no throttle
+
+**Where:** `src/app/r/[token]/ReportShareButton.tsx:16-24` — any visitor to `/r/<token>` can call `report_shared_resume(token, reason)` with the anon key, repeatedly, with a fixed reason string.
+
+**What's wrong:** a share token's moderation/report state can be spammed by an unauthenticated user (e.g. to get a legitimate résumé link auto-disabled, if the RPC does that on a threshold).
+
+**Suggested fix (described):** rate-limit `report_shared_resume` server-side (per token + per IP), dedupe repeat reports, and/or require a session to report.
+
+---
+
+### W-14 — LOW — Sitemap can `RangeError` on a null `updated_at`; also uncached
+
+**Where:** `src/app/sitemap.ts:47-77`. `entries.push({ url: …, lastModified: new Date(p.updated_at) })` for projects, jobs, companies, learning rows, coding/practice problems, blog posts. `new Date(undefined)` → `Invalid Date`; Next serializes `lastModified` via `.toISOString()`, which throws `RangeError` on an invalid date → `/sitemap.xml` returns 500. Also: 8 queries (`.limit(1000)` / `.limit(500)`) run with **no `unstable_cache`** and no `export const revalidate`.
+
+**What's wrong:** if any of those `updated_at` columns (or the RPC `updated_at` fields) can be null/absent, the whole sitemap 500s. Even absent that, the sitemap is regenerated with 8 round-trips whenever Next decides to.
+
+**Suggested fix (described):** guard each date (`const d = new Date(x); entries.push({ url, ...(isNaN(d.getTime()) ? {} : { lastModified: d }) })`), and wrap the fetch block in `unstable_cache` with the relevant tags (like `src/lib/cache.ts` does elsewhere) or add `export const revalidate = 3600`.
+
+---
+
+### W-15 — LOW — `auth.getUser()` on every request in middleware
+
+**Where:** `middleware.ts:31` (`await supabase.auth.getUser()`), matcher at `:38-40` excludes only static assets and image files — so it runs for every public catalog page too.
+
+**What's wrong:** `getUser()` is a network call to the Supabase Auth server (it validates the JWT server-side), added to the latency of `/`, `/projects`, `/jobs`, `/learning`, `/blog`, etc., for anonymous visitors who have no session to refresh. This is already noted as "R1" in `website/OPTIMIZATION_NOTES.md`.
+
+**Suggested fix (described):** narrow the matcher to the routes that actually need a fresh server session (`/account/:path*`, `/custom-projects/:path*`, `/resume/:path*`, the résumé API), or short-circuit when no Supabase auth cookie is present on the request.
+
+---
+
+### W-16 — LOW — `resumeId` accepted from client and never ownership-checked (assist)
+
+**Where:** `src/app/api/resume/assist/route.ts:97-104` passes `parsed.data.resumeId` straight into `getAssistSuggestion`; `src/lib/resumeBuilder/aiAssist.ts:51-53, 96` only writes it to `resume_ai_requests.resume_id`.
+
+**What's wrong:** a caller can supply any UUID as `resumeId`. Impact is limited to a mislabeled analytics/log row (the suggestion itself is generated from `currentText`/`instruction` in the body, not from the resume). Worth tightening for correctness and to prevent log poisoning.
+
+**Suggested fix (described):** when `resumeId` is present, `select id from resumes_builder where id = $1 and user_id = $2` before logging; drop it (null) if it isn't the caller's.
+
+---
+
+### W-17 — LOW — Free project has no grant path from the website
+
+**Where:** `src/app/projects/[id]/ProjectPurchasePanel.tsx:132-141` — when `price <= 0`, the panel shows "Free — open in your account" as a link to `/account/purchases`. No `purchases` insert, no Edge Function call.
+
+**What's wrong:** unless a free project is granted elsewhere (mobile app, a DB default, an admin process), a web user clicking "Free — open in your account" lands on an empty purchases list. Either a genuine functional gap or logic that lives outside this tree.
+
+**Suggested fix (described):** if free projects are meant to be self-serve on web, add a server action that inserts a `purchases` row (`status:'success', total_amount:0`) after an ownership/existence check; otherwise change the copy to point at the app.
+
+---
+
+## 4. Feature Status (Phase 2)
+
+| Feature | Status | Notes / where the data comes from |
+|---|---|---|
+| **Signup** | WORKING | `src/app/register/page.tsx` → `supabase.auth.signUp` (client) → `handle_new_user` trigger creates `profiles`. Consent recorded via `record_legal_consent` RPC (best-effort). Password min-6 is client-only but Supabase enforces its own policy. Referral code passed in `raw_user_meta_data`. |
+| **Login (email + mobile)** | WORKING | `src/app/login/page.tsx` → `email_for_mobile` RPC for mobile → `signInWithPassword`. `?next=` validated by `safeInternalPath` (`src/lib/nav.ts`). Loading/error handled; no duplicate-submit guard beyond `disabled`. |
+| **Logout** | WORKING | `src/app/logout/page.tsx` → `signOut().finally(...)` always redirects; cross-tab via `emitSessionChange`. |
+| **Password reset** | BROKEN (absent) | No route, no link, no `resetPasswordForEmail`. See **W-03**. |
+| **Email confirmation** | CANNOT VERIFY | No `/auth/callback` route; `/register` tells the user to confirm then sign in manually. Needs Manual Verification #3. |
+| **Session in nav / islands** | WORKING | `src/lib/useSessionProfile.ts` → `GET /api/session` (`Cache-Control: private, no-store`), shared in-flight request, cross-tab + focus re-check. |
+| **Marketplace list** | WORKING | `src/app/projects/page.tsx` → `getCachedProjectsPage` (`src/lib/cache.ts:171`). Pagination via `.range()`, `count:"exact"`, `totalPages()`. Empty state handled. `q` unsanitized — **W-05**. |
+| **Project detail + reviews + related** | WORKING | `src/lib/cache.ts:251` — `.single()` on the project (returns `{project:null}` path handled at `:263`; caller 404s). Reviews `.limit(10)`, related `.limit(4)`. Gallery dedupes. |
+| **Project purchase** | WORKING (server-authoritative) | `src/app/projects/[id]/ProjectPurchasePanel.tsx` → `create-razorpay-order` / `verify-razorpay-payment` Edge Functions; client never sends a price; `interpretVerifyResponse` (`src/lib/payments.ts`) refuses success on any non-`{}` body. Owned-check via `purchases` read. Free path — **W-17**. |
+| **Jobs list** | WORKING | `src/app/jobs/page.tsx` → `getCachedJobsPage`. Loading skeletons present (`src/app/jobs/loading.tsx`). Same `q` note as W-05. |
+| **Job detail** | WORKING | `src/lib/cache.ts:307` — `.single()`; `data ?? null` → caller `notFound()`. `job.requirements?.length` / `job.skills?.length` optional-chained. |
+| **Save job** | WORKING | `src/lib/actions/jobs.ts:35` — session id from cookie, `jobExists()` check, `23505` treated as success (race-safe). RLS + explicit `.eq("user_id")`. |
+| **Apply to job** | WORKING (with W-09) | `src/lib/actions/jobs.ts:93` — server-side: exactly-one-resume `refine`, storage path must start with `${user.id}/`, extension allow-list, server-minted signed URL, `23505`/`23503` mapped to friendly errors. Long-lived signed URL — **W-09**. |
+| **Placement / Learning grids + topics** | WORKING | `src/lib/learning.ts` — all reads via SECURITY DEFINER RPCs pinned to `platform='website'`. `notFound()` on null. ISR (`revalidate=300`). Premium topics: server renders `locked`, `PremiumTopicContent` island re-checks via RPC (server-authoritative). |
+| **Coding problems (topic + practice)** | WORKING | `getCodingProblem` / `getPracticeProblem` RPCs withhold body/tests for locked premium. Judge route redacts hidden cases (`src/lib/codingProblems.ts:45-66`). Auth gap on judge — **W-02**. |
+| **Online compiler** | WORKING (with W-02) | `src/app/api/compiler/run` → Zod schema, size caps (`src/lib/compiler/limits.ts`), `AbortController` wall-clock, provider abstraction, never executes in-process. Auth opt-in / rate limit weak — **W-02**. |
+| **Mock tests** | PARTIALLY WORKING | `src/app/mock-tests/[testId]` — client fetches questions **without** `correct_index` (good); scoring via `submit_test_attempt` RPC; `submittedRef` guards double-submit; timer auto-submits at 0. Premium gate client-side only — **W-06**. Result page reads `correct_index` post-submission (relies on RLS). |
+| **Resume builder (editor, ATS, JD-match, versions, share)** | WORKING | `src/lib/actions/resumeBuilder.ts` — every action: Zod-validated, `getOptionalUser()`, update re-scoped to `.eq("user_id")` + `.select("id").maybeSingle()` so a forged id errors clearly. Import always creates a new résumé. Share tokens owner-RLS; public read via `get_shared_resume` RPC only. Renderer (`ResumeDocumentView`) renders URLs as **plain text**, not `href` — no `javascript:` vector. |
+| **Resume PDF/DOCX export** | WORKING | `src/app/api/resume/export/{pdf,docx}` → `loadOwnResumeForExport` (`src/lib/resumeBuilder/loadForExport.ts`) scopes to `.eq("user_id")`; UUID-validated `resumeId`; logs download + snapshots version (both best-effort). |
+| **Resume upload/parse** | WORKING | `src/app/api/resume/parse` — 8 MB cap, PDF/DOCX detect, in-memory only, never persisted; cookie session OR bearer JWT; per-user+IP rate limit (in-memory). |
+| **Resume AI assist** | WORKING (with W-07, W-16) | `src/app/api/resume/assist` — cookie OR bearer JWT, Zod body, section enum, per-user rate limit, `DAILY_REQUEST_CAP=30`. Key server-only. CORS `*` (documented, needed for mobile WebView; endpoint requires a valid token so `*` is acceptable). |
+| **Custom project builder + checkout** | WORKING (server-authoritative) | Draft in `custom_project_drafts` (owner RLS); estimate recomputed server-side (`src/lib/customProjects.server.ts`); payment via `create-custom-project-order` / `verify-custom-project-payment`; draft cleared client-side post-verify. |
+| **Custom project messages** | WORKING | `src/lib/actions/customProjects.ts` — Zod length caps, ownership re-check on `custom_project_requests`, `sender_role:'student'` forced. |
+| **Premium / subscription** | WORKING (server-authoritative) | `/premium` ISR; `PremiumSubscribeButton` resolves auth client-side; `create-premium-order` / `verify-premium-payment`; `interpretVerifyResponse` guard. Entitlement (`profiles.is_premium`) — see Needs Manual Verification #1. |
+| **Referral system** | CANNOT VERIFY (website side WORKING) | `/referral` shows `reward_settings`; `/account/referral` shows the user's `referral_codes` + `referrals`. The website only *reads*; award/anti-self-referral/anti-replay logic is entirely in `handle_new_user` / DB triggers (out of tree) — Needs Manual Verification #7. |
+| **Profile** | WORKING (with a caveat) | `src/app/account/profile/ProfileForm.tsx` — **client-side** `supabase.from("profiles").update(...).eq("id", initial.id)`. No server-side validation of names/URLs (length, scheme). Safe only if `profiles` UPDATE RLS/column grants forbid `is_premium` / `role` / balance columns — Needs Manual Verification #1. |
+| **Notifications** | WORKING | `/account/notifications` `.limit(50)`, empty state; `NotificationRow` marks read client-side. Error path unhandled — **W-04**. |
+| **Account dashboard / purchases / saved / applications** | WORKING | All `.limit(50/100)`-bounded, empty states present. Error path unhandled — **W-04**. |
+| **Global search** | WORKING | `src/lib/search.ts` — `sanitizeSearchTerm` strips filter-structure + wildcard chars before `.or(ilike...)`; `unstable_cache`; per-type hrefs; `/api/search` typeahead abortable + debounced. |
+| **Blog** | WORKING | `src/lib/blog.ts` + `src/lib/blogText.ts`; Markdown renderer is text-node-only; `articleJsonLd` via escaped `JsonLd`. |
+| **Contact form** | WORKING | `src/lib/actions/contact.ts` — Zod, then `submit_contact_message` RPC which rate-limits (4/hr/client key) and is the only writer of `contact_submissions` (`website/supabase/migrations/0001`). |
+| **Delete account** | PARTIALLY WORKING (by design) | `/delete-account` is a legal doc that routes the user to the mobile app or a privacy email. No web deletion flow. Consistent with the documented compliance decision; flag only if web-based deletion is a Play/GDPR requirement for you. |
+| **Legal / consent** | WORKING | `src/lib/legalConsent.ts` — `ensureLegalConsent` best-effort on every authed page; `record_legal_consent` SECURITY DEFINER RPC pins `user_id`. |
+
+---
+
+## 5. Phase 3 — Crash Hunt (results)
+
+**No unconditional crash was found.** The codebase is unusually disciplined about this:
+
+- Every public read goes through `getPublicSupabase()` which returns `null` when unconfigured; every caller checks (`if (!supabase)` / `if (supabase)`).
+- `.map()` calls are guarded (`(data ?? [])`, `arr?.length > 0 && (...)`, optional chaining on nested props).
+- `.single()` is used in `src/lib/cache.ts:262,315,344` and the resume/jobs actions — `.single()` **throws** on 0 rows, but: in `cache.ts` the wrappers are inside `unstable_cache` and the `null`/`{project:null}` result is normalized right after (`:263`), and the detail pages `notFound()` on a falsy result; in the resume/jobs actions the insert `.single()` calls are on rows just created in the same statement. Low risk, but `.maybeSingle()` would be strictly safer for `getCachedJobDetail` (`:315`) and `getCachedCompanyDetail` (`:344`) — **noted, not a confirmed crash**.
+- Client components consistently use `let active = true; return () => { active = false }` around async effects; `useEffect` dependency arrays are correct (checked `useResizableSplit`, `useSessionProfile`, `MockTestRunner`, `GlobalSearch`, the premium islands). No conditional hooks. `MockTestRunner` guards double-submit with `submittedRef`.
+- **Hydration:** `src/components/JobCard.tsx:23` uses `Date.now()` at render, but `JobCard` is a **server component** rendered inside ISR pages (no client re-render of that subtree), so there is no server/client mismatch — only up-to-`revalidate` staleness of the "New" badge. `blogText.formatBlogDate` pins locale + `timeZone:"UTC"` specifically to avoid mismatch. No `Math.random` in render.
+- **Server components touching `window`/`localStorage`:** `src/lib/compiler/codingLayout.ts` / `standaloneLayout.ts` reference `window.localStorage` inside `try/catch` that returns a default on `ReferenceError`; `src/lib/razorpay.ts` guards `typeof window === "undefined"`. All are invoked from `"use client"` code in practice.
+- Error boundaries: `src/app/error.tsx` exists and does **not** leak `error.message` to the UI. Gaps: no `global-error.tsx`, no per-segment boundaries (**W-08**). `not-found.tsx` exists.
+
+**Conditional / non-crash issues surfaced by the hunt:** W-04 (errors → empty states), W-14 (`Invalid Date` → sitemap `RangeError` *if* an `updated_at` is null), W-11 (`ilike` slug wildcards).
+
+---
+
+## 6. Phase 4 — Security Audit (results)
+
+### Handled well (verified in the website tree)
+
+- **No service-role key.** `grep -rn "SERVICE_ROLE|service_role|serviceRole" src` → nothing. Three clients only: `getPublicSupabase()` (anon, no session), `createBrowserSupabase()` (cookie session), `createAuthedServerSupabase()` (cookie session). `src/lib/supabase/server.ts` documents the rule explicitly.
+- **`NEXT_PUBLIC_` vars** are all safe to expose: Supabase URL + anon key, site URL, support email, legal-entity strings, social links, Play Store URL, WhatsApp number, `NEXT_PUBLIC_WHATSAPP_SUPPORT` toggle. Secrets (`REVALIDATE_SECRET`, `ANTHROPIC_API_KEY`, `JUDGE0_KEY`, `PAIZA_API_KEY`, …) are non-`NEXT_PUBLIC_` and only read in route handlers / server libs.
+- **Payment integrity.** Wallet top-up, Premium, project purchase, custom-project token all delegate order creation + HMAC verification to existing Edge Functions; the client never computes or sends an amount; `interpretVerifyResponse` (`src/lib/payments.ts:22-32`) treats anything that isn't a plain object with no `error` field as failure. Verified in `TopUpForm.tsx`, `PremiumSubscribeButton.tsx`, `ProjectPurchasePanel.tsx`, `CustomProjectCheckout.tsx`.
+- **Authorization on protected pages** is per-page, not middleware-only: `src/app/account/layout.tsx:10` calls `requireUser()` (`src/lib/auth.ts:96` → `redirect("/login")`), and each account page calls `requireUser()` again. Middleware only refreshes the session.
+- **IDOR resistance in server actions.** `src/lib/actions/resumeBuilder.ts` — every update re-scopes to `.eq("user_id", user.id)` *and* reads back `.select("id").maybeSingle()`; `src/lib/actions/jobs.ts` and `src/lib/actions/customProjects.ts` re-check ownership before writing; `src/lib/resumeBuilder/loadForExport.ts:13-18` scopes the export read to `.eq("user_id")`. `resumeId` etc. are UUID-validated with Zod.
+- **Premium entitlement decisions are server-side** for Learning topics and Coding Problems: the client island calls a SECURITY DEFINER RPC that returns `locked: true` or the content; the client only renders what it's given (`PremiumTopicContent.tsx`, `CodingProblemPremiumGate.tsx`). Judge routes call `*_run_cases` RPCs described as premium-gated. (Mock tests are the exception — **W-06**.)
+- **Injection.** Only 4 `dangerouslySetInnerHTML`: `JsonLd.tsx` (serialized + `<>&` escaped — `src/components/JsonLd.tsx:12-18`, covered by `tests/lib/jsonld-xss.test.ts`), `CodeEditor.tsx:162` (Prism-highlighted *own* code, self-only), and two doc comments that say they *don't* use it. The Learning/blog Markdown renderer is React-text-node-only with a URL scheme allow-list. `runGlobalSearch` sanitizes the term before `.or(ilike)`. No raw SQL. No `eval`/`new Function`.
+- **Open redirect:** `safeInternalPath` (`src/lib/nav.ts`) rejects absolute, `//host`, `/\host`, and control-char values → `/account`. Used by `/login`.
+- **Security headers** (`next.config.js`): CSP with `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`; HSTS `max-age=63072000; includeSubDomains`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: strict-origin-when-cross-origin`; `Permissions-Policy` locks camera/mic/geo. `script-src` allows `'unsafe-inline'` (needed for Next's inline bootstrap + JSON-LD) and Razorpay; `'unsafe-eval'` is dev-only. Reasonable.
+- **Cookies:** managed by `@supabase/ssr` (`HttpOnly`, `SameSite=Lax`, `Secure` in prod by default). `/api/session` sets `Cache-Control: private, no-store`; `/api/announcements` is the cacheable anon counterpart. No sensitive data hand-rolled into cookies.
+- **Response hygiene:** `/api/session` returns only the caller's own `id/email/fullName/avatarUrl/isPremium`. No password hashes, no admin flags, no internal ids beyond the user's own leak in any response reviewed.
+
+### Weaknesses (findings above)
+
+- **W-02** — unauthenticated code-execution proxy + ineffective rate limiting (also affects `/api/resume/parse`, `/api/resume/assist`, contact — though contact has a DB-side 4/hr limit).
+- **W-09** — 1-year signed URL to a private bucket persisted in a row.
+- **W-05** — unsanitized `q` into `ilike` + cache key on the list pages.
+- **W-10** — admin content URLs without a scheme allow-list.
+- **W-12** — mobile-number enumeration on login.
+- **W-13** — anonymous report spam on `/r/[token]`.
+- **W-16** — unvalidated `resumeId` in `/api/resume/assist` (log-poisoning only).
+- **`/api/resume/assist` and `/api/resume/parse` use `Access-Control-Allow-Origin: *`.** Documented (mobile WebView needs it) and both require a valid Supabase token, so no credentialed cross-origin risk — noted, not a finding.
+- **`/api/revalidate`** — secret-gated (`x-revalidate-secret`), 404 when unset, tag allow-list, never returns data. No rate limit, but the secret is the control. OK.
+
+### RLS — cannot be audited in a website-only pass
+
+The website defines no policies. Whether **every** table has RLS enabled, whether any policy is effectively `true` for writes, and whether user A can read/write user B's rows all live in `mobile-app/`/`admin-panel/` migrations. The website's safety **depends on** those being correct — see Needs Manual Verification.
+
+---
+
+## 7. Phase 5 — Data Integrity & Performance (results)
+
+- **Windowed aggregate:** W-01 (wallet balance from 50 rows).
+- **Unbounded reads:** `src/app/account/page.tsx:13` (all `wallet_transactions` for the user — required for a correct balance, but no cap), `src/app/account/referral/page.tsx:14` (all `referrals` for the user, no `.limit()`), `src/app/account/profile/page.tsx:10-12` (all `courses`/`branches`/`academic_years` — catalog tables, bounded in practice), `src/app/sitemap.ts` (`.limit(1000)` ×3, `.limit(500)`, `.limit(200)` + RPCs, uncached — W-14). Everything else is `.limit()`/`.range()`-bounded.
+- **N+1:** none found. List pages use one query with `count:"exact"`; detail pages batch with `Promise.all`; `getTopicDiscovery` is one `Promise.all` of 4 bounded reads behind `unstable_cache`. `getCachedProjectDetail` does one extra conditional related-projects query — bounded, fine.
+- **`select('*')`:** only `src/lib/cache.ts:313` (`getCachedJobDetail` — `select("*, company:companies(...)")`). Every other read lists explicit columns (per the P1 performance work). Minor — the `jobs` row can be wide; an explicit column list would be tighter.
+- **Race conditions / transactions:** money mutations are RPC/Edge-Function transactions server-side. `toggleSaveJobAction` handles the `23505` race. `applyToJobAction` relies on `unique(user_id, job_id)`. `submit_test_attempt` / `practice/submit` are single RPC / single insert. `MockTestRunner` and the payment handlers guard double-submit (`submittedRef`, `status==="processing"` disabled). `updateResumeContentAction` is a debounced full-document overwrite — last-write-wins across two tabs, acceptable for a single-user editor.
+- **Bundle:** clean build, First-Load JS ≈ 88 kB shared; heaviest routes ≈ 177–181 kB (coding-problem workspace, learning topic) — reasonable. `@supabase/supabase-js` kept out of the base bundle via `/api/session` (documented). `optimizePackageImports: ["@/components/ui"]`, `serverComponentsExternalPackages` for `pdf-parse`/`pdfjs-dist`.
+- **Images:** `next/config` sets `formats: ["image/avif","image/webp"]`, `minimumCacheTTL: 86400`, trimmed `deviceSizes`, `remotePatterns` limited to `**.supabase.co`. Blur placeholder via `src/lib/image.ts`.
+- **`middleware.ts`** adds an auth round-trip to every request — W-15.
+- Existing perf docs (`website/OPTIMIZATION_NOTES.md`, `PERFORMANCE_*`) already track the remaining levers (R1 de-Supabase the nav, etc.).
+
+---
+
+## 8. Needs Manual Verification
+
+These cannot be settled from `website/` alone. Each is load-bearing for a website feature's security or correctness.
+
+1. **`profiles` UPDATE RLS / column grants.** `src/app/account/profile/ProfileForm.tsx:44-55` does a **client-side** `update` on `profiles`. Confirm the UPDATE policy is `auth.uid() = id` **and** that a user cannot set `is_premium`, `role`/admin flags, `referral_code`, or any balance column via that same statement (memory notes "SEC-001 is_premium self-escalation" was fixed by migrations 0037/0038 — verify it is live on the production project and covers every privileged column).
+2. **RLS enabled on every table** the website touches (≈55 tables — full list below), and no write policy is effectively `true`. Especially: `resumes_builder`, `resume_shares`, `resume_versions`, `resume_downloads`, `coding_submissions`, `user_dsa_progress`, `wallet_transactions`, `purchases`, `applications`, `saved_jobs`, `wishlists`, `custom_project_*`, `legal_consents`, `notifications`, `test_attempts`, `test_attempt_answers`.
+3. **Email-confirmation redirect.** With no `/auth/callback` route, verify what a Supabase confirmation link does on the web (lands where? shows an error? does the `@supabase/ssr` cookie session get set, or must the user sign in again as `/register` implies?).
+4. **`test_questions` RLS + `submit_test_attempt`.** (a) Can a signed-in non-premium user `select` rows for a **premium** test's questions (which would defeat the client-side gate in `MockTestRunner.tsx` — W-06)? (b) Can any authenticated user `select correct_index` for a test they have **not** submitted (answer-key leak)? (c) Does `submit_test_attempt` re-check premium + recompute the score server-side and ignore client `selected_index` beyond recording it?
+5. **Judge RPCs are actually premium-gated.** `coding_problem_run_cases`, `practice_problem_run_cases` — confirm they return `null`/empty for a premium problem the caller can't open and never include hidden `test_cases` for a non-entitled caller (the route trusts this — `src/app/api/coding-problems/judge/route.ts:70`).
+6. **`get_shared_resume` / `report_shared_resume` scope.** `get_shared_resume(token)` (anon, `src/app/r/[token]/page.tsx:30`) must return only résumés whose share row is `is_active = true`, and nothing else. `report_shared_resume` must validate the token and rate-limit server-side (W-13).
+7. **Referral anti-abuse.** Award logic lives in `handle_new_user` / triggers. Verify: a user cannot self-refer (own code at signup), a code can't be replayed to farm rewards, `reward_settings.max_payout` is enforced server-side, and `referral_codes.total_earned` / wallet credit are written only by trusted server code.
+8. **`email_for_mobile` exposure.** Confirm it returns only an email string for an exact mobile match and nothing more, and consider whether the enumeration (W-12) is acceptable.
+9. **Storage bucket `resumes`.** Confirm it is **private**, the RLS policy is `name like auth.uid() || '/%'` (first path segment = user id, matching `resumeStoragePath` — `src/lib/resume.ts:37`), there is a file-type/size restriction at the bucket level (the app checks, but the bucket should too), and that path traversal (`../`) in an object key can't escape the user's prefix.
+10. **`resume_ai_prompts` readability.** `src/lib/resumeBuilder/aiAssist.ts:27-37` reads system prompts with the **anon** client. Confirm that's intended and the table exposes nothing sensitive.
+11. **Payment reconciliation UX.** If `verify-*-payment` succeeds server-side but the browser `handler` callback then errors (network drop after charge), the user sees an error and no "payment received, being processed" state. Confirm the Edge Function / a webhook credits the wallet / grants the purchase independently of the client callback, and consider a reconciliation banner on `/account/wallet` and `/account/purchases`.
+
+**Full table list referenced from `website/src` (for the RLS review):**
+`academic_years, announcements, applications, banners, blog_categories, blog_posts, branches, categories, coding_submissions, companies, courses, custom_project_deliveries, custom_project_delivery_assets, custom_project_drafts, custom_project_features, custom_project_messages, custom_project_platform_pricing, custom_project_pricing, custom_project_request_features, custom_project_request_files, custom_project_request_history, custom_project_requests, dsa_problems, faqs, jobs, learning_bookmarks, learning_grids, legal_consents, notifications, premium_features, premium_plans, profiles, projects, purchases, referral_codes, referrals, resume_ai_prompts, resume_ai_requests, resume_downloads, resume_shares, resume_templates, resume_versions, resumes, resumes_builder, reviews, reward_settings, saved_jobs, test_attempt_answers, test_attempts, test_questions, testimonials, user_dsa_progress, wallet_transactions, wishlists`
+
+**RPCs referenced:** `coding_problem_detail, coding_problem_run_cases, coding_problems_sitemap, compute_ats_breakdown, email_for_mobile, get_shared_resume, learning_grids_list, learning_search, learning_sitemap, learning_topic_by_source_note, learning_topic_content, learning_topic_practice, learning_tree, match_resume_to_jd, mock_test_detail, practice_categories, practice_problem_detail, practice_problem_run_cases, practice_problems_list, practice_problems_sitemap, record_legal_consent, report_shared_resume, restore_resume_version, submit_contact_message, submit_test_attempt`
+
+**Edge Functions referenced:** `create-custom-project-order, create-premium-order, create-razorpay-order, create-wallet-topup-order, verify-custom-project-payment, verify-premium-payment, verify-razorpay-payment, verify-wallet-topup-payment`
+
+---
+
+## 9. Phase 0 — Inventory (reference)
+
+### Page routes (77)
+
+`/`, `/about`, `/account`, `/account/applications`, `/account/notifications`, `/account/profile`, `/account/purchases`, `/account/referral`, `/account/resume`, `/account/resume/[id]/ats`, `/account/resume/[id]/edit`, `/account/resume/[id]/jd-match`, `/account/resume/[id]/preview`, `/account/resume/[id]/projects`, `/account/resume/[id]/versions`, `/account/resume/import`, `/account/saved-jobs`, `/account/saved-projects`, `/account/wallet`, `/blog`, `/blog/[slug]`, `/coding-problems/[problemSlug]`, `/community-guidelines`, `/compiler`, `/contact`, `/cookie-policy`, `/custom-projects`, `/custom-projects/checkout`, `/custom-projects/estimate`, `/custom-projects/features`, `/custom-projects/my-projects`, `/custom-projects/my-projects/[id]`, `/custom-projects/start`, `/data-and-permissions`, `/delete-account`, `/disclaimer`, `/faq`, `/grievance`, `/jobs`, `/jobs/[id]`, `/jobs/companies`, `/jobs/companies/[id]`, `/learning`, `/learning/[gridSlug]`, `/learning/[gridSlug]/[topicSlug]`, `/legal`, `/login`, `/logout`, `/mock-tests/[testId]`, `/mock-tests/[testId]/result/[attemptId]`, `/placement`, `/placement/notes`, `/placement/notes/[id]`, `/practice`, `/practice/compiler`, `/practice/problems`, `/practice/problems/[slug]`, `/practice/submissions`, `/premium`, `/privacy-policy`, `/project-license`, `/projects`, `/projects/[id]`, `/projects/best-sellers`, `/projects/category/[category]`, `/projects/new`, `/projects/premium`, `/projects/trending`, `/r/[token]`, `/referral`, `/refund-policy`, `/register`, `/resume`, `/resume/templates`, `/search`, `/support`, `/terms`
+Plus generated: `/sitemap.xml`, `/robots.txt`.
+Redirects (`next.config.js`): `/placement*`, `/placement-prep`, `/placement-preparation` → `/learning` (308), excluding `/placement/notes*`.
+
+### API route handlers (12)
+
+| Route | Methods | Auth | Notes |
+|---|---|---|---|
+| `/api/announcements` | GET | none (public) | `unstable_cache` + CDN headers |
+| `/api/coding-problems/judge` | POST, GET(405) | **none** | up to 12 sandbox runs — W-02 |
+| `/api/compiler/run` | POST, GET(405) | `COMPILER_REQUIRE_AUTH` (default off) | W-02 |
+| `/api/practice/judge` | POST, GET(405) | **none** | up to 12 sandbox runs — W-02 |
+| `/api/practice/submit` | POST, GET(405) | `getUser()` 401 | inserts `coding_submissions` + upserts `user_dsa_progress` |
+| `/api/resume/assist` | POST, OPTIONS | cookie **or** bearer JWT | CORS `*`; rate-limited; W-07, W-16 |
+| `/api/resume/export/docx` | GET | via `loadOwnResumeForExport` | UUID `resumeId`, owner-scoped |
+| `/api/resume/export/pdf` | GET | via `loadOwnResumeForExport` | owner-scoped |
+| `/api/resume/parse` | POST, OPTIONS | cookie **or** bearer JWT | 8 MB cap, in-memory only, CORS `*` |
+| `/api/revalidate` | POST | `x-revalidate-secret` (404 if unset) | tag allow-list, no data returned |
+| `/api/search` | GET | none (public) | term sanitized, CDN-cacheable |
+| `/api/session` | GET | cookie session | `private, no-store`; own profile only |
+
+### Server-action modules (5)
+
+`src/lib/actions/contact.ts`, `src/lib/actions/jobs.ts`, `src/lib/actions/customProjects.ts`, `src/lib/actions/resumeBuilder.ts`, `src/lib/resumeBuilder/formatting.ts` (all `"use server"`).
+
+### Supabase client setup
+
+- `src/lib/supabase/server.ts` — `getPublicSupabase()`: anon key, `persistSession:false`, returns `null` if env missing. Public catalog only.
+- `src/lib/supabase/browser.ts` — `createBrowserSupabase()`: `@supabase/ssr` `createBrowserClient`, module-singleton, cookie session.
+- `src/lib/supabase/authed-server.ts` — `createAuthedServerSupabase()`: `@supabase/ssr` `createServerClient` bound to `next/headers` cookies; cookie writes wrapped in `try/catch` (middleware refreshes).
+- `middleware.ts` — `createServerClient` + `getUser()` on every non-static request; matcher excludes `_next/static`, `_next/image`, `favicon.ico`, image extensions.
+
+### Config
+
+- `package.json` — Next 14.2.35, React 18.3.1, `@supabase/ssr ^0.4.0`, `@supabase/supabase-js ^2.57.0`, `@anthropic-ai/sdk ^0.124.0`, `@react-pdf/renderer`, `docx`, `mammoth`, `pdf-parse`, `prismjs`, `qrcode.react`, `zod`. Scripts: `dev/build/start/lint/typecheck/test/legal:sync`.
+- `tsconfig.json` — `strict: true`, `noEmit`, `moduleResolution: bundler`, path alias `@/* → ./src/*`.
+- `next.config.js` — CSP + security headers (see §6), image optimization, `redirects()`, `serverComponentsExternalPackages`, `optimizePackageImports`, opt-in bundle analyzer.
+- `.eslintrc.json` — `next/core-web-vitals`.
+- `.env.example` keys — `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_LEGAL_ENTITY_NAME`, `NEXT_PUBLIC_BUSINESS_ADDRESS`, `NEXT_PUBLIC_GOVERNING_JURISDICTION`, `NEXT_PUBLIC_PLAY_STORE_URL`, `NEXT_PUBLIC_SOCIAL_*`, `NEXT_PUBLIC_WHATSAPP_SUPPORT*`, `REVALIDATE_SECRET`, `ANTHROPIC_API_KEY`, `COMPILER_PROVIDER`, `PAIZA_URL`, `PAIZA_API_KEY`, `JUDGE0_URL`, `JUDGE0_KEY`, `JUDGE0_AUTH_TOKEN`, `PISTON_URL`, `COMPILER_REQUIRE_AUTH`, `COMPILER_MAX_*` / `COMPILER_RATE_LIMIT_*` (optional).
+
+---
+
+*End of report. No code has been changed. Awaiting instructions on which findings to fix.*

@@ -6,6 +6,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://campusedux.app";
 const STATIC_ROUTES = [
   "", "/projects", "/projects/trending", "/projects/premium", "/projects/best-sellers", "/projects/new",
   "/jobs", "/jobs/companies", "/learning", "/blog", "/compiler", "/resume", "/resume/templates", "/custom-projects",
+  "/practice", "/practice/problems", "/practice/compiler",
   "/premium", "/referral", "/faq", "/about", "/contact", "/support",
   "/legal", "/privacy-policy", "/terms", "/refund-policy", "/project-license", "/community-guidelines",
   "/disclaimer", "/data-and-permissions", "/cookie-policy", "/grievance", "/delete-account",
@@ -26,6 +27,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       { data: companies },
       { data: learning },
       { data: codingProblems },
+      { data: practiceProblems },
       { data: blogPosts },
     ] = await Promise.all([
       supabase.from("projects").select("id,updated_at").limit(1000),
@@ -34,6 +36,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       supabase.from("companies").select("id,updated_at").limit(500),
       supabase.rpc("learning_sitemap", { p_platform: "website" }),
       supabase.rpc("coding_problems_sitemap", { p_platform: "website" }),
+      supabase.rpc("practice_problems_sitemap", { p_platform: "website" }),
       supabase
         .from("blog_posts")
         .select("slug,updated_at")
@@ -59,6 +62,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Published, website-visible topic Coding Problems (migration 0048/025).
     (codingProblems as { slug: string; updated_at: string }[] | null)?.forEach((row) => {
       entries.push({ url: `${siteUrl}/coding-problems/${row.slug}`, lastModified: new Date(row.updated_at) });
+    });
+
+    // Published, website-visible global Practice coding problems (migration 0072/044).
+    (practiceProblems as { slug: string; updated_at: string }[] | null)?.forEach((row) => {
+      entries.push({ url: `${siteUrl}/practice/problems/${row.slug}`, lastModified: new Date(row.updated_at) });
     });
 
     // Published blog posts (migration 037 / 0065, RLS relaxed by 039 / 0067).

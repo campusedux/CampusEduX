@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BRAND } from "@/lib/brand";
+import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
 
 /*
  * Site footer — renders on every route, so it is a Server Component with
@@ -199,6 +200,10 @@ export default function Footer() {
               </svg>
               {supportEmail}
             </a>
+
+            {/* WhatsApp Support — renders only while the channel is switched on
+             *  (src/lib/whatsapp.ts). Server component, no client JS. */}
+            <WhatsAppSupport variant="inline" className="mt-3 flex w-fit" />
 
             <div className="mt-5 flex items-center gap-1">
               {SOCIALS.map(({ label, href, icon }) => (

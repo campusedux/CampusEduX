@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
  * The active module gets an indigo label and a 2px underline flush with the
  * header's bottom border. Client-only so the root layout stays static.
  */
-const COMPACT_HIDDEN = new Set(["/", "/premium"]); // shown only at lg+
+const COMPACT_HIDDEN = new Set(["/", "/practice", "/premium"]); // shown only at lg+
 
 export function HeaderLinks() {
   const pathname = usePathname();

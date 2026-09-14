@@ -34,12 +34,17 @@ export function MockTestRunner({
   durationMinutes,
   isPremium,
   resultBase,
+  scope = "topic",
 }: {
   testId: string;
   title: string;
   durationMinutes: number;
   isPremium: boolean;
   resultBase: string;
+  /** 'chapter' / 'course' tests sample a random pool via practice_test_questions()
+   *  and score via submit_randomized_test_attempt() instead of the plain
+   *  per-topic test_questions() and submit_test_attempt() paths. */
+  scope?: "topic" | "chapter" | "course";
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -66,21 +71,38 @@ export function MockTestRunner({
 
   const startTest = useCallback(async () => {
     setPhase({ k: "loading" });
-    const { data, error } = await supabase
-      .from("test_questions")
-      .select("id,question_text,options,marks,sort_order")
-      .eq("test_id", testId)
-      .order("sort_order", { ascending: true });
-    if (error) {
-      setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
-      return;
+    let questions: Question[];
+    if (scope === "topic") {
+      const { data, error } = await supabase
+        .from("test_questions")
+        .select("id,question_text,options,marks,sort_order")
+        .eq("test_id", testId)
+        .order("sort_order", { ascending: true });
+      if (error) {
+        setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
+        return;
+      }
+      questions = (data ?? []).map((r) => ({
+        id: r.id as string,
+        question_text: r.question_text as string,
+        options: (r.options ?? []) as string[],
+        marks: (r.marks ?? 1) as number,
+      }));
+    } else {
+      // Chapter / course tests: a fresh random sample every attempt, drawn
+      // server-side from the live pool (practice_test_pool, 0091/063).
+      const { data, error } = await supabase.rpc("practice_test_questions", { p_test_id: testId, p_platform: "website" });
+      if (error) {
+        setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
+        return;
+      }
+      questions = (Array.isArray(data) ? data : []).map((r) => ({
+        id: r.id as string,
+        question_text: r.question_text as string,
+        options: (r.options ?? []) as string[],
+        marks: (r.marks ?? 1) as number,
+      }));
     }
-    const questions = (data ?? []).map((r) => ({
-      id: r.id as string,
-      question_text: r.question_text as string,
-      options: (r.options ?? []) as string[],
-      marks: (r.marks ?? 1) as number,
-    }));
     if (questions.length === 0) {
       setPhase(isPremium ? { k: "premium" } : { k: "error", message: "This test has no questions yet." });
       return;
@@ -90,7 +112,7 @@ export function MockTestRunner({
     setCurrent(0);
     setAnswers({});
     setPhase({ k: "quiz", questions });
-  }, [supabase, testId, durationMinutes, isPremium]);
+  }, [supabase, testId, durationMinutes, isPremium, scope]);
 
   const submit = useCallback(
     async (questions: Question[]) => {
@@ -102,11 +124,19 @@ export function MockTestRunner({
         selected_index: q.id in answers ? answers[q.id] : null,
       }));
       const timeTaken = Math.round((Date.now() - startedAt.current) / 1000);
-      const { data, error } = await supabase.rpc("submit_test_attempt", {
-        p_test_id: testId,
-        p_answers: payload,
-        p_time_taken_seconds: timeTaken,
-      });
+      const { data, error } =
+        scope === "topic"
+          ? await supabase.rpc("submit_test_attempt", {
+              p_test_id: testId,
+              p_answers: payload,
+              p_time_taken_seconds: timeTaken,
+            })
+          : await supabase.rpc("submit_randomized_test_attempt", {
+              p_test_id: testId,
+              p_question_ids: questions.map((q) => q.id),
+              p_answers: payload,
+              p_time_taken_seconds: timeTaken,
+            });
       const attempt = Array.isArray(data) ? data[0] : data;
       if (error || !attempt?.id) {
         submittedRef.current = false;
@@ -118,7 +148,7 @@ export function MockTestRunner({
       }
       router.push(`${resultBase}/result/${attempt.id}`);
     },
-    [answers, supabase, testId, resultBase, router],
+    [answers, supabase, testId, resultBase, router, scope],
   );
 
   // countdown

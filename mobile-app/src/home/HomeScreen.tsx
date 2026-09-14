@@ -13,6 +13,7 @@ import {
   PressableScale,
 } from "@/components/ui";
 import { ProjectCard, JobCard } from "@/components/cards";
+import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import { useTrendingProjects, useLatestJobs, useNotifications } from "@/hooks/useHomeData";
 import { useLearningGrids } from "@/hooks/useLearning";
 import { useAuthStore } from "@/store/authStore";
@@ -117,6 +118,11 @@ export function HomeScreen() {
           )}
         </Pressable>
       </View>
+
+      <CustomProjectBanner
+        onStartProject={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
+        onLearnMore={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
+      />
 
       <Pressable
         onPress={() => (navigation as any).navigate("SearchResult")}

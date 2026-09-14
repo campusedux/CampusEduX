@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
-import { getPublicSupabase } from "@/lib/supabase/server";
-import type { FeatureRow } from "@/lib/customProjects";
+import { loadCatalog } from "@/lib/customProjects.server";
 import StepBar from "../_builder/StepBar";
 import BuilderFeatures from "./BuilderFeatures";
 
@@ -14,26 +13,21 @@ export const metadata: Metadata = {
 export default async function Page() {
   await requireUser();
 
-  const supabase = getPublicSupabase();
-  let features: FeatureRow[] = [];
-  if (supabase) {
-    const { data } = await supabase
-      .from("custom_project_features")
-      .select("id,name,description,category,project_types,project_levels,price,sort_order")
-      .eq("is_active", true)
-      .order("sort_order", { ascending: true });
-    features = (data ?? []) as FeatureRow[];
-  }
+  const { pricing, platforms, features, catalogAvailable } = await loadCatalog();
 
   return (
-    <div className="container-prose py-12">
-      <h1 className="text-3xl font-bold text-ink">Features &amp; files</h1>
-      <p className="mt-2 text-sm text-ink-muted">
-        Pick the features your project needs, and attach any requirement or reference files.
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
+      <StepBar current={1} />
+
+      <p className="eyebrow">Step 2 · Project scope</p>
+      <h1 className="mt-2 text-[1.6rem] font-bold tracking-tight text-ink sm:text-3xl">Project features &amp; requirements</h1>
+      <p className="mt-2 max-w-2xl text-sm text-ink-muted sm:text-[15px]">
+        Your selected package already includes the essential functionality below. Review what&apos;s included, then
+        add optional features if your project needs more.
       </p>
+
       <div className="mt-8">
-        <StepBar current={1} />
-        {features.length === 0 ? (
+        {!catalogAvailable || features.length === 0 ? (
           <div className="empty-state">
             The feature catalog isn&apos;t available right now.{" "}
             <Link href="/custom-projects/estimate" className="text-ink underline">
@@ -42,7 +36,7 @@ export default async function Page() {
             .
           </div>
         ) : (
-          <BuilderFeatures features={features} />
+          <BuilderFeatures features={features} pricing={pricing} platforms={platforms} />
         )}
       </div>
     </div>

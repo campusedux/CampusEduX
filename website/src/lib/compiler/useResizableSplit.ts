@@ -34,6 +34,16 @@ export interface UseResizableSplitOptions {
   minSecondPx?: number;
   /** Fixed size (px) of the divider along the resize axis — subtracted before converting the px minimums above to percentages. Defaults to 0. */
   handlePx?: number;
+  /**
+   * Opt-in persistence. When passed, the pane size is restored from `load()`
+   * once on mount and written back via `save()` (debounced) whenever it
+   * changes — so a reload brings the layout back. Keep the object referentially
+   * cheap; it is read through a ref, so a new object each render is fine.
+   */
+  persist?: {
+    load: () => number | null | undefined;
+    save: (pct: number) => void;
+  };
 }
 
 export interface ResizableSplit {
@@ -66,10 +76,13 @@ export function useResizableSplit({
   minFirstPx,
   minSecondPx,
   handlePx = 0,
+  persist,
 }: UseResizableSplitOptions): ResizableSplit {
   const [pct, setPct] = useState(initial);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
 
   const clamp = useCallback(
     (n: number) => {
@@ -105,6 +118,43 @@ export function useResizableSplit({
     return () => ro.disconnect();
   }, [clamp]);
 
+  // Restore a persisted size once on mount (client only). Rendered with
+  // `initial` on the server + first client paint to stay hydration-stable, then
+  // corrected here — the panels nudge to the saved split in the first frame.
+  useEffect(() => {
+    const saved = persistRef.current?.load();
+    if (typeof saved === "number" && Number.isFinite(saved)) {
+      setPct((p) => {
+        const next = clamp(saved);
+        return next === p ? p : next;
+      });
+    }
+    // Mount-only: `clamp` is stable enough here and re-running on its identity
+    // change would clobber a size the user just dragged.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Write the size back (debounced) whenever it settles.
+  useEffect(() => {
+    const p = persistRef.current;
+    if (!p) return;
+    const t = setTimeout(() => p.save(pct), 250);
+    return () => clearTimeout(t);
+  }, [pct]);
+
+  // Safety net: if the component unmounts mid-drag, drop the body drag styles.
+  useEffect(
+    () => () => {
+      try {
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      } catch {
+        /* SSR / no document */
+      }
+    },
+    [],
+  );
+
   const updateFromPointer = useCallback(
     (clientX: number, clientY: number) => {
       const rect = containerRef.current?.getBoundingClientRect();
@@ -116,10 +166,22 @@ export function useResizableSplit({
     [axis, clamp],
   );
 
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    draggingRef.current = true;
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }, []);
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      draggingRef.current = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      // Lock selection + force the resize cursor for the whole document while
+      // dragging, so a fast drag over the editor/textarea doesn't select text
+      // and the cursor never flickers back to a caret between divider pixels.
+      try {
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = axis === "x" ? "col-resize" : "row-resize";
+      } catch {
+        /* SSR / no document */
+      }
+    },
+    [axis],
+  );
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (!draggingRef.current) return;
@@ -129,6 +191,12 @@ export function useResizableSplit({
   );
   const onPointerUp = useCallback(() => {
     draggingRef.current = false;
+    try {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    } catch {
+      /* SSR / no document */
+    }
   }, []);
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {

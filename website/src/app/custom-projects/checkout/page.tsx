@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CheckCircle2, Lock, ShieldCheck } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { formatINR } from "@/lib/format";
+import { type Platform, type ProjectLevel, type ProjectType } from "@/lib/customProjects";
 import { loadDraftWithEstimate } from "@/lib/customProjects.server";
 import StepBar from "../_builder/StepBar";
+import { ConfigSummary } from "../_builder/ConfigSummary";
 import CustomProjectCheckout from "./CustomProjectCheckout";
 
 export const metadata: Metadata = {
@@ -11,20 +14,30 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+const TRUST_SIGNALS = [
+  "Project details confirmed in the steps before this one",
+  "Transparent estimate — the amount below matches what you reviewed",
+  "Payments are processed by Razorpay and verified server-side; CampusEduX never sees your card or UPI details",
+];
+
 export default async function Page() {
   const user = await requireUser();
   const { draft, estimate } = await loadDraftWithEstimate(user.id);
 
+  const included = estimate.selectedFeatures.filter((f) => f.price === 0 || draft.aiRecommendedFeatureIds.includes(f.id));
+  const extra = estimate.selectedFeatures.filter((f) => f.price > 0 && !draft.aiRecommendedFeatureIds.includes(f.id));
+
   return (
-    <div className="container-prose py-12">
-      <h1 className="text-3xl font-bold text-ink">Payment</h1>
-      <p className="mt-2 text-sm text-ink-muted">
-        Pay the token to submit your request. It&apos;s picked up by the CampusEduX team only after the payment is verified.
+    <div className="container-prose py-10 sm:py-12">
+      <StepBar current={3} />
+
+      <p className="eyebrow">Step 4 · Payment</p>
+      <h1 className="mt-2 text-[1.6rem] font-bold tracking-tight text-ink sm:text-3xl">Complete your project request</h1>
+      <p className="mt-2 text-sm text-ink-muted sm:text-[15px]">
+        Review your project details, then pay the token to submit your request.
       </p>
 
       <div className="mt-8">
-        <StepBar current={3} />
-
         {!estimate.ready ? (
           <div className="empty-state">
             Your request isn&apos;t complete yet.{" "}
@@ -34,30 +47,90 @@ export default async function Page() {
             .
           </div>
         ) : (
-          <>
-            <div className="border border-line bg-white p-5 text-sm">
-              <div className="text-ink">{draft.title}</div>
-              <dl className="mt-3 space-y-1 text-ink-muted">
-                <div className="flex justify-between">
-                  <dt>Estimated project price</dt>
-                  <dd className="text-ink">{formatINR(estimate.estimatedTotal)}</dd>
-                </div>
-                <div className="flex justify-between font-semibold text-ink">
-                  <dt>Token due now</dt>
-                  <dd>{formatINR(estimate.tokenAmount)}</dd>
-                </div>
-              </dl>
+          <div className="space-y-6">
+            {/* Same summary card as Features & Estimate, so this reads as the same project */}
+            <ConfigSummary
+              eyebrow="Payment summary"
+              projectType={draft.projectType as ProjectType}
+              projectLevel={draft.projectLevel as ProjectLevel}
+              platform={draft.platform as Platform}
+              title={draft.title}
+            />
+
+            <section className="rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Selected features</p>
+              <p className="mt-1.5 text-sm text-ink">
+                {included.length} included feature{included.length === 1 ? "" : "s"}
+                {extra.length > 0 && (
+                  <>
+                    {" "}
+                    · {extra.length} extra feature{extra.length === 1 ? "" : "s"}
+                  </>
+                )}
+              </p>
+              {extra.length > 0 && (
+                <ul className="mt-3 space-y-1.5 border-t border-line pt-3">
+                  {extra.map((f) => (
+                    <li key={f.id} className="flex items-center justify-between text-sm">
+                      <span className="text-ink-muted">{f.name}</span>
+                      <span className="font-medium text-ink">+{formatINR(f.price)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {/* Secure payment — the visual focus of this page */}
+            <section className="rounded-2xl border border-primary/20 bg-primary-50/60 p-5 shadow-card sm:p-6">
+              <div className="flex items-center gap-2">
+                <Lock className="h-4 w-4 text-primary" aria-hidden />
+                <p className="text-sm font-bold text-primary">Secure payment</p>
+              </div>
+
+              <div className="mt-4 flex items-baseline justify-between gap-3 border-b border-primary/20 pb-4">
+                <span className="text-sm text-ink-muted">Project estimate</span>
+                <span className="text-sm font-semibold text-ink">{formatINR(estimate.estimatedTotal)}</span>
+              </div>
+
+              <div className="mt-4">
+                <p className="text-xs font-medium text-ink-muted">Token due now</p>
+                <p className="mt-1 text-4xl font-bold text-ink">{formatINR(estimate.tokenAmount)}</p>
+              </div>
+
+              <div className="mt-5">
+                <CustomProjectCheckout
+                  draft={draft}
+                  featureIds={estimate.selectedFeatures.map((f) => f.id)}
+                  tokenAmount={estimate.tokenAmount}
+                />
+              </div>
+            </section>
+
+            <ul className="space-y-2">
+              {TRUST_SIGNALS.map((t) => (
+                <li key={t} className="flex items-start gap-2 text-xs leading-relaxed text-ink-muted">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-success" aria-hidden />
+                  {t}
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface p-4">
+              <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" aria-hidden />
+              <p className="text-xs leading-relaxed text-ink-muted">
+                Your request is only created and shown to our team after payment is verified.
+              </p>
             </div>
 
-            <CustomProjectCheckout draft={draft} tokenAmount={estimate.tokenAmount} />
-
-            <p className="mt-4 text-xs text-ink-muted">
-              Payments are processed by Razorpay and verified server-side. CampusEduX never sees your card or UPI details.
-            </p>
-            <Link href="/custom-projects/estimate" className="mt-4 inline-block text-sm text-ink underline">
-              Back to estimate
-            </Link>
-          </>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <Link href="/custom-projects/features" className="text-sm font-medium text-ink-muted underline hover:text-ink">
+                ← Edit features
+              </Link>
+              <Link href="/custom-projects/estimate" className="text-sm font-medium text-ink-muted underline hover:text-ink">
+                ← Back to estimate
+              </Link>
+            </div>
+          </div>
         )}
       </div>
     </div>

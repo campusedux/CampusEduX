@@ -5,7 +5,7 @@ import { resolveLanguage } from "@/lib/compiler/languages";
 import { MAX_CODE_BYTES, byteLength, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/compiler/limits";
 import { checkRateLimit } from "@/lib/compiler/rateLimit";
 import { runCode } from "@/lib/compiler/run";
-import { judgeCase, MAX_JUDGE_CASES, type RunCase, type JudgeCaseResult } from "@/lib/codingProblems";
+import { composeSubmissionSource, judgeCase, MAX_JUDGE_CASES, type RunCase, type JudgeCaseResult } from "@/lib/codingProblems";
 
 /**
  * POST /api/coding-problems/judge — run a Coding Problem submission against its
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
   let compileError: string | undefined;
 
   for (const c of toRun) {
-    const outcome = await runCode({ language, source, stdin: c.input ?? "" });
+    const outcome = await runCode({ language, source: composeSubmissionSource(language, source, c), stdin: c.input ?? "" });
     if (!outcome.ok) {
       const status = outcome.code === "not_configured" ? 503 : 502;
       return NextResponse.json({ ok: false, error: outcome.error, code: outcome.code }, { status });

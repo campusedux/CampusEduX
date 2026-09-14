@@ -1,13 +1,25 @@
 import Link from "next/link";
-import { ChevronRight, Lock } from "lucide-react";
+import { ChevronRight, Lock, ListChecks } from "lucide-react";
 import type { LearningTreeSection } from "@/lib/learning";
 
 /**
  * One section card on the course overview page — section name/description as
  * a header, then its topics as clean clickable rows. Reused for every grid and
  * every section, so a 6-topic course and a 150-topic one get the same rhythm.
+ *
+ * `chapterTest` is optional — only sections with a `scope='chapter'`
+ * practice_tests row (0091/063) get the extra "Chapter Test" link; every
+ * other grid's sections render exactly as before.
  */
-export function TopicSection({ section, gridSlug }: { section: LearningTreeSection; gridSlug: string }) {
+export function TopicSection({
+  section,
+  gridSlug,
+  chapterTest,
+}: {
+  section: LearningTreeSection;
+  gridSlug: string;
+  chapterTest?: { id: string; title: string };
+}) {
   return (
     <section className="rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
       <div className="border-b border-line pb-3.5">
@@ -45,6 +57,17 @@ export function TopicSection({ section, gridSlug }: { section: LearningTreeSecti
           ))}
         </ul>
       )}
+
+      {chapterTest ? (
+        <Link
+          href={`/mock-tests/${chapterTest.id}`}
+          className="group mt-2 -mx-2 flex items-center gap-3 rounded-xl border-t border-line px-2 pt-3.5 text-sm font-semibold text-primary transition-colors hover:bg-surface"
+        >
+          <ListChecks className="h-4 w-4 flex-shrink-0" aria-hidden />
+          <span className="flex-1">{chapterTest.title}</span>
+          <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden />
+        </Link>
+      ) : null}
     </section>
   );
 }

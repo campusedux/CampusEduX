@@ -38,6 +38,7 @@ import { json, preflight } from "../_shared/cors.ts";
 import { adminClient, getUser } from "../_shared/client.ts";
 import { enforceRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 import { createRazorpayOrder, razorpayConfigured, razorpayKeyId } from "../_shared/razorpay.ts";
+import { priceForFeature } from "../_shared/academicPricing.ts";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -135,7 +136,30 @@ Deno.serve(async (req) => {
     if (!platformRow) return json({ error: "That platform option is not available." }, 400);
     const platformCharge = Number(platformRow.charge) || 0;
 
-    // 3. selected features — only those actually valid for this tier ----
+    // 3a. AI-recommended feature ids from this user's own draft — the same
+    // draft the website's Estimate page already priced from. Read here
+    // (server-side, service role, scoped to this user) so the snapshot below
+    // reuses the exact Included-vs-Extra split the customer saw, without the
+    // client having to resend it. Best-effort: a missing/unreadable draft
+    // just means no feature gets the "AI-recommended" exemption — the safe
+    // default, since it only widens which Academic features get repriced by
+    // the override below, never which features are selected or charged.
+    let aiRecommendedFeatureIds: string[] = [];
+    try {
+      const { data: draftRow } = await db
+        .from("custom_project_drafts")
+        .select("payload")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const ids = (draftRow?.payload as { aiRecommendedFeatureIds?: unknown } | null)?.aiRecommendedFeatureIds;
+      if (Array.isArray(ids)) {
+        aiRecommendedFeatureIds = ids.filter((x): x is string => typeof x === "string");
+      }
+    } catch (e) {
+      console.warn("create-custom-project-order: could not read draft for AI-recommended feature ids:", e);
+    }
+
+    // 3b. selected features — only those actually valid for this tier ----
     let validFeatures: { id: string; name: string; price: number; category: string }[] = [];
     if (featureIds.length > 0) {
       const { data: featureRows, error: featureError } = await db
@@ -155,7 +179,10 @@ Deno.serve(async (req) => {
         .map((f: { id: string; name: string; price: unknown; category: string }) => ({
           id: f.id,
           name: f.name,
-          price: Number(f.price) || 0,
+          // Academic Extra Features price from the same override the website
+          // estimate uses (see _shared/academicPricing.ts); Personal/Business
+          // and any AI-recommended-as-necessary feature keep the catalog price.
+          price: priceForFeature({ id: f.id, price: Number(f.price) || 0 }, projectType, aiRecommendedFeatureIds.includes(f.id)),
           category: f.category ?? "",
         }));
     }

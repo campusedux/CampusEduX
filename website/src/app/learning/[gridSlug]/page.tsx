@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getLearningTree, getLearningGridBrief, getLearningGridSlugs, firstTopicOf } from "@/lib/learning";
+import { ListChecks } from "lucide-react";
+import { getLearningTree, getLearningGridBrief, getLearningGridSlugs, getGridScopedTests, firstTopicOf } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
-import { Breadcrumb } from "@/components/ui";
+import { Breadcrumb, Button } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { DocsShell } from "../_components/DocsShell";
 import { CourseHeader } from "../_components/CourseHeader";
 import { TopicSection } from "../_components/TopicSection";
+import { ProgressSummary } from "../_components/ProgressSummary";
 
 export const revalidate = 300;
 export const dynamicParams = true;
@@ -42,6 +44,7 @@ export default async function GridOverviewPage({ params }: { params: { gridSlug:
   const { grid, sections } = tree;
   const start = firstTopicOf(tree);
   const topicTotal = sections.reduce((n, s) => n + s.topics.length, 0);
+  const { courseTest, chapterTestBySectionId } = await getGridScopedTests(grid.id);
 
   return (
     <>
@@ -74,9 +77,22 @@ export default async function GridOverviewPage({ params }: { params: { gridSlug:
 
         <CourseHeader grid={grid} sectionCount={sections.length} topicCount={topicTotal} start={start} />
 
+        {courseTest ? (
+          <Button href={`/mock-tests/${courseTest.id}`} variant="secondary" leftIcon={ListChecks} className="mt-4">
+            {courseTest.title}
+          </Button>
+        ) : null}
+
+        <ProgressSummary gridSlug={grid.slug} />
+
         <div className="mt-6 space-y-5">
           {sections.map((section) => (
-            <TopicSection key={section.id} section={section} gridSlug={grid.slug} />
+            <TopicSection
+              key={section.id}
+              section={section}
+              gridSlug={grid.slug}
+              chapterTest={chapterTestBySectionId[section.id]}
+            />
           ))}
         </div>
       </DocsShell>

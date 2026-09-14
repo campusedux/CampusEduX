@@ -1,6 +1,11 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import { arrayMatchVariants } from "@/lib/searchModel";
+import { JOB_LIST_FIELDS, PROJECT_LIST_FIELDS } from "@/lib/marketplace";
+import { gridTechProfile, mergeUniqueById, rankTutorials } from "@/lib/learningDiscovery";
+import type { ProjectCardData } from "@/components/ProjectCard";
+import type { JobCardData } from "@/components/JobCard";
 import type {
   LearningGridCard,
   LearningGridBrief,
@@ -102,6 +107,118 @@ export const getTopicPractice = cache(
   },
 );
 
+// ---------------------------------------------------------------------------
+// Bottom-of-topic content discovery — "Other Tutorials", "Related Projects",
+// "Related Jobs", "Latest Jobs", "Other Learning Topics". ONE cross-request
+// cache entry per grid (tags: learning / projects / jobs, so an admin edit +
+// `POST /api/revalidate` refreshes it) wrapping a SINGLE `Promise.all` of four
+// BOUNDED, explicit-column reads. Every table hit is anon on an RLS
+// `using (true)` catalog table (projects / jobs) or the already
+// visibility-filtered `learning_grids_list` RPC — nothing draft / private /
+// premium-gated can surface here.
+// ---------------------------------------------------------------------------
+
+export interface TopicDiscoveryData {
+  /** Technology label derived from the grid ("Java", "AI/ML"…) — heading copy. */
+  techLabel: string;
+  /** Up to 6 OTHER published grids, ranked (featured → topic count → order). */
+  tutorials: LearningGridCard[];
+  /** Ranked grids beyond the first 6 — a compact tail for "Other Learning Topics". */
+  overflowTutorials: { slug: string; name: string }[];
+  relatedProjects: ProjectCardData[];
+  relatedJobs: JobCardData[];
+  latestJobs: JobCardData[];
+}
+
+const EMPTY_DISCOVERY: Omit<TopicDiscoveryData, "techLabel"> = {
+  tutorials: [],
+  overflowTutorials: [],
+  relatedProjects: [],
+  relatedJobs: [],
+  latestJobs: [],
+};
+
+const DISCOVERY_TUTORIAL_LIMIT = 6;
+const DISCOVERY_CARD_LIMIT = 6;
+/** Below this many tech matches, top up from popular / latest so a section
+ *  still has enough to be worth showing (never with fabricated rows). */
+const DISCOVERY_MIN_RELEVANT = 3;
+
+export const getTopicDiscovery = unstable_cache(
+  async (gridSlug: string, gridName: string): Promise<TopicDiscoveryData> => {
+    const { label, terms } = gridTechProfile(gridSlug, gridName);
+    const supabase = getPublicSupabase();
+    if (!supabase) return { techLabel: label, ...EMPTY_DISCOVERY };
+
+    const variants = Array.from(new Set(terms.flatMap(arrayMatchVariants)));
+
+    try {
+      const [gridsRes, projByTechRes, jobsBySkillRes, latestJobsRes] = await Promise.all([
+        supabase.rpc("learning_grids_list", { p_platform: PLATFORM }),
+        supabase
+          .from("projects")
+          .select(PROJECT_LIST_FIELDS)
+          .overlaps("tech_stack", variants)
+          .order("sales_count", { ascending: false })
+          .limit(DISCOVERY_CARD_LIMIT),
+        supabase
+          .from("jobs")
+          .select(JOB_LIST_FIELDS)
+          .overlaps("skills", variants)
+          .order("posted_at", { ascending: false })
+          .limit(DISCOVERY_CARD_LIMIT),
+        supabase
+          .from("jobs")
+          .select(JOB_LIST_FIELDS)
+          .order("posted_at", { ascending: false })
+          .limit(DISCOVERY_CARD_LIMIT + 3),
+      ]);
+
+      // --- Other Tutorials — every other published grid, ranked -----------
+      const others = (Array.isArray(gridsRes.data) ? (gridsRes.data as LearningGridCard[]) : []).filter(
+        (g) => g.slug && g.slug.toLowerCase() !== gridSlug.toLowerCase(),
+      );
+      const ranked = rankTutorials(others);
+      const tutorials = ranked.slice(0, DISCOVERY_TUTORIAL_LIMIT);
+      const overflowTutorials = ranked
+        .slice(DISCOVERY_TUTORIAL_LIMIT)
+        .map((g) => ({ slug: g.slug, name: g.name }));
+
+      // --- Related Projects — tech match, topped up with popular ----------
+      let relatedProjects = (projByTechRes.data ?? []) as ProjectCardData[];
+      if (relatedProjects.length < DISCOVERY_MIN_RELEVANT) {
+        const { data: popular } = await supabase
+          .from("projects")
+          .select(PROJECT_LIST_FIELDS)
+          .order("sales_count", { ascending: false })
+          .limit(DISCOVERY_CARD_LIMIT);
+        relatedProjects = mergeUniqueById(
+          relatedProjects,
+          (popular ?? []) as ProjectCardData[],
+          DISCOVERY_CARD_LIMIT,
+        );
+      }
+
+      // --- Related Jobs — skill match, topped up with the latest pool -----
+      const latestPool = (latestJobsRes.data ?? []) as JobCardData[];
+      let relatedJobs = (jobsBySkillRes.data ?? []) as JobCardData[];
+      if (relatedJobs.length < DISCOVERY_MIN_RELEVANT) {
+        relatedJobs = mergeUniqueById(relatedJobs, latestPool, DISCOVERY_CARD_LIMIT);
+      }
+
+      // --- Latest Jobs — newest, minus anything already shown as related --
+      const shownJobIds = new Set(relatedJobs.map((j) => j.id));
+      const latestJobs = latestPool.filter((j) => !shownJobIds.has(j.id)).slice(0, DISCOVERY_CARD_LIMIT);
+
+      return { techLabel: label, tutorials, overflowTutorials, relatedProjects, relatedJobs, latestJobs };
+    } catch {
+      return { techLabel: label, ...EMPTY_DISCOVERY };
+    }
+  },
+  ["learning:topic-discovery"],
+  { revalidate: 300, tags: ["learning", "projects", "jobs"] },
+);
+
 /** One topic Coding Problem by its global slug, for `/coding-problems/<slug>`.
  *  `coding_problem_detail` (0048/025) withholds the body / examples / hints /
  *  editorial when the caller can't open a premium problem (`locked: true`), and
@@ -129,6 +246,45 @@ export const getMockTest = cache(async (testId: string): Promise<MockTestDetail 
   });
   if (error || !data) return null;
   return data as MockTestDetail;
+});
+
+/** Chapter-wise / full-course randomized tests for a grid (0091/063's
+ *  `scope='chapter'|'course'` practice_tests rows) — a course test (if any)
+ *  plus a section_id -> chapter test lookup, for the grid page's "Chapter
+ *  Test" / "Full Course Test" links. Empty for grids that don't have any
+ *  (every grid except dbms-sql-tutorial, today). */
+export interface GridScopedTests {
+  courseTest: { id: string; title: string } | null;
+  chapterTestBySectionId: Record<string, { id: string; title: string }>;
+}
+export const getGridScopedTests = cache(async (gridId: string): Promise<GridScopedTests> => {
+  const supabase = getPublicSupabase();
+  if (!supabase) return { courseTest: null, chapterTestBySectionId: {} };
+
+  const [{ data: courseRows }, { data: chapterRows }] = await Promise.all([
+    supabase
+      .from("practice_tests")
+      .select("id,title")
+      .eq("scope", "course")
+      .eq("learning_grid_id_scope", gridId)
+      .eq("status", "published")
+      .eq("show_on_website", true)
+      .limit(1),
+    supabase
+      .from("practice_tests")
+      .select("id,title,learning_section_id,learning_sections!inner(grid_id)")
+      .eq("scope", "chapter")
+      .eq("learning_sections.grid_id", gridId)
+      .eq("status", "published")
+      .eq("show_on_website", true),
+  ]);
+
+  const courseTest = courseRows?.[0] ? { id: courseRows[0].id as string, title: courseRows[0].title as string } : null;
+  const chapterTestBySectionId: Record<string, { id: string; title: string }> = {};
+  for (const r of (chapterRows ?? []) as { id: string; title: string; learning_section_id: string | null }[]) {
+    if (r.learning_section_id) chapterTestBySectionId[r.learning_section_id] = { id: r.id, title: r.title };
+  }
+  return { courseTest, chapterTestBySectionId };
 });
 
 /** Lightweight grid header — one row, no tree. RLS on `learning_grids`

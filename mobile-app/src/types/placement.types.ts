@@ -24,6 +24,10 @@ export interface PracticeTest {
   questionCount: number;
   durationMinutes: number;
   description: string;
+  /** 'chapter' / 'course' tests (0091/063) draw a random sample from a live
+   *  pool instead of owning their own test_questions. Missing/undefined
+   *  behaves as 'topic', same as every test before this column existed. */
+  scope?: "topic" | "chapter" | "course";
 }
 
 export interface TestAttemptAnswer {

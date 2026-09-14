@@ -46,9 +46,22 @@ export const TYPE_LABELS: Record<ProjectType, string> = {
   business: "Business",
 };
 
+/** Short card copy for the Step 1 project-type picker. Presentation only. */
+export const TYPE_DESCRIPTIONS: Record<ProjectType, string> = {
+  academic: "For college assignments, final-year projects, mini projects and academic submissions.",
+  personal: "For personal websites, portfolios, tools, apps and learning projects.",
+  business: "For business websites, internal tools, customer-facing applications and commercial projects.",
+};
+
 export const LEVEL_LABELS: Record<ProjectLevel, string> = {
   standard: "Standard",
   advanced: "Advanced",
+};
+
+/** Short card copy for the Step 1 project-level picker. Presentation only. */
+export const LEVEL_DESCRIPTIONS: Record<ProjectLevel, string> = {
+  standard: "Essential functionality for straightforward projects.",
+  advanced: "More complex functionality, integrations and customization.",
 };
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -103,6 +116,14 @@ export type BuilderDraft = {
   customRequirements: { text: string }[];
   projectImagePath: string | null;
   referenceFiles: ReferenceFile[];
+  /** Short AI-generated project overview shown on the Features & Files summary. */
+  aiOverview: string;
+  /** Ids (free or paid) the AI understanding call considers necessary for this project — shown as "Included", not "Extra". */
+  aiRecommendedFeatureIds: string[];
+  /** Paid feature ids the AI understanding call flagged as relevant-but-optional. */
+  aiSuggestedExtraFeatureIds: string[];
+  /** One-time default-selection guard so re-visiting Features & Files never stomps explicit toggles. */
+  featuresSeeded: boolean;
 };
 
 export function emptyDraft(): BuilderDraft {
@@ -120,6 +141,10 @@ export function emptyDraft(): BuilderDraft {
     customRequirements: [],
     projectImagePath: null,
     referenceFiles: [],
+    aiOverview: "",
+    aiRecommendedFeatureIds: [],
+    aiSuggestedExtraFeatureIds: [],
+    featuresSeeded: false,
   };
 }
 
@@ -159,6 +184,14 @@ export function normalizeDraft(payload: unknown): BuilderDraft {
       })
       .slice(0, 20);
   }
+  if (typeof p.aiOverview === "string") d.aiOverview = p.aiOverview.slice(0, 1000);
+  if (Array.isArray(p.aiRecommendedFeatureIds)) {
+    d.aiRecommendedFeatureIds = p.aiRecommendedFeatureIds.filter((x) => typeof x === "string").slice(0, 100) as string[];
+  }
+  if (Array.isArray(p.aiSuggestedExtraFeatureIds)) {
+    d.aiSuggestedExtraFeatureIds = p.aiSuggestedExtraFeatureIds.filter((x) => typeof x === "string").slice(0, 100) as string[];
+  }
+  d.featuresSeeded = p.featuresSeeded === true;
   return d;
 }
 
@@ -174,7 +207,84 @@ export type FeatureRow = {
   project_levels: string[];
   price: number;
   sort_order: number;
+  icon: string | null;
+  dependencies: string[];
+  conflicts: string[];
 };
+
+/**
+ * Academic-only Extra Feature price override (₹40–150 band). `price` in
+ * `custom_project_features` is one flat value shared across every
+ * `project_types` a feature is offered to, so a Personal/Business student
+ * and an Academic student are currently quoted the same figure for the same
+ * feature — appropriate for Personal/Business (kept exactly as-is here) but
+ * far too high for an academic assignment. Rather than editing the shared
+ * catalog `price` column (which would also change Personal/Business), this
+ * map is read ONLY when `projectType === "academic"` — see `priceForFeature`
+ * below — so every other project type keeps reading the catalog price
+ * untouched.
+ *
+ * Every id here is a real, currently-academic-eligible paid Extra Feature
+ * from `mobile-app/supabase/migrations/0033_custom_project_builder.sql`.
+ * The advanced (₹100–150) vs non-advanced (₹40–100) band each feature sits
+ * in reuses the catalog's own existing classification: the `level` column
+ * added in `mobile-app/supabase/migrations/0034_custom_feature_catalog.sql`
+ * (basic/standard/advanced/premium), whose deterministic backfill rule is
+ * `level = 'advanced' when price >= 2000 or name ilike '%advanced%'` —
+ * applied here to each feature's seeded catalog price/name. Free "Included"
+ * features (price 0) and features the AI understanding call has flagged as
+ * necessary (shown under Included, not Extra) are intentionally absent —
+ * see the `isRecommended` guard in `priceForFeature`.
+ */
+export const ACADEMIC_EXTRA_FEATURE_PRICES: Record<string, number> = {
+  // Non-advanced (₹40–100) ---------------------------------------------
+  "doc-viva": 40, // Viva questions — short prep content
+  "media-pdf-upload": 45, // PDF upload — simple upload widget
+  "doc-ppt": 45, // Presentation (PPT) — short slide deck
+  "auth-google": 50, // Google login — standard OAuth integration
+  "pay-history": 50, // Payment history — simple read-only list
+  "notif-inapp": 55, // In-app notifications — simple notification centre
+  "media-multi-image": 55, // Multiple image upload — batch upload + gallery
+  "search-filters": 55, // Filters — filter results by common fields
+  "doc-documentation": 55, // Technical documentation — short write-up
+  "doc-srs": 60, // SRS document — a full requirements document
+  "notif-email": 65, // Email notifications — transactional email setup
+  "doc-project-report": 70, // Project report — a longer formatted document
+  "auth-otp": 75, // OTP / phone verification — SMS/email OTP infra
+  "admin-dashboard-basic": 80, // Basic admin dashboard — metrics + records
+  "notif-push": 80, // Push notifications — FCM / Expo push setup
+  "analytics-dashboard": 85, // Dashboard analytics — headline charts
+  "deploy-web": 85, // Web deployment — hosting setup
+  "deploy-support": 95, // Deployment support — assisted handover
+  // Advanced (₹100–150) --------------------------------------------------
+  "search-advanced": 110, // Advanced search — full-text search with ranking
+  "deploy-apk": 120, // Android APK build — signed release build
+  "pay-razorpay": 125, // Razorpay integration — real payment gateway
+  "int-rest-api": 130, // REST API — a documented API surface
+  "doc-academic-package": 150, // Complete academic package — SRS+report+PPT+viva bundle
+};
+
+/**
+ * The price to charge for `feature` given the active project type. Academic
+ * Extra Features (paid, not AI-recommended-as-necessary) use the override
+ * above; every Included feature (free, or AI-flagged as necessary) and
+ * every Personal/Business feature keep reading the catalog's own `price`
+ * column, exactly as before this override existed. Single choke point so
+ * Features & Files, the Estimate page and the Payment page can never
+ * disagree on what an Academic Extra Feature costs.
+ */
+export function priceForFeature(
+  feature: Pick<FeatureRow, "id" | "price">,
+  projectType: ProjectType | null,
+  isRecommended: boolean,
+): number {
+  const catalogPrice = Number(feature.price) || 0;
+  if (projectType === "academic" && !isRecommended && catalogPrice > 0) {
+    const override = ACADEMIC_EXTRA_FEATURE_PRICES[feature.id];
+    if (override !== undefined) return override;
+  }
+  return catalogPrice;
+}
 
 /** Features actually offered for this type + level, sorted for display. */
 export function featuresForTier(
@@ -193,6 +303,17 @@ export function featuresForTier(
     )
     .slice()
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+}
+
+/** Group a feature list by its category, preserving catalog sort order. */
+export function groupByCategory<T extends { category: string }>(rows: T[]): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  for (const f of rows) {
+    const arr = map.get(f.category) ?? [];
+    arr.push(f);
+    map.set(f.category, arr);
+  }
+  return [...map.entries()];
 }
 
 export type Estimate = {
@@ -227,10 +348,18 @@ export function computeEstimate(
   const platformRow = platforms.find((p) => p.platform === platform);
   const platformCharge = Number(platformRow?.charge) || 0;
 
+  // draft.featureIds is the single source of truth for what's enabled —
+  // free ("included") features are just as toggleable as paid ones; the
+  // customer's explicit choice always wins (see BuilderFeatures seeding).
   const eligible = featuresForTier(features, projectType, projectLevel);
   const selectedFeatures = eligible
     .filter((f) => draft.featureIds.includes(f.id))
-    .map((f) => ({ id: f.id, name: f.name, price: Number(f.price) || 0, category: f.category ?? "" }));
+    .map((f) => ({
+      id: f.id,
+      name: f.name,
+      price: priceForFeature(f, projectType, draft.aiRecommendedFeatureIds.includes(f.id)),
+      category: f.category ?? "",
+    }));
   const featureTotal = round2(selectedFeatures.reduce((s, f) => s + f.price, 0));
 
   const tokenAmount = projectType ? CUSTOM_PROJECT_TOKENS[projectType] : 0;
@@ -243,4 +372,48 @@ export function computeEstimate(
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Enabling `id` may require other features to be on first. Returns the
+ * feature-id list with any missing dependencies added, plus the rows that
+ * got auto-enabled (so the caller can show "X requires Y" once). Pure —
+ * doesn't touch React state itself.
+ */
+export function resolveDependencies(
+  featureIds: string[],
+  id: string,
+  features: FeatureRow[],
+): { featureIds: string[]; added: FeatureRow[] } {
+  const byId = new Map(features.map((f) => [f.id, f]));
+  const target = byId.get(id);
+  const deps = target?.dependencies ?? [];
+  const added: FeatureRow[] = [];
+  let next = featureIds;
+  for (const depId of deps) {
+    if (next.includes(depId)) continue;
+    const depFeature = byId.get(depId);
+    if (!depFeature) continue;
+    next = [...next, depId];
+    added.push(depFeature);
+  }
+  return { featureIds: next, added };
+}
+
+/**
+ * If enabling `id` would conflict with an already-enabled feature, returns
+ * that conflicting row (conflicts are symmetric — checked both directions
+ * since catalog data may only declare the relationship on one side).
+ */
+export function findConflict(featureIds: string[], id: string, features: FeatureRow[]): FeatureRow | null {
+  const byId = new Map(features.map((f) => [f.id, f]));
+  const target = byId.get(id);
+  if (!target) return null;
+  for (const otherId of featureIds) {
+    if (otherId === id) continue;
+    const other = byId.get(otherId);
+    if (!other) continue;
+    if (target.conflicts.includes(otherId) || other.conflicts.includes(id)) return other;
+  }
+  return null;
 }

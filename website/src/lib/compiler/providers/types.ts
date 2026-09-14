@@ -14,6 +14,9 @@ export interface NormalizedRun {
   status: "success" | "compile_error" | "runtime_error" | "timeout";
   /** Wall-clock milliseconds the provider call took (server-measured). */
   timeMs: number;
+  /** Peak memory in kilobytes when the provider reports it (Judge0 does;
+   *  Paiza / Piston usually don't). Undefined when unavailable. */
+  memoryKb?: number;
 }
 
 export interface RunInput {

@@ -10,6 +10,7 @@ import { DocsShell } from "../../_components/DocsShell";
 import { LearningBookmarkButton } from "./LearningBookmarkButton";
 import { PremiumTopicContent } from "./PremiumTopicContent";
 import { TopicPractice } from "./_components/TopicPractice";
+import { TopicDiscovery } from "./_components/TopicDiscovery";
 
 export const revalidate = 300;
 export const dynamicParams = true;
@@ -176,6 +177,11 @@ export default async function TopicPage({
             <span className="flex-1" />
           )}
         </nav>
+
+        {/* Internal-linking / discovery — Other Tutorials, Related Projects,
+            Related Jobs, Latest Jobs, Other Learning Topics. Renders nothing
+            when it has no real content for this topic. */}
+        <TopicDiscovery gridSlug={grid.slug} gridName={grid.name} />
       </DocsShell>
     </>
   );

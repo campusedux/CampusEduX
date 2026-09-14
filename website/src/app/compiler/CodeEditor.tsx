@@ -7,6 +7,7 @@ import "prismjs/components/prism-c";
 import "prismjs/components/prism-cpp";
 import "prismjs/components/prism-java";
 import "prismjs/components/prism-python";
+import "prismjs/components/prism-sql";
 // JavaScript grammar ships in Prism core.
 import "./editor.css";
 
@@ -45,6 +46,12 @@ export interface CodeEditorProps {
   fontSize?: number;
   /** Fired whenever the caret moves, for a status-bar "Ln X, Col Y" readout. */
   onCursorChange?: (pos: CursorPosition) => void;
+  /**
+   * Colour scheme for the editor surface. Omit for the original standalone
+   * `/compiler` look (dark surface, light-grey frame). Pass `"dark"` to sit on
+   * a dark IDE panel (frame blends into it) or `"light"` for a white editor.
+   */
+  theme?: "dark" | "light";
 }
 
 export default function CodeEditor({
@@ -56,7 +63,14 @@ export default function CodeEditor({
   className,
   fontSize = 13,
   onCursorChange,
+  theme,
 }: CodeEditorProps) {
+  const isLight = theme === "light";
+  const frameBg = isLight ? "bg-white" : "bg-[#0f172a]";
+  const frameBorder = theme == null ? "border-line" : isLight ? "border-line" : "border-white/10";
+  const gutterText = isLight ? "text-ink-faint" : "text-slate-500";
+  const codeText = isLight ? "text-slate-800" : "text-slate-100";
+  const caretColor = isLight ? "caret-slate-900" : "caret-slate-100";
   const taRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -121,13 +135,15 @@ export default function CodeEditor({
 
   return (
     <div
-      className={`relative flex overflow-hidden rounded-xl border border-line bg-[#0f172a] font-mono leading-[1.5] ${className ?? ""}`}
+      className={`relative flex overflow-hidden rounded-xl border ${frameBorder} ${frameBg} font-mono leading-[1.5] ${
+        isLight ? "cm-theme-light" : ""
+      } ${className ?? ""}`}
       style={fontStyle}
     >
       <div
         ref={gutterRef}
         aria-hidden
-        className="select-none overflow-hidden py-3 pl-3 pr-2 text-right font-mono leading-[1.5] text-slate-500"
+        className={`select-none overflow-hidden py-3 pl-3 pr-2 text-right font-mono leading-[1.5] ${gutterText}`}
         style={{ minWidth: "2.75rem", ...fontStyle }}
       >
         <div>
@@ -141,7 +157,7 @@ export default function CodeEditor({
         <pre
           ref={preRef}
           aria-hidden
-          className="pointer-events-none absolute inset-0 m-0 overflow-auto whitespace-pre px-3 py-3 font-mono leading-[1.5] text-slate-100 [scrollbar-width:none] [tab-size:2] [&::-webkit-scrollbar]:hidden"
+          className={`pointer-events-none absolute inset-0 m-0 overflow-auto whitespace-pre px-3 py-3 font-mono leading-[1.5] ${codeText} [scrollbar-width:none] [tab-size:2] [&::-webkit-scrollbar]:hidden`}
           style={fontStyle}
         >
           <code className={`language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted }} />
@@ -162,7 +178,7 @@ export default function CodeEditor({
           wrap="off"
           aria-label={ariaLabel}
           style={fontStyle}
-          className="absolute inset-0 h-full w-full resize-none overflow-auto whitespace-pre bg-transparent px-3 py-3 font-mono leading-[1.5] text-transparent caret-slate-100 outline-none selection:bg-primary/40 [scrollbar-width:thin] [tab-size:2]"
+          className={`absolute inset-0 h-full w-full resize-none overflow-auto whitespace-pre bg-transparent px-3 py-3 font-mono leading-[1.5] text-transparent ${caretColor} outline-none selection:bg-primary/40 [scrollbar-width:thin] [tab-size:2]`}
         />
       </div>
     </div>

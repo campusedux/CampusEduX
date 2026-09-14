@@ -384,3 +384,101 @@ function tally(ids: string[]): Map<string, number> {
   for (const id of ids) m.set(id, (m.get(id) ?? 0) + 1);
   return m;
 }
+
+// ---------------------------------------------------------------------------
+// Global Practice → Coding Problems (migration 0072/044). Categories are
+// `dsa_topics` rows with `kind='practice'`; problems are `dsa_problems` rows
+// with `learning_topic_id IS NULL` and `topic_id` -> such a category. Separate
+// from Learning, managed under the same `learning` permission module.
+// ---------------------------------------------------------------------------
+export interface PracticeCategoryRow {
+  id: string;
+  name: string;
+  slug: string | null;
+  description: string;
+  sort_order: number;
+  status: LearningStatus;
+  show_on_website: boolean;
+  show_on_mobile: boolean;
+  problem_count: number;
+}
+
+export interface PracticeProblemRow extends TopicCodingProblem {
+  /** The category id (`dsa_topics.id`, `kind='practice'`). */
+  topic_id: string;
+  category_name?: string;
+  category_slug?: string | null;
+}
+
+const PRACTICE_PROBLEM_COLS =
+  'id,topic_id,title,slug,difficulty,description,examples,constraints,starter_code,solution_code,test_cases,hints,editorial,solution_approach,supported_languages,is_premium,status,show_on_website,show_on_mobile,sort_order';
+
+export async function listPracticeCategories(): Promise<PracticeCategoryRow[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('dsa_topics')
+    .select('id,name,slug,description,sort_order,status,show_on_website,show_on_mobile')
+    .eq('kind', 'practice')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  const rows = (data ?? []) as Omit<PracticeCategoryRow, 'problem_count'>[];
+  const ids = rows.map((r) => r.id);
+  const counts = new Map<string, number>();
+  if (ids.length) {
+    const { data: probs } = await supabase
+      .from('dsa_problems')
+      .select('topic_id')
+      .is('learning_topic_id', null)
+      .in('topic_id', ids);
+    for (const p of (probs ?? []) as { topic_id: string }[]) {
+      counts.set(p.topic_id, (counts.get(p.topic_id) ?? 0) + 1);
+    }
+  }
+  return rows.map((r) => ({ ...r, problem_count: counts.get(r.id) ?? 0 }));
+}
+
+export async function listPracticeProblems(opts: {
+  page: number;
+  q?: string;
+  difficulty?: string;
+  category?: string;
+  status?: string;
+}): Promise<{ rows: PracticeProblemRow[]; total: number; categories: PracticeCategoryRow[] }> {
+  const supabase = createClient();
+  const categories = await listPracticeCategories();
+  const catIds = categories.map((c) => c.id);
+  const catById = new Map(categories.map((c) => [c.id, c]));
+  if (catIds.length === 0) return { rows: [], total: 0, categories };
+
+  const from = (opts.page - 1) * LEARNING_PAGE_SIZE;
+  let query = supabase
+    .from('dsa_problems')
+    .select(PRACTICE_PROBLEM_COLS, { count: 'exact' })
+    .is('learning_topic_id', null)
+    .in('topic_id', opts.category && catIds.includes(opts.category) ? [opts.category] : catIds)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+    .range(from, from + LEARNING_PAGE_SIZE - 1);
+  if (opts.q) query = query.ilike('title', `%${opts.q}%`);
+  if (opts.difficulty) query = query.eq('difficulty', opts.difficulty);
+  if (opts.status) query = query.eq('status', opts.status);
+
+  const { data, count, error } = await query;
+  const rows = ((error ? [] : (data ?? [])) as unknown as PracticeProblemRow[]).map((r) => ({
+    ...r,
+    category_name: catById.get(r.topic_id)?.name,
+    category_slug: catById.get(r.topic_id)?.slug ?? null,
+  }));
+  return { rows, total: error ? 0 : count ?? 0, categories };
+}
+
+export async function getPracticeProblem(id: string): Promise<PracticeProblemRow | null> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('dsa_problems')
+    .select(PRACTICE_PROBLEM_COLS)
+    .eq('id', id)
+    .is('learning_topic_id', null)
+    .maybeSingle();
+  return (data ?? null) as unknown as PracticeProblemRow | null;
+}

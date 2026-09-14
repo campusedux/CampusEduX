@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import CompilerWorkspace from "./CompilerWorkspace";
+import { CompilerFallback } from "./CompilerFallback";
 
 export const metadata: Metadata = {
   title: "Online Code Compiler",
@@ -22,18 +23,6 @@ export const metadata: Metadata = {
   },
 };
 
-function Fallback() {
-  return (
-    <div className="container-page py-6">
-      <div className="h-11 w-full max-w-md animate-pulse rounded-xl bg-line/70" />
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className="h-[52vh] min-h-[320px] animate-pulse rounded-xl bg-line/50 lg:h-[62vh]" />
-        <div className="h-[52vh] min-h-[320px] animate-pulse rounded-xl bg-line/50 lg:h-[62vh]" />
-      </div>
-    </div>
-  );
-}
-
 export default function CompilerPage() {
   return (
     <>
@@ -48,7 +37,13 @@ export default function CompilerPage() {
           url: absoluteUrl("/compiler"),
         }}
       />
-      <Suspense fallback={<Fallback />}>
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Practice", path: "/practice" },
+          { name: "Online Compiler", path: "/compiler" },
+        ])}
+      />
+      <Suspense fallback={<CompilerFallback />}>
         <CompilerWorkspace />
       </Suspense>
     </>

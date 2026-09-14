@@ -1,51 +1,109 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight, FileText, HelpCircle, Image as ImageIcon, Info, Plus, Search, X } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { formatINR } from "@/lib/format";
-import { Button } from "@/components/ui";
+import { Button, Modal } from "@/components/ui";
 import {
   CP_DOC_TYPES,
   CP_IMAGE_TYPES,
   CP_MAX_FILE_BYTES,
   CP_MAX_FILE_MB,
   CP_UPLOADS_BUCKET,
-  type FeatureRow,
-  TYPE_LABELS,
-  LEVEL_LABELS,
+  computeEstimate,
   featuresForTier,
+  findConflict,
+  groupByCategory,
+  priceForFeature,
+  resolveDependencies,
+  type FeatureRow,
+  type PlatformRow,
+  type PricingRow,
+  type ProjectLevel,
+  type ProjectType,
+  type Platform,
 } from "@/lib/customProjects";
 import { useDraft } from "../_builder/useDraft";
+import { BottomBar } from "../_builder/BottomBar";
+import { ConfigSummary } from "../_builder/ConfigSummary";
+import { CollapsibleCategory } from "../_builder/CollapsibleCategory";
+import { Dropzone } from "../_builder/Dropzone";
+import { FeatureCard } from "../_builder/FeatureCard";
 
-export default function BuilderFeatures({ features }: { features: FeatureRow[] }) {
+/** Always considered necessary, whatever the project — see migration 0090. */
+const MANDATORY_FEATURE_IDS = ["auth-email-password", "user-profile", "search-basic"];
+
+export default function BuilderFeatures({
+  features,
+  pricing,
+  platforms,
+}: {
+  features: FeatureRow[];
+  pricing: PricingRow[];
+  platforms: PlatformRow[];
+}) {
   const router = useRouter();
   const { draft, update, patch, saveNow, loaded, userId } = useDraft();
   const [going, setGoing] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browseQuery, setBrowseQuery] = useState("");
 
   const eligible = useMemo(
     () => featuresForTier(features, draft.projectType, draft.projectLevel),
     [features, draft.projectType, draft.projectLevel],
   );
+  const featureById = useMemo(() => new Map(features.map((f) => [f.id, f])), [features]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, FeatureRow[]>();
-    for (const f of eligible) {
-      const arr = map.get(f.category) ?? [];
-      arr.push(f);
-      map.set(f.category, arr);
-    }
-    return [...map.entries()];
-  }, [eligible]);
+  // Included = free for this tier, or AI flagged it as genuinely necessary
+  // (even if paid). Extra = everything else paid — optional enhancements.
+  const includedBucket = useMemo(
+    () => eligible.filter((f) => Number(f.price) === 0 || draft.aiRecommendedFeatureIds.includes(f.id)),
+    [eligible, draft.aiRecommendedFeatureIds],
+  );
+  const extraBucket = useMemo(
+    () => eligible.filter((f) => Number(f.price) > 0 && !draft.aiRecommendedFeatureIds.includes(f.id)),
+    [eligible, draft.aiRecommendedFeatureIds],
+  );
+  const defaultExtras = useMemo(() => {
+    if (draft.aiSuggestedExtraFeatureIds.length === 0) return extraBucket;
+    const ids = new Set(draft.aiSuggestedExtraFeatureIds);
+    return extraBucket.filter((f) => ids.has(f.id));
+  }, [extraBucket, draft.aiSuggestedExtraFeatureIds]);
+
+  const groupedIncluded = useMemo(() => groupByCategory(includedBucket), [includedBucket]);
+  const groupedExtras = useMemo(() => groupByCategory(defaultExtras), [defaultExtras]);
+
+  const browseResults = useMemo(() => {
+    const q = browseQuery.trim().toLowerCase();
+    if (!q) return extraBucket;
+    return extraBucket.filter((f) => f.name.toLowerCase().includes(q) || f.description?.toLowerCase().includes(q) || f.category.toLowerCase().includes(q));
+  }, [extraBucket, browseQuery]);
+  const groupedBrowse = useMemo(() => groupByCategory(browseResults), [browseResults]);
 
   const selectedSet = useMemo(() => new Set(draft.featureIds), [draft.featureIds]);
-  const featureSubtotal = eligible
-    .filter((f) => selectedSet.has(f.id))
-    .reduce((s, f) => s + (Number(f.price) || 0), 0);
+  const extraSelectedCount = extraBucket.filter((f) => selectedSet.has(f.id)).length;
+
+  const estimate = useMemo(
+    () => computeEstimate(draft, pricing, platforms, features),
+    [draft, pricing, platforms, features],
+  );
+
+  const filesUploaded = draft.referenceFiles.length + (draft.projectImagePath ? 1 : 0);
+
+  // One-time default selection: every included feature, the first time this
+  // tier is seen. Re-visits never stomp a user's explicit toggles.
+  useEffect(() => {
+    if (!loaded || draft.featuresSeeded || includedBucket.length === 0) return;
+    patch({ featureIds: includedBucket.map((f) => f.id), featuresSeeded: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, draft.featuresSeeded, includedBucket]);
 
   if (!loaded) return <p className="text-sm text-ink-muted">Loading your draft…</p>;
 
@@ -62,15 +120,40 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
   }
 
   function toggle(id: string) {
-    update((d) => ({
-      ...d,
-      featureIds: d.featureIds.includes(id) ? d.featureIds.filter((x) => x !== id) : [...d.featureIds, id],
-    }));
+    const feature = featureById.get(id);
+    if (!feature) return;
+    const already = selectedSet.has(id);
+
+    if (already) {
+      if (MANDATORY_FEATURE_IDS.includes(id) && !confirm(`"${feature.name}" is commonly essential. Disable it anyway?`)) {
+        return;
+      }
+      update((d) => ({ ...d, featureIds: d.featureIds.filter((x) => x !== id) }));
+      setNotice(null);
+      return;
+    }
+
+    const conflict = findConflict(draft.featureIds, id, features);
+    if (conflict) {
+      setNotice(`"${feature.name}" and "${conflict.name}" can't be enabled together.`);
+      return;
+    }
+
+    const { featureIds: withDeps, added } = resolveDependencies(draft.featureIds, id, features);
+    const next = withDeps.includes(id) ? withDeps : [...withDeps, id];
+    update((d) => ({ ...d, featureIds: next }));
+    setNotice(
+      added.length > 0
+        ? `"${feature.name}" requires ${added.map((a) => `"${a.name}"`).join(", ")}. ${
+            added.length > 1 ? "They have" : "It has"
+          } been enabled automatically.`
+        : null,
+    );
   }
 
-  async function handleImage(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleImage(list: FileList) {
     setUploadError(null);
-    const f = e.target.files?.[0];
+    const f = list[0];
     if (!f || !userId) return;
     if (!CP_IMAGE_TYPES.includes(f.type)) {
       setUploadError("Project image must be a PNG, JPEG or WebP.");
@@ -97,14 +180,14 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
     }
   }
 
-  async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFiles(list: FileList) {
     setUploadError(null);
-    const list = Array.from(e.target.files ?? []);
-    if (list.length === 0 || !userId) return;
+    const files = Array.from(list);
+    if (files.length === 0 || !userId) return;
     setFileBusy(true);
     try {
       const supabase = createBrowserSupabase();
-      for (const f of list) {
+      for (const f of files) {
         if (f.size > CP_MAX_FILE_BYTES) {
           setUploadError(`"${f.name}" is over ${CP_MAX_FILE_MB} MB and was skipped.`);
           continue;
@@ -133,7 +216,6 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
       }
     } finally {
       setFileBusy(false);
-      e.target.value = "";
     }
   }
 
@@ -144,100 +226,262 @@ export default function BuilderFeatures({ features }: { features: FeatureRow[] }
   }
 
   return (
-    <div className="space-y-8">
-      <p className="text-xs text-ink-muted">
-        Showing features for <strong>{TYPE_LABELS[draft.projectType]}</strong> ·{" "}
-        <strong>{LEVEL_LABELS[draft.projectLevel]}</strong>.{" "}
-        <Link href="/custom-projects/start" className="underline hover:text-ink">
-          Change
-        </Link>
-      </p>
+    <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
+      <div className="min-w-0 space-y-8">
+        <ConfigSummary
+          projectType={draft.projectType as ProjectType}
+          projectLevel={draft.projectLevel as ProjectLevel}
+          platform={(draft.platform ?? "web") as Platform}
+          title={draft.title}
+          overview={draft.aiOverview || draft.objective.slice(0, 200)}
+        />
 
-      {grouped.map(([category, rows]) => (
-        <div key={category}>
-          <h2 className="text-lg font-bold text-ink">{category}</h2>
-          <div className="mt-2 divide-y divide-line border-t border-line">
-            {rows.map((f) => (
-              <label
-                key={f.id}
-                className="flex cursor-pointer items-start gap-3 rounded-lg px-1 py-3 transition hover:bg-surface"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedSet.has(f.id)}
-                  onChange={() => toggle(f.id)}
-                  className="mt-1 accent-primary"
-                />
-                <span className="flex-1">
-                  <span className="text-sm text-ink">{f.name}</span>
-                  {f.description && <span className="block text-xs text-ink-muted">{f.description}</span>}
-                </span>
-                <span className="whitespace-nowrap text-sm text-ink">
-                  {Number(f.price) > 0 ? `+${formatINR(Number(f.price))}` : "Included"}
-                </span>
-              </label>
-            ))}
+        {notice && (
+          <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary-50/60 px-4 py-3 text-sm text-ink">
+            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" aria-hidden />
+            <p>{notice}</p>
           </div>
-        </div>
-      ))}
+        )}
 
-      <div className="border-t border-line pt-4 text-sm text-ink">
-        Selected feature add-ons: <strong>{formatINR(featureSubtotal)}</strong>{" "}
-        <span className="text-xs text-ink-muted">(the final estimate is calculated on the next step)</span>
-      </div>
+        {/* Included Features */}
+        <section>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-ink">Included Features</h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                These are already part of your project based on what you told us. You can turn any of them off.
+              </p>
+            </div>
+            {includedBucket.length > 0 && (
+              <span className="flex-shrink-0 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary">
+                {includedBucket.length} included
+              </span>
+            )}
+          </div>
+          {groupedIncluded.length === 0 ? (
+            <p className="mt-3 text-sm text-ink-faint">No included features are configured for this tier yet.</p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {groupedIncluded.map(([category, rows]) => (
+                <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={rows.length === 1 ? "feature" : "features"}>
+                  {rows.map((f) => (
+                    <FeatureCard
+                      key={f.id}
+                      feature={f}
+                      checked={selectedSet.has(f.id)}
+                      onToggle={() => toggle(f.id)}
+                      recommended={MANDATORY_FEATURE_IDS.includes(f.id) || draft.aiRecommendedFeatureIds.includes(f.id)}
+                    />
+                  ))}
+                </CollapsibleCategory>
+              ))}
+            </div>
+          )}
+        </section>
 
-      <div>
-        <h2 className="text-lg font-bold text-ink">Project image (optional)</h2>
-        <input
-          type="file"
-          accept={CP_IMAGE_TYPES.join(",")}
-          onChange={handleImage}
-          disabled={imageBusy}
-          className="mt-2 block w-full text-sm text-ink-muted file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink"
-        />
-        {draft.projectImagePath && <p className="mt-1 text-xs text-success">Image attached.</p>}
-      </div>
+        {/* Extra Features */}
+        <section>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
+                Extra Features
+                {defaultExtras.length > 0 && (
+                  <span className="rounded-full bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink-muted">
+                    {defaultExtras.length} available
+                  </span>
+                )}
+              </h2>
+              <p className="mt-1 text-sm text-ink-muted">Optional enhancements you can add to this project.</p>
+            </div>
+            <Button type="button" variant="secondary" size="sm" leftIcon={Plus} onClick={() => setBrowseOpen(true)}>
+              Add extra feature
+            </Button>
+          </div>
 
-      <div>
-        <h2 className="text-lg font-bold text-ink">Requirement / reference files (optional)</h2>
-        <p className="text-xs text-ink-muted">PDF, DOC, DOCX, images or ZIP · up to {CP_MAX_FILE_MB} MB each.</p>
-        <input
-          type="file"
-          multiple
-          accept={CP_DOC_TYPES.join(",")}
-          onChange={handleFiles}
-          disabled={fileBusy}
-          className="mt-2 block w-full text-sm text-ink-muted file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink"
-        />
-        {draft.referenceFiles.length > 0 && (
-          <ul className="mt-2 space-y-1">
-            {draft.referenceFiles.map((r, i) => (
-              <li key={r.path} className="flex items-center gap-2 text-sm text-ink">
-                <span className="flex-1">
-                  {r.name} <span className="text-xs text-ink-muted">({r.sizeMb} MB)</span>
-                </span>
+          {groupedExtras.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => setBrowseOpen(true)}
+              className="mt-4 flex w-full flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line bg-surface px-4 py-8 text-center transition hover:border-primary/30 hover:bg-primary-50/40"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary">
+                <Plus className="h-5 w-5" aria-hidden />
+              </span>
+              <span className="text-sm font-semibold text-ink">Add extra feature</span>
+              <span className="max-w-xs text-xs text-ink-muted">
+                Browse additional functionality available for your project.
+              </span>
+            </button>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {groupedExtras.map(([category, rows]) => (
+                <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={rows.length === 1 ? "feature" : "features"}>
+                  {rows.map((f) => (
+                    <FeatureCard
+                      key={f.id}
+                      feature={{ ...f, price: priceForFeature(f, draft.projectType, false) }}
+                      checked={selectedSet.has(f.id)}
+                      onToggle={() => toggle(f.id)}
+                    />
+                  ))}
+                </CollapsibleCategory>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Project files & references */}
+        <section>
+          <h2 className="text-lg font-bold text-ink">Project files &amp; references</h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            Upload documents, screenshots, PDFs, designs or reference files that help us understand your project.
+          </p>
+
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-semibold text-ink">Project image (optional)</p>
+            <Dropzone
+              accept={CP_IMAGE_TYPES.join(",")}
+              disabled={imageBusy}
+              onFiles={handleImage}
+              hint="PNG, JPEG or WebP"
+            />
+            {draft.projectImagePath && (
+              <div className="flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink">
+                <ImageIcon className="h-4 w-4 flex-shrink-0 text-ink-faint" aria-hidden />
+                <span className="flex-1 truncate">Image attached</span>
                 <button
                   type="button"
-                  onClick={() => update((d) => ({ ...d, referenceFiles: d.referenceFiles.filter((_, j) => j !== i) }))}
-                  className="text-xs text-ink-muted underline hover:text-ink"
+                  onClick={() => patch({ projectImagePath: null })}
+                  className="text-ink-faint hover:text-danger"
+                  aria-label="Remove image"
                 >
-                  Remove
+                  <X className="h-4 w-4" aria-hidden />
                 </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {uploadError && <p className="mt-2 text-xs text-danger">{uploadError}</p>}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5 space-y-2">
+            <p className="text-xs font-semibold text-ink">Requirement / reference files (optional)</p>
+            <Dropzone
+              accept={CP_DOC_TYPES.join(",")}
+              multiple
+              disabled={fileBusy}
+              onFiles={handleFiles}
+              hint={`PDF, DOC, DOCX, images or ZIP · up to ${CP_MAX_FILE_MB} MB each`}
+            />
+            {draft.referenceFiles.length > 0 && (
+              <ul className="space-y-1.5">
+                {draft.referenceFiles.map((r, i) => (
+                  <li key={r.path} className="flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink">
+                    <FileText className="h-4 w-4 flex-shrink-0 text-ink-faint" aria-hidden />
+                    <span className="flex-1 truncate">
+                      {r.name} <span className="text-xs text-ink-muted">({r.sizeMb} MB)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => update((d) => ({ ...d, referenceFiles: d.referenceFiles.filter((_, j) => j !== i) }))}
+                      className="text-ink-faint hover:text-danger"
+                      aria-label={`Remove ${r.name}`}
+                    >
+                      <X className="h-4 w-4" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {uploadError && <p className="text-xs text-danger">{uploadError}</p>}
+          </div>
+        </section>
+
+        <BottomBar
+          step={2}
+          left={
+            <Link href="/custom-projects/start" className="text-sm font-medium text-ink-muted underline hover:text-ink">
+              ← Back
+            </Link>
+          }
+          center={<span>{draft.featureIds.length} features selected</span>}
+          right={
+            <Button type="button" onClick={handleContinue} disabled={going} loading={going}>
+              {going ? "Saving…" : "Review estimate →"}
+            </Button>
+          }
+        />
       </div>
 
-      <div className="flex items-center justify-between border-t border-line pt-6">
-        <Link href="/custom-projects/start" className="text-sm font-medium text-ink-muted underline hover:text-ink">
-          Back
-        </Link>
-        <Button type="button" onClick={handleContinue} disabled={going} loading={going}>
-          {going ? "Saving…" : "Continue to estimate"}
-        </Button>
-      </div>
+      {/* Right sidebar */}
+      <aside className="space-y-4 lg:sticky lg:top-24">
+        <div className="rounded-2xl border border-line bg-white p-5 shadow-card">
+          <h2 className="text-base font-bold text-ink">Your selection</h2>
+          <dl className="mt-4 space-y-2.5 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-ink-muted">Included features</dt>
+              <dd className="font-medium text-ink">{includedBucket.filter((f) => selectedSet.has(f.id)).length}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-ink-muted">Extra features</dt>
+              <dd className="font-medium text-ink">{extraSelectedCount} selected</dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-ink-muted">Files uploaded</dt>
+              <dd className="font-medium text-ink">{filesUploaded}</dd>
+            </div>
+          </dl>
+
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="text-xs font-medium text-ink-muted">Estimated price</p>
+            <p className="mt-1 text-2xl font-bold text-ink">{formatINR(estimate.estimatedTotal)}</p>
+          </div>
+
+          <Link
+            href="/custom-projects/estimate"
+            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:text-primary-700"
+          >
+            View full estimate <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-surface p-4">
+          <div className="flex items-center gap-2">
+            <HelpCircle className="h-4 w-4 text-primary" aria-hidden />
+            <p className="text-sm font-semibold text-ink">Need help choosing?</p>
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
+            Not sure which features to choose? You can continue and our team will help you refine the requirements.
+          </p>
+        </div>
+      </aside>
+
+      <Modal open={browseOpen} onClose={() => setBrowseOpen(false)} title="Browse extra features" className="max-w-2xl">
+        <div className="relative mb-4">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden />
+          <input
+            value={browseQuery}
+            onChange={(e) => setBrowseQuery(e.target.value)}
+            placeholder="Search all extra features…"
+            className="block h-10 w-full rounded-xl border border-line bg-white pl-10 pr-3 text-sm text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+          {groupedBrowse.length === 0 ? (
+            <p className="text-sm text-ink-faint">No features match &quot;{browseQuery}&quot;.</p>
+          ) : (
+            groupedBrowse.map(([category, rows]) => (
+              <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={rows.length === 1 ? "feature" : "features"}>
+                {rows.map((f) => (
+                  <FeatureCard
+                    key={f.id}
+                    feature={{ ...f, price: priceForFeature(f, draft.projectType, false) }}
+                    checked={selectedSet.has(f.id)}
+                    onToggle={() => toggle(f.id)}
+                  />
+                ))}
+              </CollapsibleCategory>
+            ))
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

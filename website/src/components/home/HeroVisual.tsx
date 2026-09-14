@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, LayoutGrid, Briefcase, GraduationCap, FileText } from "lucide-react";
+import { ArrowRight, LayoutGrid, Briefcase, GraduationCap, Code2, FileText } from "lucide-react";
 
 /**
  * Right-hand hero composition — a UI-only "product" panel. Every row is a real
@@ -14,6 +14,7 @@ const ROWS: Row[] = [
   { label: "Projects", desc: "Buy & sell final-year projects", href: "/projects", icon: LayoutGrid, tint: "#4F39F6", bg: "#EEF0FF" },
   { label: "Jobs", desc: "Roles & internships for students", href: "/jobs", icon: Briefcase, tint: "#3B82F6", bg: "#DBEAFE" },
   { label: "Learning", desc: "Structured prep & study material", href: "/learning", icon: GraduationCap, tint: "#16A34A", bg: "#DCFCE7" },
+  { label: "Practice", desc: "Practice coding problems and improve your programming skills", href: "/practice", icon: Code2, tint: "#DB2777", bg: "#FCE7F3" },
   { label: "Resume", desc: "ATS-friendly builder & templates", href: "/resume", icon: FileText, tint: "#EA580C", bg: "#FFEDD5" },
 ];
 

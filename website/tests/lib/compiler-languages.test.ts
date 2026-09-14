@@ -41,6 +41,8 @@ describe("resolveLanguage / alias handling", () => {
     ["c++", "cpp"],
     ["G++", "cpp"],
     ["  java  ", "java"],
+    ["mysql", "sql"],
+    ["SQL", "sql"],
   ])("%s resolves to %s", (input, expected) => {
     expect(resolveLanguage(input)?.id).toBe(expected);
   });

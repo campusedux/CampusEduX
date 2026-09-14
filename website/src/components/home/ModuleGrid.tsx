@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, LayoutGrid, GraduationCap, Briefcase, FileText, Wrench } from "lucide-react";
+import { ArrowRight, Compass, LayoutGrid, GraduationCap, Code2, Briefcase, FileText, Wrench } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 type Accent = "indigo" | "emerald" | "sky" | "amber" | "pink";
@@ -30,6 +30,7 @@ const ACCENT: Record<Accent, { tile: string; fg: string }> = {
 const MODULES: ModuleTile[] = [
   { label: "Projects", desc: "Explore and buy final year projects", href: "/projects", icon: LayoutGrid, accent: "indigo" },
   { label: "Learning", desc: "Courses, tutorials and study material", href: "/learning", icon: GraduationCap, accent: "emerald" },
+  { label: "Practice", desc: "Practice coding problems and improve your programming skills", href: "/practice", icon: Code2, accent: "pink" },
   { label: "Jobs", desc: "Find jobs & internships", href: "/jobs", icon: Briefcase, accent: "sky" },
   { label: "Resume", desc: "Build ATS-friendly resumes", href: "/resume", icon: FileText, accent: "amber" },
   { label: "Custom Projects", desc: "Get your custom project built", href: "/custom-projects", icon: Wrench, accent: "pink" },
@@ -37,8 +38,20 @@ const MODULES: ModuleTile[] = [
 
 export function ModuleGrid() {
   return (
-    <section className="container-page pt-8" aria-label="Explore CampusEduX">
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+    <section className="container-page pt-10 sm:pt-12" aria-label="Explore CampusEduX">
+      <div className="mb-6">
+        <span className="eyebrow inline-flex items-center gap-1.5">
+          <Compass className="h-3.5 w-3.5" aria-hidden />
+          Quick access
+        </span>
+        <h2 className="h-section mt-2">Explore</h2>
+      </div>
+      {/*
+       * Responsive, capped at 4 columns — an explicit breakpoint ladder
+       * (1 → 2 → 3 → 4), never `auto-fit`, so even an ultrawide monitor shows
+       * at most 4 tiles per row. Cards carry no fixed width and reflow on resize.
+       */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
         {MODULES.map((m) => {
           const Icon = m.icon;
           const a = ACCENT[m.accent];

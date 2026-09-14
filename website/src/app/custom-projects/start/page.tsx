@@ -11,13 +11,20 @@ export const metadata: Metadata = {
 export default async function Page() {
   await requireUser();
   return (
-    <div className="container-prose py-12">
-      <h1 className="text-3xl font-bold text-ink">Custom project request</h1>
-      <p className="mt-2 text-sm text-ink-muted">
-        Tell us what you need. Your progress saves automatically — you can leave and come back.
-      </p>
-      <div className="mt-8">
-        <StepBar current={0} />
+    <div className="container-prose py-10 sm:py-12">
+      <StepBar current={0} />
+
+      <div className="mt-6">
+        <p className="eyebrow">Step 1 · Project details</p>
+        <h1 className="mt-2 text-[1.9rem] font-bold leading-[1.12] tracking-tight text-ink sm:text-[2.35rem]">
+          Let&apos;s build your idea
+        </h1>
+        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-muted sm:text-base">
+          Give it a name and tell us what it should do. We&apos;ll take care of the rest.
+        </p>
+      </div>
+
+      <div className="mt-10">
         <BuilderStart />
       </div>
     </div>

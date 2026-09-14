@@ -30,6 +30,7 @@ interface Judge0Response {
   message: string | null;
   exit_code: number | null;
   time: string | null;
+  memory: number | null;
   status: { id: number; description: string } | null;
 }
 
@@ -115,6 +116,7 @@ export function createJudge0Provider(): CompilerProvider {
         timedOut,
         status,
         timeMs,
+        memoryKb: typeof body.memory === "number" && body.memory > 0 ? Math.round(body.memory) : undefined,
       };
     },
   };

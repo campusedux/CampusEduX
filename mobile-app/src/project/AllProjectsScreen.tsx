@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState, EmptyState, DrawerMenuButton } from "@/components/ui";
 import { ProjectCard } from "@/components/cards";
+import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import { useAllProjects , useToggleWishlist, useWishlist } from "@/hooks/useProjects";
 import { useCategories } from "@/hooks/useHomeData";
 import { useProjectFilterStore } from "@/store/projectFilterStore";
@@ -43,6 +44,11 @@ export function AllProjectsScreen() {
           </Pressable>
         </View>
       </View>
+
+      <CustomProjectBanner
+        onStartProject={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
+        onLearnMore={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
+      />
 
       <View className="mb-4">
         <FlatList

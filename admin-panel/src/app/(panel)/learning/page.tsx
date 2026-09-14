@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Plus, LayoutGrid, FolderTree, FileText, BookOpen } from 'lucide-react';
+import { Plus, LayoutGrid, FolderTree, FileText, BookOpen, Code2, ArrowRight } from 'lucide-react';
 import { requireModule } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, EmptyState } from '@/components/ui/primitives';
@@ -59,6 +59,24 @@ export default async function LearningDashboard({ searchParams }: { searchParams
         <StatCard label="Topics" value={formatNumber(d.topics)} icon={BookOpen} tone="brand" hint={`${d.premiumTopics} premium`} />
         <StatCard label="Content blocks" value={formatNumber(d.contents)} icon={FileText} tone="success" hint={`${d.publishedContents} published · ${d.draftContents} draft`} />
       </div>
+
+      <Link
+        href="/learning/practice"
+        className="flex items-center justify-between gap-4 rounded-xl border border-border bg-white p-4 transition-colors hover:border-brand/40 hover:bg-surface-subtle"
+      >
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <Code2 size={18} />
+          </span>
+          <div>
+            <div className="font-semibold text-ink">Coding Practice</div>
+            <div className="text-sm text-ink-muted">
+              The global Practice → Coding Problems library (separate from the grids below).
+            </div>
+          </div>
+        </div>
+        <ArrowRight size={18} className="flex-shrink-0 text-ink-faint" />
+      </Link>
 
       <Card>
         <CardHeader

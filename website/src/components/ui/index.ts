@@ -9,6 +9,7 @@ export type { BadgeTone } from "./Badge";
 export { Chip, TagPill } from "./Chip";
 export { Input, Textarea, Select, Field, OptionChips } from "./Field";
 export type { InputProps, TextareaProps, SelectProps } from "./Field";
+export { Switch } from "./Switch";
 export { Reveal } from "./Reveal";
 export { Breadcrumb } from "./Breadcrumb";
 export type { Crumb } from "./Breadcrumb";

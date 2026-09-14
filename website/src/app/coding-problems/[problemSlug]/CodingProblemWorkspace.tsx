@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Play, RotateCcw, ListChecks, Loader2, Check, X } from "lucide-react";
-import { Button, Select } from "@/components/ui";
+import Link from "next/link";
+import { Loader2, Check, X } from "lucide-react";
 import { LANGUAGES, resolveLanguage, starterFor } from "@/lib/compiler/languages";
 import type { NormalizedRun } from "@/lib/compiler/providers/types";
 import type { JudgeCaseResult } from "@/lib/codingProblems";
-import { CompilerPane } from "../../compiler/CompilerPane";
+import { CompilerPanel } from "./_components/CompilerPanel";
 
 const DRAFT_PREFIX = "campusedux:coding:draft:";
 
@@ -14,14 +14,29 @@ interface Props {
   slug: string;
   supportedLanguages: string[];
   starterCode: Record<string, string>;
-  firstExampleInput: string;
+  /** Example stdin strings from the problem, in order — seeds stdin + the "Use Example" menu. */
+  exampleInputs: string[];
+  /** Endpoint for "Run Tests" (visible + hidden cases, no persistence). */
+  judgeEndpoint?: string;
+  /** When set, a "Submit" action POSTs here and persists the attempt; a link to
+   *  this path is shown after a successful submit. */
+  submitEndpoint?: string;
+  /** Where the "View submissions" link points after a submit. */
+  submissionsHref?: string;
 }
 
 type RunState =
   | { phase: "idle" }
   | { phase: "running" }
   | { phase: "run-done"; run: NormalizedRun }
-  | { phase: "judge-done"; results: JudgeCaseResult[]; summary: { passed: number; total: number }; compileError?: string }
+  | {
+      phase: "judge-done";
+      results: JudgeCaseResult[];
+      summary: { passed: number; total: number };
+      compileError?: string;
+      submitted?: boolean;
+      verdict?: string;
+    }
   | { phase: "error"; message: string };
 
 function readDraft(slug: string, langId: string): string | null {
@@ -48,7 +63,28 @@ function starterForProblem(starterCode: Record<string, string>, langId: string):
   return starterFor(langId);
 }
 
-export default function CodingProblemWorkspace({ slug, supportedLanguages, starterCode, firstExampleInput }: Props) {
+/** kB → human string. Undefined when the provider doesn't report memory. */
+function formatMemory(kb: number | undefined): string | null {
+  if (typeof kb !== "number" || !Number.isFinite(kb) || kb <= 0) return null;
+  return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
+}
+
+/**
+ * Stateful container for the coding-problem compiler: language + code + stdin +
+ * draft persistence, the quick Run (`/api/compiler/run`) and Run Tests
+ * (`judgeEndpoint`) calls, an optional persisted Submit (`submitEndpoint`), and
+ * the result renderers. The Learning topic-practice route uses the defaults
+ * (Run + Run Tests only); the global Practice route also passes `submitEndpoint`.
+ */
+export default function CodingProblemWorkspace({
+  slug,
+  supportedLanguages,
+  starterCode,
+  exampleInputs,
+  judgeEndpoint = "/api/coding-problems/judge",
+  submitEndpoint,
+  submissionsHref = "/practice/submissions",
+}: Props) {
   // Only languages this compiler can actually execute, in menu order.
   const languages = useMemo(() => {
     const wanted = new Set(
@@ -62,8 +98,7 @@ export default function CodingProblemWorkspace({ slug, supportedLanguages, start
 
   const [languageId, setLanguageId] = useState(languages[0].id);
   const [code, setCode] = useState("");
-  const [stdin, setStdin] = useState(firstExampleInput ?? "");
-  const [showStdin, setShowStdin] = useState(Boolean(firstExampleInput));
+  const [stdin, setStdin] = useState(exampleInputs[0] ?? "");
   const [runState, setRunState] = useState<RunState>({ phase: "idle" });
   const [ready, setReady] = useState(false);
   const runningRef = useRef(false);
@@ -85,20 +120,25 @@ export default function CodingProblemWorkspace({ slug, supportedLanguages, start
     return () => clearTimeout(t);
   }, [code, languageId, ready, slug]);
 
-  function switchLanguage(nextId: string) {
-    if (nextId === languageId) return;
-    writeDraft(slug, languageId, code);
-    setLanguageId(nextId);
-    setCode(readDraft(slug, nextId) ?? starterForProblem(starterCode, nextId));
-    setRunState({ phase: "idle" });
-  }
+  const switchLanguage = useCallback(
+    (nextId: string) => {
+      if (nextId === languageId) return;
+      writeDraft(slug, languageId, code);
+      setLanguageId(nextId);
+      setCode(readDraft(slug, nextId) ?? starterForProblem(starterCode, nextId));
+      setRunState({ phase: "idle" });
+    },
+    [languageId, code, slug, starterCode],
+  );
 
-  function resetToStarter() {
+  const resetToStarter = useCallback(() => {
     const starter = starterForProblem(starterCode, languageId);
     setCode(starter);
     writeDraft(slug, languageId, starter);
     setRunState({ phase: "idle" });
-  }
+  }, [starterCode, languageId, slug]);
+
+  const clearOutput = useCallback(() => setRunState({ phase: "idle" }), []);
 
   const run = useCallback(async () => {
     if (runningRef.current || !code.trim()) {
@@ -126,93 +166,89 @@ export default function CodingProblemWorkspace({ slug, supportedLanguages, start
     }
   }, [code, languageId, stdin]);
 
-  const judge = useCallback(async () => {
-    if (runningRef.current || !code.trim()) {
-      if (!code.trim()) setRunState({ phase: "error", message: "Write some code first." });
-      return;
-    }
-    runningRef.current = true;
-    setRunState({ phase: "running" });
-    try {
-      const res = await fetch("/api/coding-problems/judge", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ slug, language: languageId, source: code }),
-      });
-      const data: {
-        ok?: boolean;
-        error?: string;
-        results?: JudgeCaseResult[];
-        summary?: { passed: number; total: number };
-        compileError?: string;
-      } = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok || !data.results || !data.summary) {
-        setRunState({ phase: "error", message: data.error || `Couldn't run the tests (${res.status}).` });
+  const callJudge = useCallback(
+    async (endpoint: string, submitted: boolean) => {
+      if (runningRef.current || !code.trim()) {
+        if (!code.trim()) setRunState({ phase: "error", message: "Write some code first." });
         return;
       }
-      setRunState({
-        phase: "judge-done",
-        results: data.results,
-        summary: data.summary,
-        compileError: data.compileError,
-      });
-    } catch {
-      setRunState({ phase: "error", message: "Network error — check your connection and try again." });
-    } finally {
-      runningRef.current = false;
-    }
-  }, [code, languageId, slug]);
+      runningRef.current = true;
+      setRunState({ phase: "running" });
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ slug, language: languageId, source: code }),
+        });
+        const data: {
+          ok?: boolean;
+          error?: string;
+          results?: JudgeCaseResult[];
+          summary?: { passed: number; total: number };
+          compileError?: string;
+          verdict?: string;
+        } = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          setRunState({ phase: "error", message: data.error || "Sign in to submit your solution." });
+          return;
+        }
+        if (!res.ok || !data.ok || !data.results || !data.summary) {
+          setRunState({ phase: "error", message: data.error || `Couldn't run the tests (${res.status}).` });
+          return;
+        }
+        setRunState({
+          phase: "judge-done",
+          results: data.results,
+          summary: data.summary,
+          compileError: data.compileError,
+          submitted,
+          verdict: data.verdict,
+        });
+      } catch {
+        setRunState({ phase: "error", message: "Network error — check your connection and try again." });
+      } finally {
+        runningRef.current = false;
+      }
+    },
+    [code, languageId, slug],
+  );
+
+  const judge = useCallback(() => callJudge(judgeEndpoint, false), [callJudge, judgeEndpoint]);
+  const submit = useCallback(() => {
+    if (submitEndpoint) void callJudge(submitEndpoint, true);
+  }, [callJudge, submitEndpoint]);
 
   const busy = runState.phase === "running";
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="cp-language" className="text-sm font-medium text-ink-muted">
-          Language
-        </label>
-        <Select id="cp-language" value={languageId} onChange={(e) => switchLanguage(e.target.value)} className="w-36">
-          {languages.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.label}
-            </option>
-          ))}
-        </Select>
-        <div className="ml-auto flex items-center gap-2">
-          <Button type="button" variant="ghost" leftIcon={RotateCcw} onClick={resetToStarter} disabled={busy}>
-            Reset
-          </Button>
-          <Button type="button" variant="ghost" leftIcon={busy ? undefined : Play} onClick={run} loading={busy}>
-            Run
-          </Button>
-          <Button type="button" leftIcon={busy ? undefined : ListChecks} onClick={judge} loading={busy}>
-            Run Tests
-          </Button>
-        </div>
-      </div>
-
-      <CompilerPane
-        ready={ready}
-        code={code}
-        onChange={setCode}
-        language={activeLang.prism}
-        ariaLabel={`${activeLang.label} code editor`}
-        onRun={judge}
-        stdinOpen={showStdin}
-        onStdinToggle={() => setShowStdin((v) => !v)}
-        stdin={stdin}
-        onStdinChange={setStdin}
-        stdinLabel="Custom input (stdin) — for the Run button"
-        outputHeader={<div className="text-sm font-semibold text-ink">Output</div>}
-        output={<OutputBody state={runState} />}
-      />
-    </div>
+    <CompilerPanel
+      ready={ready}
+      languages={languages}
+      languageId={languageId}
+      onLanguageChange={switchLanguage}
+      code={code}
+      onCodeChange={setCode}
+      prismLanguage={activeLang.prism}
+      editorAriaLabel={`${activeLang.label} code editor`}
+      stdin={stdin}
+      onStdinChange={setStdin}
+      exampleInputs={exampleInputs}
+      onClearStdin={() => setStdin("")}
+      onClearOutput={clearOutput}
+      onRun={run}
+      onRunTests={judge}
+      onSubmit={submitEndpoint ? submit : undefined}
+      onReset={resetToStarter}
+      busy={busy}
+      canClearOutput={runState.phase !== "idle"}
+      output={<OutputBody state={runState} submissionsHref={submissionsHref} />}
+    />
   );
 }
 
-function OutputBody({ state }: { state: RunState }) {
+function OutputBody({ state, submissionsHref }: { state: RunState; submissionsHref: string }) {
   return state.phase === "idle" ? (
-    <p className="text-slate-400">Run your code, or run the tests, to see results here.</p>
+    <p className="text-slate-500">Run your code to see output here...</p>
   ) : state.phase === "running" ? (
     <p className="flex items-center gap-2 text-slate-300">
       <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Running…
@@ -225,7 +261,14 @@ function OutputBody({ state }: { state: RunState }) {
   ) : state.phase === "run-done" ? (
     <RunOutput run={state.run} />
   ) : (
-    <JudgeOutput results={state.results} summary={state.summary} compileError={state.compileError} />
+    <JudgeOutput
+      results={state.results}
+      summary={state.summary}
+      compileError={state.compileError}
+      submitted={state.submitted}
+      verdict={state.verdict}
+      submissionsHref={submissionsHref}
+    />
   );
 }
 
@@ -247,6 +290,7 @@ function RunOutput({ run }: { run: NormalizedRun }) {
     );
   }
   const nothing = !run.stdout && !run.stderr;
+  const mem = formatMemory(run.memoryKb);
   return (
     <div className="space-y-3">
       {run.stdout ? <pre className="whitespace-pre-wrap">{run.stdout}</pre> : null}
@@ -259,6 +303,7 @@ function RunOutput({ run }: { run: NormalizedRun }) {
       {nothing ? <p className="text-slate-400">Program finished with no output.</p> : null}
       <p className="border-t border-white/10 pt-2 text-xs text-slate-400">
         {run.status === "runtime_error" ? "Runtime error · " : ""}exit code {run.exitCode ?? "—"} · {run.timeMs} ms
+        {mem ? ` · ${mem}` : " · memory —"}
       </p>
     </div>
   );
@@ -268,10 +313,16 @@ function JudgeOutput({
   results,
   summary,
   compileError,
+  submitted,
+  verdict,
+  submissionsHref,
 }: {
   results: JudgeCaseResult[];
   summary: { passed: number; total: number };
   compileError?: string;
+  submitted?: boolean;
+  verdict?: string;
+  submissionsHref: string;
 }) {
   const allPassed = summary.passed === summary.total && summary.total > 0;
   return (
@@ -279,6 +330,16 @@ function JudgeOutput({
       <p className={`font-semibold ${allPassed ? "text-emerald-400" : "text-amber-400"}`}>
         {allPassed ? "All tests passed" : `${summary.passed} / ${summary.total} tests passed`}
       </p>
+      {submitted ? (
+        <p className="text-xs text-slate-400">
+          {verdict === "accepted" ? "Accepted — " : "Submitted — "}
+          saved to your{" "}
+          <Link href={submissionsHref} className="font-semibold text-primary-300 hover:underline">
+            submissions
+          </Link>
+          .
+        </p>
+      ) : null}
       {compileError ? (
         <div role="alert">
           <p className="text-xs font-semibold uppercase tracking-wide text-red-400">Compilation error</p>

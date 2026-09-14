@@ -14,6 +14,24 @@ export interface RunCase {
   input: string;
   expected: string;
   hidden: boolean;
+  /** SQL problems only — schema DDL / seed data / trailing check query to
+   *  compose around the student's submitted query. Empty for every other
+   *  language. See `composeSubmissionSource`. */
+  schema_sql?: string;
+  seed_sql?: string;
+  check_sql?: string;
+}
+
+/**
+ * The actual program sent to the execution provider for one case. Every
+ * language runs the student's source verbatim — EXCEPT `sql`, whose problems
+ * don't hand the student a full program: the case supplies the schema +
+ * seed data (and an optional trailing check query) that must run around
+ * whatever query the student wrote, in that order.
+ */
+export function composeSubmissionSource(languageId: string, studentSource: string, c: Pick<RunCase, "schema_sql" | "seed_sql" | "check_sql">): string {
+  if (languageId !== "sql") return studentSource;
+  return [c.schema_sql, c.seed_sql, studentSource, c.check_sql].filter((part) => part && part.trim()).join(";\n");
 }
 
 /** One case's result, ready to send to the browser (redacted for hidden cases). */

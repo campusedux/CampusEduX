@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Lock } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { loadRazorpayScript } from "@/lib/razorpay";
 import { interpretVerifyResponse } from "@/lib/payments";
 import { formatINR } from "@/lib/format";
+import { Button } from "@/components/ui";
 import type { BuilderDraft } from "@/lib/customProjects";
 
 /**
@@ -17,9 +19,11 @@ import type { BuilderDraft } from "@/lib/customProjects";
  */
 export default function CustomProjectCheckout({
   draft,
+  featureIds,
   tokenAmount,
 }: {
   draft: BuilderDraft;
+  featureIds: string[];
   tokenAmount: number;
 }) {
   const router = useRouter();
@@ -43,7 +47,7 @@ export default function CustomProjectCheckout({
           description: draft.description,
           targetUsers: draft.targetUsers,
           technologyPreference: draft.technologyPreference,
-          featureIds: draft.featureIds,
+          featureIds,
           customRequirements: draft.customRequirements,
           projectImagePath: draft.projectImagePath,
           referenceFiles: draft.referenceFiles,
@@ -96,14 +100,18 @@ export default function CustomProjectCheckout({
   }
 
   return (
-    <div className="mt-5">
-      <button
+    <div>
+      <Button
+        type="button"
+        size="lg"
+        fullWidth
+        leftIcon={Lock}
         onClick={handlePay}
         disabled={status === "processing"}
-        className="btn-primary disabled:opacity-60"
+        loading={status === "processing"}
       >
         {status === "processing" ? "Opening checkout…" : `Pay ${formatINR(tokenAmount)} token`}
-      </button>
+      </Button>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );

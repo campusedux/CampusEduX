@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Lock } from "lucide-react";
 import { getCodingProblem } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
@@ -16,12 +14,6 @@ export const dynamicParams = true;
 export function generateStaticParams() {
   return [];
 }
-
-const DIFF_CLASS: Record<string, string> = {
-  Easy: "bg-emerald-50 text-emerald-700",
-  Medium: "bg-amber-50 text-amber-700",
-  Hard: "bg-red-50 text-red-700",
-};
 
 export async function generateMetadata({
   params,
@@ -62,44 +54,20 @@ export default async function CodingProblemPage({ params }: { params: { problemS
           { name: problem.title, path: `/coding-problems/${problem.slug}` },
         ])}
       />
-      <div className="container-page py-8">
-        <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-ink-faint">
-          <Link href="/learning" className="hover:text-ink">
-            Learning
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          <Link href={backToTopic} className="hover:text-ink">
-            {topic.title}
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          <span className="text-ink-faint">Coding Problem</span>
-        </nav>
-
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold text-ink sm:text-3xl">{problem.title}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <span className={`rounded-full px-2.5 py-1 font-medium ${DIFF_CLASS[problem.difficulty] ?? "bg-surface text-ink-muted"}`}>
-              {problem.difficulty}
-            </span>
-            {problem.supported_languages?.length ? (
-              <span className="rounded-full bg-surface px-2.5 py-1 font-medium text-ink-muted">
-                {problem.supported_languages.join(" · ")}
-              </span>
-            ) : null}
-            {problem.is_premium ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
-                <Lock className="h-3.5 w-3.5" aria-hidden /> Premium
-              </span>
-            ) : null}
-          </div>
-        </header>
-
-        {locked ? (
-          <CodingProblemPremiumGate slug={problem.slug} loginNext={`/coding-problems/${problem.slug}`} />
-        ) : (
-          <CodingProblemBody detail={detail} />
-        )}
-      </div>
+      {locked ? (
+        <CodingProblemPremiumGate
+          problem={problem}
+          topic={topic}
+          slug={problem.slug}
+          loginNext={`/coding-problems/${problem.slug}`}
+        />
+      ) : (
+        <CodingProblemBody
+          detail={detail}
+          submitEndpoint="/api/coding-problems/submit"
+          submissionsHref="/practice/submissions"
+        />
+      )}
     </>
   );
 }

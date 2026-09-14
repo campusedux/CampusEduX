@@ -175,6 +175,11 @@ export interface MockTestDetail {
   total_marks: number;
   attempts_allowed: number | null;
   is_premium: boolean;
+  /** 'chapter' / 'course' tests draw a random sample from a live pool instead
+   *  of owning their own test_questions — see practice_test_questions() /
+   *  submit_randomized_test_attempt() (0091/063). Older rows / RPC responses
+   *  without this field behave as 'topic'. */
+  scope?: "topic" | "chapter" | "course";
   topic: { grid_slug: string; topic_slug: string; title: string } | null;
 }
 

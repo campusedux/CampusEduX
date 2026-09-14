@@ -21,9 +21,10 @@ function mapTestRow(row: any): PracticeTest {
     title: row.title,
     category: row.category,
     companyId: row.company_id ?? null,
-    questionCount: row.question_count ?? 0,
+    questionCount: row.question_limit ?? row.question_count ?? 0,
     durationMinutes: row.duration_minutes ?? 0,
     description: row.description ?? "",
+    scope: row.scope ?? "topic",
   };
 }
 
@@ -88,6 +89,14 @@ export const placementService = {
   },
 
   async getTestQuestions(testId: string): Promise<QuizQuestion[]> {
+    const test = await placementService.getTestDetail(testId);
+    if (test.scope && test.scope !== "topic") {
+      // Chapter / course tests: a fresh random sample every attempt, drawn
+      // server-side from the live pool (practice_test_pool, 0091/063).
+      const { data, error } = await supabase.rpc("practice_test_questions", { p_test_id: testId, p_platform: "mobile" });
+      if (error) throw new Error(error.message);
+      return (Array.isArray(data) ? data : []).map(mapQuestionRow);
+    }
     const { data, error } = await supabase
       .from("test_questions")
       .select("*")
@@ -106,15 +115,26 @@ export const placementService = {
     const questions = await placementService.getTestQuestions(testId);
     const test = await placementService.getTestDetail(testId);
 
-    // Scoring is done server-side (migration 0040): submit_test_attempt()
-    // recomputes score / counts from the answer key, so a client can't POST a
-    // forged result into the analytics. The client-sent selections are the only
-    // thing trusted.
-    const { data: attempt, error: attemptError } = await supabase.rpc("submit_test_attempt", {
-      p_test_id: testId,
-      p_answers: answers.map((a) => ({ question_id: a.questionId, selected_index: a.selectedIndex })),
-      p_time_taken_seconds: timeTakenSeconds,
-    });
+    // Scoring is done server-side (migration 0040 / 0091): submit_test_attempt()
+    // (or, for a chapter/course test, submit_randomized_test_attempt() —
+    // scoped to exactly the questions this attempt actually presented, re-
+    // validated against the live pool) recomputes score / counts from the
+    // answer key, so a client can't POST a forged result into the analytics.
+    // The client-sent selections are the only thing trusted.
+    const mappedAnswers = answers.map((a) => ({ question_id: a.questionId, selected_index: a.selectedIndex }));
+    const { data: attempt, error: attemptError } =
+      test.scope && test.scope !== "topic"
+        ? await supabase.rpc("submit_randomized_test_attempt", {
+            p_test_id: testId,
+            p_question_ids: questions.map((q) => q.id),
+            p_answers: mappedAnswers,
+            p_time_taken_seconds: timeTakenSeconds,
+          })
+        : await supabase.rpc("submit_test_attempt", {
+            p_test_id: testId,
+            p_answers: mappedAnswers,
+            p_time_taken_seconds: timeTakenSeconds,
+          });
     if (attemptError || !attempt) {
       throw new Error(`Couldn't save your test result: ${attemptError?.message ?? "please try again."}`);
     }
