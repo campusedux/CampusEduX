@@ -24,7 +24,14 @@ const state: {
   tables: Record<string, QueryResult>;
   rpc: Record<string, QueryResult>;
   signedUrl: { data?: unknown; error?: unknown };
-} = { user: null, tables: {}, rpc: {}, signedUrl: { data: { signedUrl: "https://signed.example/resume.pdf" }, error: null } };
+  exchangeCodeForSession: { data?: unknown; error?: unknown };
+} = {
+  user: null,
+  tables: {},
+  rpc: {},
+  signedUrl: { data: { signedUrl: "https://signed.example/resume.pdf" }, error: null },
+  exchangeCodeForSession: { data: {}, error: null },
+};
 
 export const supabase = {
   calls: [] as RecordedCall[],
@@ -47,6 +54,10 @@ export const supabase = {
   },
   auth: {
     getUser: vi.fn(() => Promise.resolve({ data: { user: state.user }, error: null })),
+    exchangeCodeForSession: vi.fn((code: string) => {
+      supabase.calls.push({ verb: "exchangeCodeForSession", args: [code] });
+      return Promise.resolve(state.exchangeCodeForSession);
+    }),
   },
 };
 
@@ -55,11 +66,13 @@ export function resetSupabaseMock() {
   state.tables = {};
   state.rpc = {};
   state.signedUrl = { data: { signedUrl: "https://signed.example/resume.pdf" }, error: null };
+  state.exchangeCodeForSession = { data: {}, error: null };
   supabase.calls = [];
   supabase.from.mockClear();
   supabase.rpc.mockClear();
   supabase.storage.from.mockClear();
   supabase.auth.getUser.mockClear();
+  supabase.auth.exchangeCodeForSession.mockClear();
 }
 
 export function setUser(user: unknown) {
@@ -73,6 +86,9 @@ export function setRpcResult(name: string, result: QueryResult) {
 }
 export function setSignedUrlResult(result: { data?: unknown; error?: unknown }) {
   state.signedUrl = result;
+}
+export function setExchangeCodeForSessionResult(result: { data?: unknown; error?: unknown }) {
+  state.exchangeCodeForSession = result;
 }
 
 export function callsFor(table: string) {
