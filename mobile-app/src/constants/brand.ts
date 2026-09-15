@@ -6,9 +6,9 @@ export const BRAND = {
   name: "CampusEduX",
   tagline: "Learn. Build. Get Placed.",
   supportEmail: "support@campusedux.app",
-  website: "https://campusedux.app",
+  website: "https://www.campusedux.com",
   /** Base URL used to build shareable referral links. */
-  referralBaseUrl: "https://campusedux.app/ref",
+  referralBaseUrl: "https://www.campusedux.com/ref",
 } as const;
 
 export const APP_NAME = BRAND.name;

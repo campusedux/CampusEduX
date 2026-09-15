@@ -10,5 +10,5 @@ export const BRAND = {
   name: "CampusEduX",
   tagline: "Learn. Build. Get Placed.",
   supportEmail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@campusedux.app",
-  website: "https://campusedux.app",
+  website: "https://www.campusedux.com",
 } as const;
