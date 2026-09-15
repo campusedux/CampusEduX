@@ -4,8 +4,7 @@ import { notify } from "@/lib/notify";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
-import { useProjectDetail, useDownloadFile } from "@/hooks/useProjects";
-import { projectService } from "@/services/project.service";
+import { useProjectDetail, useDownloadFile, useDownloadableFiles } from "@/hooks/useProjects";
 import type { ProjectStackParamList } from "@/types";
 
 type Rte = RouteProp<ProjectStackParamList, "DownloadProject">;
@@ -14,12 +13,17 @@ export function DownloadProjectScreen() {
   const navigation = useNavigation();
   const { params } = useRoute<Rte>();
   const { data: project, isLoading, isError, refetch } = useProjectDetail(params.projectId);
+  const {
+    data: files,
+    isLoading: isFilesLoading,
+    isError: isFilesError,
+    refetch: refetchFiles,
+  } = useDownloadableFiles(params.projectId, project);
   const { downloadFile, downloadingKey } = useDownloadFile();
 
-  if (isLoading) return <Screen className="items-center justify-center"><LoadingState label="Loading files..." /></Screen>;
+  if (isLoading || isFilesLoading) return <Screen className="items-center justify-center"><LoadingState label="Loading files..." /></Screen>;
   if (isError || !project) return <Screen className="items-center justify-center px-6"><ErrorState message="Couldn't load project files." onRetry={refetch} /></Screen>;
-
-  const files = projectService.getDownloadableFiles(project.id, project);
+  if (isFilesError || !files) return <Screen className="items-center justify-center px-6"><ErrorState message="Couldn't load project files." onRetry={refetchFiles} /></Screen>;
 
   const handleDownload = async (file: (typeof files)[number]) => {
     try {

@@ -8,6 +8,10 @@ import {
 
 type OwnershipFilter = "purchased" | "wishlist" | "collections";
 
+// `project-files` is a private bucket (RLS-gated on purchase ownership); URLs
+// are minted fresh per fetch, so an hour is plenty to cover the download.
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 export const myProjectsService = {
   async getOwnedProjects(userId: string, filter: OwnershipFilter): Promise<PurchasedProject[]> {
     if (filter === "wishlist") {
@@ -94,15 +98,24 @@ export const myProjectsService = {
         .eq("category", category)
         .order("sort_order", { ascending: true });
       if (error) throw new Error(error.message);
-      const rows = (data ?? []).map((row) => ({
-        id: row.id,
-        projectId: row.project_id,
-        category: row.category,
-        label: row.label,
-        fileName: row.file_name,
-        sizeMB: row.size_mb,
-        url: supabase.storage.from("project-files").getPublicUrl(row.storage_path).data.publicUrl,
-      }));
+      // `project-files` is a private bucket gated on ownership (RLS); each row
+      // needs its own short-lived signed URL rather than a public one.
+      const rows = await Promise.all(
+        (data ?? []).map(async (row) => {
+          const { data: signed } = await supabase.storage
+            .from("project-files")
+            .createSignedUrl(row.storage_path, SIGNED_URL_TTL_SECONDS);
+          return {
+            id: row.id,
+            projectId: row.project_id,
+            category: row.category,
+            label: row.label,
+            fileName: row.file_name,
+            sizeMB: row.size_mb,
+            url: signed?.signedUrl ?? "",
+          };
+        })
+      );
       return rows.length > 0 ? rows : sampleProjectFiles(projectId, category);
     } catch (error) {
       console.info(`[myProjects.service] getProjectFiles: using sample content (${(error as Error).message})`);

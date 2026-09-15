@@ -116,7 +116,7 @@ export async function getProjectImages(projectId: string) {
 
 export async function getProjectFiles(projectId: string, category: 'main' | 'documentation') {
   const supabase = createClient();
-  return safe(
+  const rows = await safe(
     supabase
       .from('project_files')
       .select('id, label, file_name, size_mb, storage_path, sort_order')
@@ -124,6 +124,14 @@ export async function getProjectFiles(projectId: string, category: 'main' | 'doc
       .eq('category', category)
       .order('sort_order'),
     [] as { id: string; label: string; file_name: string; size_mb: number; storage_path: string; sort_order: number }[],
+  );
+  // `project-files` is a private bucket (RLS: purchaser or admin); the admin
+  // session is is_admin(), so each row gets a fresh signed URL to download.
+  return Promise.all(
+    rows.map(async (row) => {
+      const { data } = await supabase.storage.from('project-files').createSignedUrl(row.storage_path, 60 * 10);
+      return { ...row, url: data?.signedUrl ?? null };
+    }),
   );
 }
 
@@ -137,9 +145,4 @@ export async function getProjectVersions(projectId: string) {
       .order('released_at', { ascending: false }),
     [] as { id: string; version: string; is_latest: boolean; released_at: string; size_mb: number; changelog: string[]; sort_order: number }[],
   );
-}
-
-export function publicFileUrl(storagePath: string) {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-  return `${base}/storage/v1/object/public/project-files/${storagePath}`;
 }

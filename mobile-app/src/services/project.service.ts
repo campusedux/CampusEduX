@@ -12,6 +12,9 @@ import {
 
 const PROJECT_SELECT = "*, category:categories(name)";
 const PAGE_SIZE = 20;
+// `project-files` is a private bucket (RLS-gated on purchase ownership); URLs
+// are minted fresh per fetch, so an hour is plenty to cover the download.
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 /**
  * Returns `run()`'s rows, or the sample rows when the query fails.
@@ -341,16 +344,26 @@ export const projectService = {
   },
 
   /**
-   * Builds public Storage URLs for a purchased project's downloadable
-   * files. Files are expected under the `project-files` bucket at
+   * Builds signed Storage URLs for a purchased project's downloadable files.
+   * `project-files` is a private bucket (RLS-gated on `purchases.status =
+   * 'success'` for this project), so each caller needs their own short-lived
+   * signed URL rather than a public one. Files are expected at
    * `${projectId}/source-code.zip` etc. (uploaded by the admin panel).
    */
-  getDownloadableFiles(projectId: string, detail: Pick<ProjectDetail, "sourceCodeSizeMB" | "documentationSizeMB">) {
-    const bucket = (path: string) => supabase.storage.from("project-files").getPublicUrl(path).data.publicUrl;
+  async getDownloadableFiles(projectId: string, detail: Pick<ProjectDetail, "sourceCodeSizeMB" | "documentationSizeMB">) {
+    const bucket = async (path: string) => {
+      const { data } = await supabase.storage.from("project-files").createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+      return data?.signedUrl ?? "";
+    };
+    const [sourceCodeUrl, documentationUrl, installationGuideUrl] = await Promise.all([
+      bucket(`${projectId}/source-code.zip`),
+      bucket(`${projectId}/documentation.pdf`),
+      bucket(`${projectId}/installation-guide.pdf`),
+    ]);
     return [
-      { label: "Source Code (ZIP)", fileName: "source-code.zip", sizeMB: detail.sourceCodeSizeMB, url: bucket(`${projectId}/source-code.zip`) },
-      { label: "Documentation (PDF)", fileName: "documentation.pdf", sizeMB: detail.documentationSizeMB, url: bucket(`${projectId}/documentation.pdf`) },
-      { label: "Installation Guide (PDF)", fileName: "installation-guide.pdf", sizeMB: 1.2, url: bucket(`${projectId}/installation-guide.pdf`) },
+      { label: "Source Code (ZIP)", fileName: "source-code.zip", sizeMB: detail.sourceCodeSizeMB, url: sourceCodeUrl },
+      { label: "Documentation (PDF)", fileName: "documentation.pdf", sizeMB: detail.documentationSizeMB, url: documentationUrl },
+      { label: "Installation Guide (PDF)", fileName: "installation-guide.pdf", sizeMB: 1.2, url: installationGuideUrl },
     ];
   },
 };

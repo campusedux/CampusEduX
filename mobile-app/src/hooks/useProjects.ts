@@ -5,13 +5,14 @@ import * as Sharing from "expo-sharing";
 import { projectService } from "@/services/project.service";
 import { useAuthStore } from "@/store/authStore";
 import { academicFromUser, academicKey } from "@/lib/personalization";
-import type { ProjectFilters } from "@/types";
+import type { ProjectDetail, ProjectFilters } from "@/types";
 
 export const projectQueryKeys = {
   all: (filters: Partial<ProjectFilters>, academic = "") => ["projects", "all", academic, filters] as const,
   category: (categoryId: string) => ["projects", "category", categoryId] as const,
   search: (query: string) => ["projects", "search", query] as const,
   detail: (projectId: string) => ["projects", "detail", projectId] as const,
+  downloadableFiles: (projectId: string) => ["projects", "downloadable-files", projectId] as const,
   similar: (projectId: string) => ["projects", "similar", projectId] as const,
   reviews: (projectId: string) => ["projects", "reviews", projectId] as const,
   wishlist: ["wishlist"] as const,
@@ -51,6 +52,16 @@ export const useProjectDetail = (projectId: string) => {
     enabled: !!projectId,
   });
 };
+
+export const useDownloadableFiles = (
+  projectId: string,
+  detail: Pick<ProjectDetail, "sourceCodeSizeMB" | "documentationSizeMB"> | undefined
+) =>
+  useQuery({
+    queryKey: projectQueryKeys.downloadableFiles(projectId),
+    queryFn: () => projectService.getDownloadableFiles(projectId, detail as Pick<ProjectDetail, "sourceCodeSizeMB" | "documentationSizeMB">),
+    enabled: !!projectId && !!detail,
+  });
 
 export const useSimilarProjects = (projectId: string, categoryId: string | undefined) =>
   useQuery({

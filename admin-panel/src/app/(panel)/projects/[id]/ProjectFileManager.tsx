@@ -14,9 +14,8 @@ interface FileRow {
   file_name: string;
   size_mb: number;
   storage_path: string;
+  url: string | null;
 }
-
-const PUBLIC = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/project-files/`;
 
 export function ProjectFileManager({
   projectId,
@@ -79,15 +78,25 @@ export function ProjectFileManager({
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <a
-                    href={`${PUBLIC}${f.storage_path}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint hover:bg-surface-subtle hover:text-ink"
-                    aria-label="Download"
-                  >
-                    <Download size={15} />
-                  </a>
+                  {f.url ? (
+                    <a
+                      href={f.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint hover:bg-surface-subtle hover:text-ink"
+                      aria-label="Download"
+                    >
+                      <Download size={15} />
+                    </a>
+                  ) : (
+                    <span
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint/40"
+                      aria-label="Download link unavailable"
+                      title="Couldn't sign a download link — refresh the page."
+                    >
+                      <Download size={15} />
+                    </span>
+                  )}
                   {canEdit ? (
                     <DeleteButton
                       action={() => deleteProjectFile(projectId, f.id, f.storage_path, category)}
