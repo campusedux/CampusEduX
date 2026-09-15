@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
  * Slide-in panel. Used by the mobile navigation drawer (P3) and `FilterSheet`.
  * Handles Esc-to-close, backdrop click, and body-scroll lock.
+ *
+ * Portals to `document.body`: the header (its parent chain for `MobileNav`)
+ * has `backdrop-blur`, and any ancestor with `backdrop-filter`/`filter`
+ * establishes a containing block for `position: fixed` descendants — without
+ * the portal this panel is clipped to the header's own box instead of
+ * covering the viewport.
  */
 export function Drawer({
   open,
@@ -23,6 +30,9 @@ export function Drawer({
   children: React.ReactNode;
   className?: string;
 }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -35,6 +45,8 @@ export function Drawer({
     };
   }, [open, onClose]);
 
+  if (!mounted) return null;
+
   const panelPos =
     side === "left"
       ? cn("inset-y-0 left-0 h-full w-[86%] max-w-sm", open ? "translate-x-0" : "-translate-x-full")
@@ -42,7 +54,7 @@ export function Drawer({
         ? cn("inset-y-0 right-0 h-full w-[86%] max-w-sm", open ? "translate-x-0" : "translate-x-full")
         : cn("inset-x-0 bottom-0 max-h-[85vh] w-full rounded-t-2xl", open ? "translate-y-0" : "translate-y-full");
 
-  return (
+  return createPortal(
     <div
       className={cn("fixed inset-0 z-[100]", open ? "pointer-events-auto" : "pointer-events-none")}
       aria-hidden={!open}
@@ -74,7 +86,8 @@ export function Drawer({
         )}
         <div className="flex-1 overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
