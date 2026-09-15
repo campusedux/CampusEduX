@@ -5,14 +5,12 @@ import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
 /*
  * Site footer — renders on every route, so it is a Server Component with
  * **zero** client-side JavaScript beyond the (also zero-JS) `WhatsAppSupport`
- * link:
- *  - no "use client"
- *  - the link groups render twice from the same typed array: as plain columns
- *    from `sm` up (`hidden sm:block`), and as native <details>/<summary>
- *    accordions below `sm` (`sm:hidden`). A closed <details> hides its content
- *    on every viewport via built-in UA behaviour that a CSS `display` cannot
- *    override, so the desktop layout can't reuse the same <details> element —
- *    hence the two render paths. Only one is ever in the layout/a11y tree.
+ * link. No "use client".
+ *
+ * All link groups render fully expanded at every viewport — no
+ * <details>/accordion, no hidden/collapsed links. Every route in
+ * `NAV_GROUPS` / `BOTTOM_LINKS` is visible and tappable by default on mobile,
+ * tablet and desktop alike.
  *
  * Every link lives in the typed `NAV_GROUPS` / `BOTTOM_LINKS` arrays below and
  * is mapped — there is no per-link JSX. There is deliberately no social-links
@@ -89,8 +87,8 @@ const linkCls = "text-sm text-ink-muted transition-colors hover:text-primary";
 const headingCls = "text-[13px] font-semibold uppercase tracking-wide text-ink";
 
 /**
- * The `<li>` list for one nav group — shared by the desktop columns and the
- * mobile accordions so each route is declared exactly once (in `NAV_GROUPS`).
+ * The `<li>` list for one nav group — reused for every group so each route
+ * is declared exactly once (in `NAV_GROUPS`).
  */
 function FooterLinkList({ links }: { links: readonly FooterLink[] }) {
   return (
@@ -116,8 +114,8 @@ export default function Footer() {
   return (
     <footer className="border-t border-line bg-surface">
       <div className="container-page py-10 sm:py-12">
-        <div className="grid gap-x-8 gap-y-0 sm:grid-cols-3 sm:gap-y-9 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-x-10">
-          {/* Brand — always visible, above the accordions on mobile. */}
+        <div className="grid grid-cols-1 gap-x-8 gap-y-0 sm:grid-cols-3 sm:gap-y-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-x-10">
+          {/* Brand — always visible above the link groups. */}
           <div className="pb-8 sm:col-span-3 sm:pb-0 lg:col-span-1">
             <div className="flex items-center gap-2.5">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-base font-black text-white shadow-[0_4px_12px_-3px_rgba(79,57,246,0.5)]">
@@ -156,12 +154,15 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Desktop (>= sm): one plain column per group. */}
+          {/* One plain, always-expanded column per group — same markup at
+           *  every viewport. A top border separates stacked sections on
+           *  mobile only; from `sm` up the grid's own column gap does that
+           *  job, so the border/padding are removed. */}
           {NAV_GROUPS.map((group) => (
             <nav
-              key={`col-${group.id}`}
+              key={group.id}
               aria-labelledby={`footer-nav-${group.id}`}
-              className="hidden sm:block"
+              className="border-t border-line pt-6 sm:border-0 sm:pt-0"
             >
               <h2 id={`footer-nav-${group.id}`} className={headingCls}>
                 {group.title}
@@ -171,44 +172,10 @@ export default function Footer() {
               </div>
             </nav>
           ))}
-
-          {/* Mobile (< sm): native <details> accordions — no JS, no state. */}
-          <div className="sm:hidden">
-            {NAV_GROUPS.map((group) => (
-              <details
-                key={`acc-${group.id}`}
-                className="group border-b border-line last:border-b-0 [&_summary::-webkit-details-marker]:hidden"
-              >
-                <summary className="flex cursor-pointer list-none items-center justify-between py-4">
-                  <h2 id={`footer-nav-m-${group.id}`} className={headingCls}>
-                    {group.title}
-                  </h2>
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4 flex-shrink-0 text-ink-muted transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
-                    aria-hidden
-                    focusable="false"
-                  >
-                    <path
-                      d="m6 9 6 6 6-6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </summary>
-                <nav aria-labelledby={`footer-nav-m-${group.id}`} className="pb-4">
-                  <FooterLinkList links={group.links} />
-                </nav>
-              </details>
-            ))}
-          </div>
         </div>
 
         {/* Bottom bar. */}
-        <div className="mt-10 flex flex-col gap-4 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-8 flex flex-col gap-4 border-t border-line pt-6 sm:mt-10 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-ink-muted">
             © {year} {entity}. All rights reserved.
           </p>
