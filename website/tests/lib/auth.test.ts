@@ -11,9 +11,18 @@ vi.mock("next/navigation", () => ({ redirect }));
 import { supabase, resetSupabaseMock, setUser, setTableResult } from "../helpers/supabase.mock";
 vi.mock("@/lib/supabase/authed-server", () => ({ createAuthedServerSupabase: () => supabase }));
 
-import { requireUser, getOptionalUser } from "@/lib/auth";
+import { requireUser, getOptionalUser, getAccountUser, isAcademicComplete } from "@/lib/auth";
 
 beforeEach(() => resetSupabaseMock());
+
+describe("isAcademicComplete", () => {
+  it("is true only when course, branch and year are all present", () => {
+    expect(isAcademicComplete({ course: "B.Tech", branch: "CSE", year: "3" })).toBe(true);
+    expect(isAcademicComplete({ course: "B.Tech", branch: "CSE", year: null })).toBe(false);
+    expect(isAcademicComplete({ course: "B.Tech", branch: null, year: "3" })).toBe(false);
+    expect(isAcademicComplete({ course: null, branch: null, year: null })).toBe(false);
+  });
+});
 
 describe("requireUser", () => {
   it("redirects to /login when there is no session", async () => {
@@ -21,7 +30,7 @@ describe("requireUser", () => {
     await expect(requireUser()).rejects.toMatchObject({ url: "/login" });
   });
 
-  it("maps the profiles row for a signed-in user", async () => {
+  it("returns the account directly (no redirect) for a complete existing profile", async () => {
     setUser({ id: "u-1", email: "auth@campusedux.app" });
     setTableResult("profiles", {
       data: {
@@ -46,17 +55,55 @@ describe("requireUser", () => {
       isPremium: true,
       referralCode: "RIYA10",
     });
+    expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("redirects to /onboarding when course/branch/year are not all set", async () => {
+    setUser({ id: "u-3", email: "new@campusedux.app" });
+    setTableResult("profiles", {
+      data: {
+        id: "u-3",
+        email: "new@campusedux.app",
+        full_name: "New Student",
+        mobile_number: "9111111111",
+        avatar_url: null,
+        course: "B.Tech",
+        branch: null,
+        year: null,
+        is_premium: false,
+        referral_code: null,
+      },
+    });
+
+    await expect(requireUser()).rejects.toMatchObject({ url: "/onboarding" });
+  });
+
+  it("redirects to /onboarding when the profiles row is missing entirely (brand-new Google user)", async () => {
+    setUser({ id: "u-2", email: "only-auth@campusedux.app" });
+    setTableResult("profiles", { data: null });
+
+    await expect(requireUser()).rejects.toMatchObject({ url: "/onboarding" });
+  });
+});
+
+describe("getAccountUser", () => {
   it("does not crash when the profiles row is missing — falls back to auth email", async () => {
     setUser({ id: "u-2", email: "only-auth@campusedux.app" });
     setTableResult("profiles", { data: null });
 
-    const user = await requireUser();
-    expect(user.id).toBe("u-2");
-    expect(user.email).toBe("only-auth@campusedux.app");
-    expect(user.fullName).toBe("");
-    expect(user.isPremium).toBe(false);
+    const user = await getAccountUser();
+    expect(user?.id).toBe("u-2");
+    expect(user?.email).toBe("only-auth@campusedux.app");
+    expect(user?.fullName).toBe("");
+    expect(user?.isPremium).toBe(false);
+    expect(user?.course).toBeNull();
+    expect(user?.branch).toBeNull();
+    expect(user?.year).toBeNull();
+  });
+
+  it("returns null when signed out", async () => {
+    setUser(null);
+    await expect(getAccountUser()).resolves.toBeNull();
   });
 });
 

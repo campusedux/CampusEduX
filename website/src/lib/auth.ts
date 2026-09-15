@@ -51,8 +51,11 @@ export const getAuthUser = requestCache(async () => {
  * Request-scoped memo of the signed-in user's `profiles` row, mapped to
  * `AccountUser`. Same `cache()` semantics as {@link getAuthUser} — one
  * `profiles` SELECT per request no matter how many callers ask for it.
+ * Exported so /onboarding can read the same memoised row without calling
+ * {@link requireUser} (which would redirect an incomplete profile straight
+ * back to /onboarding and loop).
  */
-const getAccountUser = requestCache(async (): Promise<AccountUser | null> => {
+export const getAccountUser = requestCache(async (): Promise<AccountUser | null> => {
   const user = await getAuthUser();
   if (!user) return null;
 
@@ -83,11 +86,21 @@ const getAccountUser = requestCache(async (): Promise<AccountUser | null> => {
 });
 
 /**
+ * course / branch / year are the only fields the onboarding gate checks —
+ * mirrors mobile-app/src/store/authStore.ts's isAcademicComplete exactly.
+ */
+export function isAcademicComplete(account: Pick<AccountUser, "course" | "branch" | "year">): boolean {
+  return !!(account.course && account.branch && account.year);
+}
+
+/**
  * The one gate every /account page passes through. A signed-in Supabase
  * session with no matching `profiles` row shouldn't normally happen (the
  * `handle_new_user` trigger creates one on signup — see mobile-app
  * migrations/0001_profiles.sql) but is handled defensively rather than
- * crashing the page.
+ * crashing the page. A signed-in user whose course/branch/year aren't all
+ * set yet is sent to /onboarding instead — /onboarding itself never calls
+ * this function, so that redirect can't loop.
  *
  * The auth check + profile read are request-memoised (see {@link getAuthUser}
  * / {@link getAccountUser}), so calling this from both the account layout and
@@ -96,6 +109,7 @@ const getAccountUser = requestCache(async (): Promise<AccountUser | null> => {
 export async function requireUser(): Promise<AccountUser> {
   const account = await getAccountUser();
   if (!account) redirect("/login");
+  if (!isAcademicComplete(account)) redirect("/onboarding");
   return account;
 }
 
