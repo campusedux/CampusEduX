@@ -38,11 +38,22 @@ export function ChangeCourseScreen() {
           (b) => b.label.trim().toLowerCase() === user.branch!.trim().toLowerCase()
         );
       }
+      // The DB is always the source of truth, so branch is nulled there right
+      // away — if the student abandons this flow before picking a new one,
+      // the account is genuinely incomplete on their next login. But it is
+      // deliberately NOT nulled in the auth store here: updateUserFields
+      // recomputes hasCompletedProfileSetup on every call, and dropping it to
+      // false mid-edit makes RootNavigator swap the whole app out of Settings
+      // into the first-time ProfileSetup wizard instead of letting this
+      // screen hand off to ChangeBranch below. ChangeBranchScreen already
+      // discards a stale branch that doesn't belong to the new course (its
+      // own validity check), so keeping the old value in the store here is
+      // safe — it never reaches the UI.
       await authService.updateAcademicDetails(user.id, {
         course: effectiveSelected,
         ...(clearBranch ? { branch: null } : {}),
       });
-      updateUserFields({ course: effectiveSelected, ...(clearBranch ? { branch: null } : {}) });
+      updateUserFields({ course: effectiveSelected });
       invalidateContent();
       if (clearBranch) {
         notify("Pick a branch", `Choose a branch for ${effectiveSelected}.`);
