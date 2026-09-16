@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { formatINR } from "@/lib/format";
+import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
-export const metadata = { title: "Custom Projects" };
+export const metadata: Metadata = {
+  title: "Custom Projects",
+  alternates: { canonical: absoluteUrl("/custom-projects") },
+};
 
 const STEPS = [
   "Choose a project type and level",

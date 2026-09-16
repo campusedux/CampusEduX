@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { Button } from "@/components/ui";
 import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
+import { absoluteUrl } from "@/lib/seo";
 
-export const metadata = { title: "Support" };
+export const metadata: Metadata = {
+  title: "Support",
+  alternates: { canonical: absoluteUrl("/support") },
+};
 
 export default function SupportPage() {
   return (

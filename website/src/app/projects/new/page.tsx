@@ -1,10 +1,15 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import type { ProjectCardData } from "@/components/ProjectCard";
 import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
 import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
+import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
-export const metadata = { title: "New Arrivals" };
+export const metadata: Metadata = {
+  title: "New Arrivals",
+  alternates: { canonical: absoluteUrl("/projects/new") },
+};
 
 export default async function NewArrivalsPage() {
   const supabase = getPublicSupabase();

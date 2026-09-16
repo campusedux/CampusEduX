@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { buildResumeRenderModel } from "@/lib/resumeBuilder/renderModel";
@@ -10,6 +11,11 @@ import { ResumeSheetScaler } from "@/components/resumeBuilder/ResumeSheetScaler"
 import ReportShareButton from "./ReportShareButton";
 
 export const dynamic = "force-dynamic";
+
+// A share-token URL renders one student's personal resume (name, contact
+// info, education). Never indexable — no canonical either, since there is no
+// single canonical public URL for user-generated per-token content.
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 interface SharedResumePayload {
   title: string;

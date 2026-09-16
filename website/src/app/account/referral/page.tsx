@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR, timeAgo } from "@/lib/format";
 import { Badge, EmptyState } from "@/components/ui";
+import { SITE_URL } from "@/lib/seo";
 import CopyLinkButton from "./CopyLinkButton";
 
 export default async function AccountReferralPage() {
@@ -17,8 +18,7 @@ export default async function AccountReferralPage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://campusedux.app";
-  const link = code?.code ? `${siteUrl}/register?ref=${code.code}` : null;
+  const link = code?.code ? `${SITE_URL}/register?ref=${code.code}` : null;
 
   const STATS = [
     { label: "Your code", value: code?.code ?? "—" },

@@ -1,4 +1,10 @@
-export const metadata = { title: "About CampusEduX" };
+import type { Metadata } from "next";
+import { absoluteUrl } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "About CampusEduX",
+  alternates: { canonical: absoluteUrl("/about") },
+};
 
 export default function AboutPage() {
   return (

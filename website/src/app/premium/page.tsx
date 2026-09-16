@@ -1,11 +1,16 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { PremiumCard, SectionHeader, EmptyState } from "@/components/ui";
 import { formatINR } from "@/lib/format";
 import PremiumSubscribeButton from "@/components/PremiumSubscribeButton";
 import { Sparkles, Zap, BookOpen, Headphones, Crown, ShieldCheck } from "lucide-react";
+import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
-export const metadata = { title: "Premium" };
+export const metadata: Metadata = {
+  title: "Premium",
+  alternates: { canonical: absoluteUrl("/premium") },
+};
 
 type Plan = {
   id: string;

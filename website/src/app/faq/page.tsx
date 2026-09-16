@@ -1,10 +1,14 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import JsonLd from "@/components/JsonLd";
 import { EmptyState } from "@/components/ui";
-import { faqJsonLd } from "@/lib/seo";
+import { absoluteUrl, faqJsonLd } from "@/lib/seo";
 
 export const revalidate = 300;
-export const metadata = { title: "Frequently Asked Questions" };
+export const metadata: Metadata = {
+  title: "Frequently Asked Questions",
+  alternates: { canonical: absoluteUrl("/faq") },
+};
 
 type Faq = { id: string; question: string; answer: string; category: string };
 

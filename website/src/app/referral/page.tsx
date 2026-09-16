@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui";
+import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
-export const metadata = { title: "Referral Program" };
+export const metadata: Metadata = {
+  title: "Referral Program",
+  alternates: { canonical: absoluteUrl("/referral") },
+};
 
 export default async function ReferralPage() {
   const supabase = getPublicSupabase();

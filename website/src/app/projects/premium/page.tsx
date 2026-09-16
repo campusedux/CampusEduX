@@ -1,10 +1,15 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import type { ProjectCardData } from "@/components/ProjectCard";
 import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
 import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
+import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
-export const metadata = { title: "Premium Projects" };
+export const metadata: Metadata = {
+  title: "Premium Projects",
+  alternates: { canonical: absoluteUrl("/projects/premium") },
+};
 
 export default async function PremiumProjectsPage() {
   const supabase = getPublicSupabase();
