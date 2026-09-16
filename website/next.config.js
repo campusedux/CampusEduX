@@ -83,6 +83,14 @@ const nextConfig = {
       { source: "/projects/new", destination: "/projects", permanent: true },
       { source: "/projects/premium", destination: "/projects?flag=premium", permanent: true },
       { source: "/projects/best-sellers", destination: "/projects?flag=bestseller&sort=popular", permanent: true },
+      // Phase 3 Batch 5: /practice/compiler rendered the exact same
+      // CompilerWorkspace as /compiler (zero logic duplication) with weaker
+      // metadata (no OpenGraph/Twitter, no WebApplication JSON-LD). /compiler
+      // is the primary URL — it's the one linked from the drawer nav, footer,
+      // Learning "Other Tutorials" block, and the hardcoded tutorial
+      // "Run this code" hand-off (buildCompilerHref). Consolidated the same
+      // direction, never the reverse.
+      { source: "/practice/compiler", destination: "/compiler", permanent: true },
     ];
   },
   async headers() {

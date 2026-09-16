@@ -31,7 +31,7 @@ const TILES = [
     bg: "#EEF0FF",
   },
   {
-    href: "/practice/compiler",
+    href: "/compiler",
     icon: TerminalSquare,
     title: "Online Compiler",
     body: "A quick scratchpad — write and run code in five languages in a secure sandbox, no problem attached.",

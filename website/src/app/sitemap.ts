@@ -6,7 +6,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.campusedux.com"
 const STATIC_ROUTES = [
   "", "/projects", "/projects/trending",
   "/jobs", "/jobs/companies", "/learning", "/blog", "/compiler", "/resume", "/resume/templates", "/custom-projects",
-  "/practice", "/practice/problems", "/practice/compiler",
+  "/practice", "/practice/problems",
   "/premium", "/referral", "/faq", "/about", "/contact", "/support",
   "/legal", "/privacy-policy", "/terms", "/refund-policy", "/project-license", "/community-guidelines",
   "/disclaimer", "/data-and-permissions", "/cookie-policy", "/grievance", "/delete-account",
