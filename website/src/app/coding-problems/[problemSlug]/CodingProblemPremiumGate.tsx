@@ -92,7 +92,7 @@ export function CodingProblemPremiumGate({
           {topic.title}
         </Link>
         <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-        <span className="text-ink-faint">Coding Problem</span>
+        <span className="text-ink-faint">{problem.title}</span>
       </nav>
 
       <header className="mb-6">

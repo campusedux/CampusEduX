@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPracticeProblem } from "@/lib/practice";
-import { PRACTICE_CRUMBS } from "@/lib/practice.types";
+import { practiceCrumbs } from "@/lib/practice.types";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { CodingProblemBody } from "@/app/coding-problems/[problemSlug]/CodingProblemBody";
@@ -62,7 +62,7 @@ export default async function PracticeProblemPage({ params }: { params: { slug: 
       ) : (
         <CodingProblemBody
           detail={detail}
-          nav={PRACTICE_CRUMBS}
+          nav={practiceCrumbs(problem.title)}
           judgeEndpoint={JUDGE_ENDPOINT}
           submitEndpoint={SUBMIT_ENDPOINT}
           submissionsHref={SUBMISSIONS_HREF}

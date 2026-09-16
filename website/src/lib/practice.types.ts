@@ -27,12 +27,15 @@ export const PRACTICE_LANGUAGE_LABEL: Record<string, string> = {
 
 export const PRACTICE_PAGE_SIZE = 24;
 
-/** Breadcrumb for the practice problem workspace (passed to `ProblemPanel`). */
-export const PRACTICE_CRUMBS: { label: string; href?: string }[] = [
-  { label: "Practice", href: "/practice" },
-  { label: "Coding Problems", href: "/practice/problems" },
-  { label: "Coding Problem" },
-];
+/** Breadcrumb for the practice problem workspace (passed to `ProblemPanel`),
+ *  with the current problem's own title as the final, unlinked crumb. */
+export function practiceCrumbs(problemTitle: string): { label: string; href?: string }[] {
+  return [
+    { label: "Practice", href: "/practice" },
+    { label: "Coding Problems", href: "/practice/problems" },
+    { label: problemTitle },
+  ];
+}
 
 export const DIFFICULTY_PILL_CLASS: Record<string, string> = {
   Easy: "bg-emerald-50 text-emerald-700",

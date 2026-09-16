@@ -14,6 +14,17 @@ const DIFF_CLASS: Record<string, string> = {
 /** A breadcrumb crumb: a label, plus an href for every crumb except the last. */
 export type ProblemCrumb = { label: string; href?: string };
 
+/** Default breadcrumb for the Learning topic-practice route: `Learning →
+ *  topic → <problem title>`. Pure, so it's unit-testable without rendering. */
+export function defaultProblemCrumbs(detail: CodingProblemDetail): ProblemCrumb[] {
+  const { problem, topic } = detail;
+  return [
+    { label: "Learning", href: "/learning" },
+    { label: topic.title, href: `/learning/${topic.grid_slug}/${topic.topic_slug}` },
+    { label: problem.title },
+  ];
+}
+
 /**
  * Left column of the coding workspace: breadcrumb → title → difficulty /
  * language badges → the tabbed problem card. A plain (directive-less) component
@@ -22,18 +33,12 @@ export type ProblemCrumb = { label: string; href?: string };
  * `detail` — nothing is hardcoded.
  *
  * `nav` overrides the breadcrumb: the Learning topic-practice route lets it
- * default to `Learning → topic → "Coding Problem"`; the global Practice route
- * passes `Practice → Coding Problems → "Coding Problem"`.
+ * default to `Learning → topic → <problem title>`; the global Practice route
+ * passes `Practice → Coding Problems → <problem title>`.
  */
 export function ProblemPanel({ detail, nav }: { detail: CodingProblemDetail; nav?: ProblemCrumb[] }) {
-  const { problem, topic, editorial, solution_approach } = detail;
-  const backToTopic = `/learning/${topic.grid_slug}/${topic.topic_slug}`;
-  const crumbs: ProblemCrumb[] =
-    nav ?? [
-      { label: "Learning", href: "/learning" },
-      { label: topic.title, href: backToTopic },
-      { label: "Coding Problem" },
-    ];
+  const { problem, editorial, solution_approach } = detail;
+  const crumbs: ProblemCrumb[] = nav ?? defaultProblemCrumbs(detail);
 
   const statement = problem.description ? (
     <Markdown source={problem.description} />

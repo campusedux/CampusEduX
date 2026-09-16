@@ -7,7 +7,7 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { CodingProblemBody } from "@/app/coding-problems/[problemSlug]/CodingProblemBody";
-import { PRACTICE_CRUMBS, DIFFICULTY_PILL_CLASS } from "@/lib/practice.types";
+import { practiceCrumbs, DIFFICULTY_PILL_CLASS } from "@/lib/practice.types";
 import type { PracticeProblemDetail } from "@/lib/practice.types";
 
 type Phase = "checking" | "locked" | "unlocked";
@@ -74,7 +74,7 @@ export function PracticeProblemPremiumGate({
     return (
       <CodingProblemBody
         detail={detail}
-        nav={PRACTICE_CRUMBS}
+        nav={practiceCrumbs(problem.title)}
         judgeEndpoint="/api/practice/judge"
         submitEndpoint="/api/practice/submit"
         submissionsHref="/practice/submissions"

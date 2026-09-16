@@ -4,7 +4,7 @@ import {
   practiceParams,
   totalPages,
   PRACTICE_PAGE_SIZE,
-  PRACTICE_CRUMBS,
+  practiceCrumbs,
 } from "@/lib/practice.types";
 
 describe("parsePracticeQuery", () => {
@@ -85,10 +85,16 @@ describe("totalPages", () => {
   });
 });
 
-describe("PRACTICE_CRUMBS", () => {
-  it("is Practice -> Coding Problems -> Coding Problem, last crumb has no href", () => {
-    expect(PRACTICE_CRUMBS.map((c) => c.label)).toEqual(["Practice", "Coding Problems", "Coding Problem"]);
-    expect(PRACTICE_CRUMBS[0].href).toBe("/practice");
-    expect(PRACTICE_CRUMBS[PRACTICE_CRUMBS.length - 1].href).toBeUndefined();
+describe("practiceCrumbs", () => {
+  it("is Practice -> Coding Problems -> <problem title>, last crumb has no href", () => {
+    const crumbs = practiceCrumbs("Two Sum");
+    expect(crumbs.map((c) => c.label)).toEqual(["Practice", "Coding Problems", "Two Sum"]);
+    expect(crumbs[0].href).toBe("/practice");
+    expect(crumbs[1].href).toBe("/practice/problems");
+    expect(crumbs[crumbs.length - 1].href).toBeUndefined();
+  });
+
+  it("never falls back to the generic 'Coding Problem' label", () => {
+    expect(practiceCrumbs("Binary Search").map((c) => c.label)).not.toContain("Coding Problem");
   });
 });
