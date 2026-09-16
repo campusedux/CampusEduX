@@ -4,7 +4,8 @@ import { BookOpen, FileText, LayoutGrid } from "lucide-react";
 import { getLearningGrids, searchLearning } from "@/lib/learning";
 import type { LearningGridCard } from "@/lib/learning";
 import { EmptyState, Badge, ResourceCard, PageHeader } from "@/components/ui";
-import { absoluteUrl } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
+import { absoluteUrl, courseListJsonLd } from "@/lib/seo";
 
 export const revalidate = 300;
 
@@ -45,6 +46,13 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
 
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
+      {grids.length > 0 ? (
+        <JsonLd
+          data={courseListJsonLd(
+            grids.map((g) => ({ name: g.name, description: g.description, path: `/learning/${g.slug}` })),
+          )}
+        />
+      ) : null}
       <PageHeader eyebrow="Free resources" title="Learning" />
 
       {q ? (

@@ -4,7 +4,8 @@ import Link from "next/link";
 import type { ProjectCardData } from "@/components/ProjectCard";
 import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
 import { getCachedCategoryPreview, getCachedCategoryIds } from "@/lib/cache";
-import { absoluteUrl } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 
 export const revalidate = 300;
 
@@ -38,6 +39,12 @@ export default async function CategoryPage({ params }: { params: { category: str
   const { name, projects } = await getData(params.category);
   return (
     <div className="container-page py-8 sm:py-10 lg:py-12">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Projects", path: "/projects" },
+          { name, path: `/projects/category/${encodeURIComponent(params.category)}` },
+        ])}
+      />
       <h1 className="text-3xl font-bold text-ink">{name}</h1>
       <ProjectGrid projects={projects} emptyTitle="No projects in this category yet" />
       {projects.length >= CATEGORY_PREVIEW_LIMIT && (

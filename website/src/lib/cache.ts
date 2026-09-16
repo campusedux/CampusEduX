@@ -310,7 +310,7 @@ export const getCachedJobDetail = unstable_cache(
     if (!supabase) return null;
     const { data } = await supabase
       .from("jobs")
-      .select("*, company:companies(id, name, logo_url, about)")
+      .select("*, company:companies(id, name, logo_url, about, website)")
       .eq("id", id)
       .single();
     return data ?? null;

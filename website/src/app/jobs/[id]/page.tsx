@@ -7,7 +7,7 @@ import { Building2, MapPin, Clock, Wallet } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import JsonLd from "@/components/JsonLd";
 import { TagPill, Breadcrumb } from "@/components/ui";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, jobPostingIdentifier, hiringOrganizationJsonLd } from "@/lib/seo";
 import { getCachedJobDetail, getCachedRecentJobIds } from "@/lib/cache";
 import JobApplyPanel from "./JobApplyPanel";
 
@@ -46,9 +46,10 @@ export default async function JobDetailPage({ params }: { params: { id: string }
     "@type": "JobPosting",
     title: job.title,
     description: job.description || job.title,
+    identifier: jobPostingIdentifier(company, job.id),
     datePosted: job.posted_at,
     employmentType: job.job_type?.toUpperCase().replace(" ", "_"),
-    hiringOrganization: { "@type": "Organization", name: company },
+    hiringOrganization: hiringOrganizationJsonLd({ name: company, logoUrl: logo, website: job.company?.website ?? null }),
     jobLocation: { "@type": "Place", address: job.location || "India" },
   };
   if (job.salary_min_lpa && job.salary_max_lpa) {

@@ -6,6 +6,7 @@ import { AnnouncementBar } from "@/components/home/AnnouncementBar";
 import Footer from "@/components/Footer";
 import JsonLd from "@/components/JsonLd";
 import { BRAND } from "@/lib/brand";
+import { websiteJsonLd } from "@/lib/seo";
 
 // The mobile app loads no custom font — it renders in the platform system
 // font. The website matches that with a system sans stack defined in
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
         <JsonLd data={organizationJsonLd} />
+        <JsonLd data={websiteJsonLd()} />
         <Header />
         <AnnouncementBar />
         <main id="main-content" className="min-h-[60vh]">

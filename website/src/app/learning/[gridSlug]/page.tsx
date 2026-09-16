@@ -4,7 +4,7 @@ import { ListChecks } from "lucide-react";
 import { getLearningTree, getLearningGridBrief, getLearningGridSlugs, getGridScopedTests, firstTopicOf } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
 import { Breadcrumb, Button } from "@/components/ui";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, courseJsonLd } from "@/lib/seo";
 import { DocsShell } from "../_components/DocsShell";
 import { CourseHeader } from "../_components/CourseHeader";
 import { TopicSection } from "../_components/TopicSection";
@@ -54,24 +54,7 @@ export default async function GridOverviewPage({ params }: { params: { gridSlug:
           { name: grid.name, path: `/learning/${grid.slug}` },
         ])}
       />
-      <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "LearningResource",
-          name: grid.name,
-          description: grid.description || undefined,
-          url: absoluteUrl(`/learning/${grid.slug}`),
-          provider: { "@type": "Organization", name: "CampusEduX" },
-          hasPart: sections
-            .flatMap((s) => s.topics)
-            .slice(0, 25)
-            .map((t) => ({
-              "@type": "LearningResource",
-              name: t.title,
-              url: absoluteUrl(`/learning/${grid.slug}/${t.slug}`),
-            })),
-        }}
-      />
+      <JsonLd data={courseJsonLd({ name: grid.name, description: grid.description, path: `/learning/${grid.slug}` })} />
       <DocsShell tree={tree} gridSlug={grid.slug}>
         <Breadcrumb className="mb-4" items={[{ label: "Learning", href: "/learning" }, { label: grid.name }]} />
 
