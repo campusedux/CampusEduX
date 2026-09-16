@@ -22,12 +22,19 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const detail = await getCodingProblem(params.problemSlug);
   if (!detail) return { title: "Coding problem not found", robots: { index: false, follow: false } };
-  const { problem, topic } = detail;
-  const description =
-    (problem.description || `${problem.title} — a ${problem.difficulty} coding problem on CampusEduX.`)
-      .replace(/[#>*`_|\-]+/g, " ")
-      .trim()
-      .slice(0, 155);
+  const { problem, topic, locked } = detail;
+  // Locked problems stay indexable (same convention as the Learning topic
+  // page), but `problem.description` is nulled server-side for a locked
+  // problem — so the fallback here must describe only what the premium gate
+  // actually shows (title, difficulty, topic, a premium notice), never the
+  // withheld statement.
+  const fallback = locked
+    ? `${problem.title} is a ${problem.difficulty} ${topic.title} coding problem on CampusEduX. It's a Premium problem — unlock it to view the full statement, examples and code editor.`
+    : `${problem.title} — a ${problem.difficulty} coding problem on CampusEduX.`;
+  const description = (problem.description || fallback)
+    .replace(/[#>*`_|\-]+/g, " ")
+    .trim()
+    .slice(0, 155);
   const url = absoluteUrl(`/coding-problems/${problem.slug}`);
   return {
     title: `${problem.title} · Coding Problem`,

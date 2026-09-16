@@ -22,8 +22,17 @@ const SUBMISSIONS_HREF = "/practice/submissions";
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const detail = await getPracticeProblem(params.slug);
   if (!detail) return { title: "Coding problem not found", robots: { index: false, follow: false } };
-  const { problem, category } = detail;
-  const description = (problem.description || `${problem.title} — a ${problem.difficulty} coding problem on CampusEduX.`)
+  const { problem, category, locked } = detail;
+  // Locked problems stay indexable (same convention as the Learning topic
+  // page), but `problem.description` is nulled server-side for a locked
+  // problem — so the fallback here must describe only what the premium gate
+  // actually shows (title, difficulty, category, a premium notice), never the
+  // withheld statement.
+  const categoryName = category?.name ?? "Practice";
+  const fallback = locked
+    ? `${problem.title} is a ${problem.difficulty} ${categoryName} coding problem on CampusEduX. It's a Premium problem — unlock it to view the full statement, examples and code editor.`
+    : `${problem.title} — a ${problem.difficulty} coding problem on CampusEduX.`;
+  const description = (problem.description || fallback)
     .replace(/[#>*`_|\-]+/g, " ")
     .trim()
     .slice(0, 155);
@@ -34,7 +43,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     alternates: { canonical: url },
     openGraph: { title: problem.title, description, url, type: "article" },
     twitter: { card: "summary", title: problem.title, description },
-    other: { "topic:name": category?.name ?? "Practice" },
+    other: { "topic:name": categoryName },
   };
 }
 

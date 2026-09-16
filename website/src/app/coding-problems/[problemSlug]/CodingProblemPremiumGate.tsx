@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
 import type { CodingProblemDetail } from "@/lib/learning.types";
 import { CodingProblemBody } from "./CodingProblemBody";
 
-type Phase = "checking" | "locked" | "unlocked";
+type Phase = "locked" | "unlocked";
 
 const DIFF_CLASS: Record<string, string> = {
   Easy: "bg-emerald-50 text-emerald-700",
@@ -18,67 +18,24 @@ const DIFF_CLASS: Record<string, string> = {
 };
 
 /**
- * Server renders a premium Coding Problem `locked` (anon client), so the body /
- * examples / editorial are never in the initial HTML. This island re-calls
- * `coding_problem_detail` with the visitor's real session: a premium member (or
- * admin) then gets `locked: false` and the full workspace renders client-side
- * (`CodingProblemBody` owns its own breadcrumb + header). Everyone else keeps
- * the upgrade CTA below. Mirrors `PremiumTopicContent` on the Learning topic
- * page.
+ * The publicly-visible locked state: title, difficulty, languages and a
+ * concrete "premium problem" notice, with the Premium / sign-in CTAs. Never
+ * touches `problem.description` / `examples` / etc — the server-side RPC
+ * already nulls those out for a locked problem, so there is nothing gated to
+ * accidentally render here. A plain (directive-less, hook-less) component so
+ * it's unit-testable without mounting `CodingProblemPremiumGate`'s client
+ * state, and so it can double as the true initial SSR/no-JS HTML instead of a
+ * content-free skeleton.
  */
-export function CodingProblemPremiumGate({
+export function CodingProblemLockedNotice({
   problem,
   topic,
-  slug,
   loginNext,
 }: {
   problem: CodingProblemDetail["problem"];
   topic: CodingProblemDetail["topic"];
-  slug: string;
   loginNext: string;
 }) {
-  const [phase, setPhase] = useState<Phase>("checking");
-  const [detail, setDetail] = useState<CodingProblemDetail | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const supabase = createBrowserSupabase();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        if (active) setPhase("locked");
-        return;
-      }
-      const { data, error } = await supabase.rpc("coding_problem_detail", {
-        p_slug: slug,
-        p_platform: "website",
-      });
-      if (!active) return;
-      const payload = data as CodingProblemDetail | null;
-      if (error || !payload || payload.locked) {
-        setPhase("locked");
-        return;
-      }
-      setDetail(payload);
-      setPhase("unlocked");
-    })();
-    return () => {
-      active = false;
-    };
-  }, [slug]);
-
-  if (phase === "unlocked" && detail) {
-    return (
-      <CodingProblemBody
-        detail={detail}
-        submitEndpoint="/api/coding-problems/submit"
-        submissionsHref="/practice/submissions"
-      />
-    );
-  }
-
   const backToTopic = `/learning/${topic.grid_slug}/${topic.topic_slug}`;
 
   return (
@@ -117,29 +74,87 @@ export function CodingProblemPremiumGate({
         </div>
       </header>
 
-      {phase === "checking" ? (
-        <div className="space-y-3">
-          <div className="h-4 w-2/3 animate-pulse rounded bg-line/70" />
-          <div className="h-4 w-full animate-pulse rounded bg-line/70" />
-          <div className="h-64 w-full animate-pulse rounded-xl bg-line/50" />
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 text-center">
+        <Lock className="mx-auto h-8 w-8 text-amber-500" aria-hidden />
+        <h2 className="mt-3 text-lg font-bold text-ink">This is a premium problem</h2>
+        <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
+          Unlock this problem with CampusEduX Premium to access its full statement, examples and code editor.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-3">
+          <Button href="/premium">See Premium plans</Button>
+          <Button href={`/login?next=${encodeURIComponent(loginNext)}`} variant="ghost">
+            I already have Premium — sign in
+          </Button>
         </div>
-      ) : (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 text-center">
-          <Lock className="mx-auto h-8 w-8 text-amber-500" aria-hidden />
-          <h2 className="mt-3 text-lg font-bold text-ink">This is a premium problem</h2>
-          <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
-            Upgrade to CampusEduX Premium to open this problem, its editor and its test cases.
-          </p>
-          <div className="mt-4 flex flex-wrap justify-center gap-3">
-            <Button href="/premium">See Premium plans</Button>
-            <Button href={`/login?next=${encodeURIComponent(loginNext)}`} variant="ghost">
-              I already have Premium — sign in
-            </Button>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
+}
+
+/**
+ * Server renders a premium Coding Problem `locked` (anon client), so the body /
+ * examples / editorial are never in the initial HTML — but the initial HTML
+ * still needs to be the real `CodingProblemLockedNotice`, not a content-free
+ * skeleton, so it doubles as accurate SEO content. This island re-calls
+ * `coding_problem_detail` with the visitor's real session: a premium member
+ * (or admin) then gets `locked: false` and the full workspace swaps in
+ * client-side (`CodingProblemBody` owns its own breadcrumb + header). Everyone
+ * else stays on the notice above — never assume premium on the initial render.
+ * Mirrors `PremiumTopicContent` on the Learning topic page.
+ */
+export function CodingProblemPremiumGate({
+  problem,
+  topic,
+  slug,
+  loginNext,
+}: {
+  problem: CodingProblemDetail["problem"];
+  topic: CodingProblemDetail["topic"];
+  slug: string;
+  loginNext: string;
+}) {
+  const [phase, setPhase] = useState<Phase>("locked");
+  const [detail, setDetail] = useState<CodingProblemDetail | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    // Reset for the new slug in case this instance is reused across a
+    // client-side navigation between two locked problems — never show a
+    // previous problem's unlocked body under a new URL while re-checking.
+    setPhase("locked");
+    setDetail(null);
+    (async () => {
+      const supabase = createBrowserSupabase();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data, error } = await supabase.rpc("coding_problem_detail", {
+        p_slug: slug,
+        p_platform: "website",
+      });
+      if (!active) return;
+      const payload = data as CodingProblemDetail | null;
+      if (error || !payload || payload.locked) return;
+      setDetail(payload);
+      setPhase("unlocked");
+    })();
+    return () => {
+      active = false;
+    };
+  }, [slug]);
+
+  if (phase === "unlocked" && detail) {
+    return (
+      <CodingProblemBody
+        detail={detail}
+        submitEndpoint="/api/coding-problems/submit"
+        submissionsHref="/practice/submissions"
+      />
+    );
+  }
+
+  return <CodingProblemLockedNotice problem={problem} topic={topic} loginNext={loginNext} />;
 }
 
 export default CodingProblemPremiumGate;
