@@ -1,10 +1,25 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { DEFAULT_RESOLVED_TEMPLATES, resolveTemplate, type ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
 import { demoRenderModel, demoResume } from "@/lib/resumeBuilder/demoResumes";
 import { TemplateGallery, type TemplateDemo } from "./TemplateGallery";
+import { absoluteUrl } from "@/lib/seo";
+
+const DESCRIPTION =
+  "Browse résumé templates on CampusEduX — each one opens with a complete, realistic demo résumé you can edit or clear and make your own.";
 
 export const revalidate = 300;
-export const metadata = { title: "Resume Templates" };
+export const metadata: Metadata = {
+  title: "Resume Templates",
+  description: DESCRIPTION,
+  alternates: { canonical: absoluteUrl("/resume/templates") },
+  openGraph: {
+    title: "Resume Templates | CampusEduX",
+    description: DESCRIPTION,
+    url: absoluteUrl("/resume/templates"),
+    type: "website",
+  },
+};
 
 type TemplateRow = { id: string; name: string | null; description: string | null; accent_color: string | null; is_premium: boolean | null };
 

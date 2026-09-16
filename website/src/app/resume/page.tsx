@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, FileUp, ShieldCheck, Sparkles } from "lucide-react";
 import { getOptionalUser } from "@/lib/auth";
@@ -9,8 +10,22 @@ import { computeCompletion } from "@/lib/resumeBuilder/content";
 import { DEFAULT_RESOLVED_TEMPLATES, resolveTemplate, templateSpec, type ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
 import { TemplateShowcaseCard } from "@/components/resumeBuilder/TemplateShowcaseCard";
 import { ResumeDashboard, type DashboardResume } from "@/components/resumeBuilder/ResumeDashboard";
+import { absoluteUrl } from "@/lib/seo";
 
-export const metadata = { title: "Resume Builder" };
+const DESCRIPTION =
+  "Build an ATS-friendly résumé on CampusEduX — pick a template, start from real demo content, track your ATS score, and export a polished PDF.";
+
+export const metadata: Metadata = {
+  title: "Resume Builder",
+  description: DESCRIPTION,
+  alternates: { canonical: absoluteUrl("/resume") },
+  openGraph: {
+    title: "Resume Builder | CampusEduX",
+    description: DESCRIPTION,
+    url: absoluteUrl("/resume"),
+    type: "website",
+  },
+};
 export const dynamic = "force-dynamic";
 
 function tally(rows: { resume_id: string | null }[] | null): Map<string, number> {

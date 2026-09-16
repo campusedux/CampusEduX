@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ProjectCardData } from "@/components/ProjectCard";
 import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
 import { getCachedCategoryPreview, getCachedCategoryIds } from "@/lib/cache";
+import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
 
@@ -23,7 +24,14 @@ const getData = cache(async (categoryId: string) => {
 
 export async function generateMetadata({ params }: { params: { category: string } }): Promise<Metadata> {
   const { name } = await getData(params.category);
-  return { title: `${name} projects` };
+  const description = `${name} projects on CampusEduX — browse student-built final-year and mini projects in this category.`;
+  const url = absoluteUrl(`/projects/category/${encodeURIComponent(params.category)}`);
+  return {
+    title: `${name} projects`,
+    description,
+    alternates: { canonical: url },
+    openGraph: { title: `${name} projects | CampusEduX`, description, url, type: "website" },
+  };
 }
 
 export default async function CategoryPage({ params }: { params: { category: string } }) {

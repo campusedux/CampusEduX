@@ -5,9 +5,23 @@ import JobCard, { JobCardData } from "@/components/JobCard";
 import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { JobFilters } from "@/components/marketplace/JobFilters";
 import { getCachedJobsPage } from "@/lib/cache";
+import { absoluteUrl } from "@/lib/seo";
 import { JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobSort, parsePage, totalPages } from "@/lib/marketplace";
 
-export const metadata: Metadata = { title: "Jobs & Internships" };
+const DESCRIPTION =
+  "Browse jobs and internships on CampusEduX — filter by location, role type and freshness to find and apply to openings that match your career goals.";
+
+export const metadata: Metadata = {
+  title: "Jobs & Internships",
+  description: DESCRIPTION,
+  alternates: { canonical: absoluteUrl("/jobs") },
+  openGraph: {
+    title: "Jobs & Internships | CampusEduX",
+    description: DESCRIPTION,
+    url: absoluteUrl("/jobs"),
+    type: "website",
+  },
+};
 export const revalidate = 120;
 
 type SP = { q?: string; location?: string; type?: string; sort?: string; page?: string };

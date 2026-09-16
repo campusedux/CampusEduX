@@ -1,8 +1,23 @@
+import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { CompanyCard, type CompanyCardData, EmptyState } from "@/components/ui";
+import { absoluteUrl } from "@/lib/seo";
+
+const DESCRIPTION =
+  "See which companies are hiring on CampusEduX and browse each employer's live job and internship openings in one place.";
 
 export const revalidate = 300;
-export const metadata = { title: "Companies hiring on CampusEduX" };
+export const metadata: Metadata = {
+  title: "Companies hiring on CampusEduX",
+  description: DESCRIPTION,
+  alternates: { canonical: absoluteUrl("/jobs/companies") },
+  openGraph: {
+    title: "Companies hiring on CampusEduX",
+    description: DESCRIPTION,
+    url: absoluteUrl("/jobs/companies"),
+    type: "website",
+  },
+};
 
 export default async function CompaniesPage() {
   const supabase = getPublicSupabase();

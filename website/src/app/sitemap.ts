@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://campusedux.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.campusedux.com";
 
 const STATIC_ROUTES = [
   "", "/projects", "/projects/trending", "/projects/premium", "/projects/best-sellers", "/projects/new",

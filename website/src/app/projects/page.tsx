@@ -6,6 +6,7 @@ import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
 import { getCachedProjectsPage, getCachedCategories } from "@/lib/cache";
+import { absoluteUrl } from "@/lib/seo";
 import {
   PROJECT_PAGE_SIZE,
   PROJECT_SORTS,
@@ -16,7 +17,20 @@ import {
   totalPages,
 } from "@/lib/marketplace";
 
-export const metadata: Metadata = { title: "Project Marketplace" };
+const DESCRIPTION =
+  "Buy or browse final-year and mini projects on CampusEduX — filter by category, price and rating to find ready-to-submit source code from student sellers.";
+
+export const metadata: Metadata = {
+  title: "Project Marketplace",
+  description: DESCRIPTION,
+  alternates: { canonical: absoluteUrl("/projects") },
+  openGraph: {
+    title: "Project Marketplace | CampusEduX",
+    description: DESCRIPTION,
+    url: absoluteUrl("/projects"),
+    type: "website",
+  },
+};
 export const revalidate = 120;
 
 type SP = {
