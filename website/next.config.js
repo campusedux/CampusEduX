@@ -74,6 +74,15 @@ const nextConfig = {
       { source: "/placement/:path((?!notes$|notes/).*)", destination: "/learning", permanent: true },
       { source: "/placement-prep", destination: "/learning", permanent: true },
       { source: "/placement-preparation", destination: "/learning", permanent: true },
+      // /projects/new, /projects/premium and /projects/best-sellers were
+      // orphaned standalone landing pages with zero internal links and no
+      // pagination — each duplicated a filter/sort the marketplace's own
+      // `/projects` route already supports. Consolidated into that one route
+      // (Phase 3 orphan-URL audit); best-sellers needs both `flag` and `sort`
+      // since `flag=bestseller` alone defaults to newest-first, not sales rank.
+      { source: "/projects/new", destination: "/projects", permanent: true },
+      { source: "/projects/premium", destination: "/projects?flag=premium", permanent: true },
+      { source: "/projects/best-sellers", destination: "/projects?flag=bestseller&sort=popular", permanent: true },
     ];
   },
   async headers() {

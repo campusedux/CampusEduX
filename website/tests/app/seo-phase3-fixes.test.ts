@@ -2,8 +2,11 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 
 /**
  * Phase 3 SEO audit fixes:
- *   1. 10 pages that silently inherited the root layout's `canonical: "/"`
- *      now self-canonicalize.
+ *   1. 7 pages that silently inherited the root layout's `canonical: "/"`
+ *      now self-canonicalize. (/projects/new, /projects/premium and
+ *      /projects/best-sellers — originally 3 of the 10 — were later
+ *      consolidated into permanent redirects to /projects; see the
+ *      orphan-URL redirect tests below.)
  *   2. The public résumé share route (`/r/[token]`) is noindex/nofollow.
  *   3. The 5 bare auth/transactional pages are noindex, follow.
  *   4. robots.ts disallows `/r`.
@@ -50,22 +53,7 @@ describe("Phase 3: previously-broken canonicals now self-reference", () => {
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/projects/trending");
   });
 
-  it("/projects/new", async () => {
-    const { metadata } = await import("@/app/projects/new/page");
-    expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/projects/new");
-  });
-
-  it("/projects/premium", async () => {
-    const { metadata } = await import("@/app/projects/premium/page");
-    expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/projects/premium");
-  });
-
-  it("/projects/best-sellers", async () => {
-    const { metadata } = await import("@/app/projects/best-sellers/page");
-    expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/projects/best-sellers");
-  });
-
-  it("none of the 10 pages canonicalize to the homepage anymore", async () => {
+  it("none of the 7 pages canonicalize to the homepage anymore", async () => {
     const modules = await Promise.all([
       import("@/app/about/page"),
       import("@/app/faq/page"),
@@ -74,15 +62,70 @@ describe("Phase 3: previously-broken canonicals now self-reference", () => {
       import("@/app/referral/page"),
       import("@/app/custom-projects/page"),
       import("@/app/projects/trending/page"),
-      import("@/app/projects/new/page"),
-      import("@/app/projects/premium/page"),
-      import("@/app/projects/best-sellers/page"),
     ]);
     for (const { metadata } of modules) {
       expect(metadata.alternates?.canonical).not.toBe("https://www.campusedux.com/");
       expect(metadata.alternates?.canonical).not.toBe("/");
       expect(metadata.alternates?.canonical).toBeTruthy();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. Orphan-URL consolidation: /projects/new, /projects/premium and
+//     /projects/best-sellers are permanently redirected into the existing
+//     /projects marketplace route (which already supports the same
+//     filter/sort via `?flag=` and `?sort=`) instead of standalone pages.
+// ---------------------------------------------------------------------------
+async function getConfiguredRedirects() {
+  const { default: nextConfig } = await import("../../next.config.js");
+  return nextConfig.redirects?.() ?? [];
+}
+
+/** Import via a widened `string` (not a literal) so `tsc` doesn't try to resolve a module that's deliberately deleted. */
+async function expectPageRemoved(specifier: string) {
+  await expect(import(specifier)).rejects.toBeTruthy();
+}
+
+describe("Phase 3 follow-up: orphan project-URL consolidation redirects", () => {
+  it("next.config.js redirects /projects/new to /projects", async () => {
+    const redirects = await getConfiguredRedirects();
+    expect(redirects).toContainEqual({ source: "/projects/new", destination: "/projects", permanent: true });
+  });
+
+  it("next.config.js redirects /projects/premium to /projects?flag=premium", async () => {
+    const redirects = await getConfiguredRedirects();
+    expect(redirects).toContainEqual({
+      source: "/projects/premium",
+      destination: "/projects?flag=premium",
+      permanent: true,
+    });
+  });
+
+  it("next.config.js redirects /projects/best-sellers to /projects?flag=bestseller&sort=popular (both params — flag alone would sort newest-first, not by sales)", async () => {
+    const redirects = await getConfiguredRedirects();
+    expect(redirects).toContainEqual({
+      source: "/projects/best-sellers",
+      destination: "/projects?flag=bestseller&sort=popular",
+      permanent: true,
+    });
+  });
+
+  it("the three standalone page files no longer exist", async () => {
+    await expectPageRemoved("@/app/projects/new/page");
+    await expectPageRemoved("@/app/projects/premium/page");
+    await expectPageRemoved("@/app/projects/best-sellers/page");
+  });
+
+  it("sitemap.ts no longer lists the three redirected URLs, but keeps /projects and /projects/trending", async () => {
+    const { default: sitemap } = await import("@/app/sitemap");
+    const entries = await sitemap();
+    const urls = entries.map((e) => e.url);
+    expect(urls).not.toContain("https://www.campusedux.com/projects/new");
+    expect(urls).not.toContain("https://www.campusedux.com/projects/premium");
+    expect(urls).not.toContain("https://www.campusedux.com/projects/best-sellers");
+    expect(urls).toContain("https://www.campusedux.com/projects");
+    expect(urls).toContain("https://www.campusedux.com/projects/trending");
   });
 });
 

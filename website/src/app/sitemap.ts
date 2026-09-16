@@ -4,7 +4,7 @@ import { getPublicSupabase } from "@/lib/supabase/server";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.campusedux.com";
 
 const STATIC_ROUTES = [
-  "", "/projects", "/projects/trending", "/projects/premium", "/projects/best-sellers", "/projects/new",
+  "", "/projects", "/projects/trending",
   "/jobs", "/jobs/companies", "/learning", "/blog", "/compiler", "/resume", "/resume/templates", "/custom-projects",
   "/practice", "/practice/problems", "/practice/compiler",
   "/premium", "/referral", "/faq", "/about", "/contact", "/support",
