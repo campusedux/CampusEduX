@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   User,
   LogOut,
@@ -13,6 +14,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useSessionProfile } from "@/lib/useSessionProfile";
+import { loginHrefFor } from "@/lib/nav";
 
 const MENU = [
   { href: "/account", label: "My account", icon: User },
@@ -28,6 +30,7 @@ export function AuthMenu() {
   const { loading, profile } = useSessionProfile();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!open) return;
@@ -50,7 +53,7 @@ export function AuthMenu() {
   if (!profile) {
     return (
       <Link
-        href="/login"
+        href={loginHrefFor(pathname)}
         className="group inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-b from-primary-500 to-primary-600 px-4 text-[0.8rem] font-semibold text-white shadow-[0_4px_14px_-3px_rgba(79,57,246,0.5)] ring-1 ring-inset ring-white/15 transition-[transform,box-shadow,background-color] hover:from-primary-600 hover:to-primary-700 hover:shadow-[0_6px_20px_-3px_rgba(79,57,246,0.6)] active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:transform-none"
       >
         Sign in

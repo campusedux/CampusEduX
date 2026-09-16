@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({ redirect }));
 import { supabase, resetSupabaseMock, setUser, setTableResult } from "../helpers/supabase.mock";
 vi.mock("@/lib/supabase/authed-server", () => ({ createAuthedServerSupabase: () => supabase }));
 
-import { requireUser, getOptionalUser, getAccountUser, isAcademicComplete } from "@/lib/auth";
+import { requireUser, getOptionalUser, getAccountUser, isAcademicComplete, postLoginDestination } from "@/lib/auth";
 
 beforeEach(() => resetSupabaseMock());
 
@@ -104,6 +104,27 @@ describe("getAccountUser", () => {
   it("returns null when signed out", async () => {
     setUser(null);
     await expect(getAccountUser()).resolves.toBeNull();
+  });
+});
+
+describe("postLoginDestination", () => {
+  it("routes an incomplete profile to /onboarding, ignoring next", async () => {
+    setUser({ id: "u-1", email: "new@campusedux.app" });
+    setTableResult("profiles", { data: { id: "u-1", course: "B.Tech", branch: null, year: null } });
+
+    await expect(postLoginDestination("/account/wallet")).resolves.toBe("/onboarding");
+  });
+
+  it("returns next unchanged for a complete profile", async () => {
+    setUser({ id: "u-2", email: "done@campusedux.app" });
+    setTableResult("profiles", { data: { id: "u-2", course: "B.Tech", branch: "CSE", year: "3" } });
+
+    await expect(postLoginDestination("/projects")).resolves.toBe("/projects");
+  });
+
+  it("returns next unchanged when there is no session", async () => {
+    setUser(null);
+    await expect(postLoginDestination("/jobs")).resolves.toBe("/jobs");
   });
 });
 

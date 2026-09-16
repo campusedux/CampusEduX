@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { emitSessionChange } from "@/lib/sessionSignal";
 import { safeInternalPath } from "@/lib/nav";
+import { resolvePostLoginDestination } from "./resolvePostLoginDestination";
 import { Field, Input } from "@/components/ui";
 
 const isEmail = (value: string) => /\S+@\S+\.\S+/.test(value);
@@ -119,13 +120,18 @@ function LoginForm() {
         email = resolvedEmail as string;
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw new Error(signInError.message);
 
       // The session cookie is set now — tell the header islands to re-check
       // `/api/session` so the nav flips to the signed-in state without a reload.
       emitSessionChange();
-      router.push(safeInternalPath(searchParams.get("next")));
+
+      const next = safeInternalPath(searchParams.get("next"));
+      const destination = signInData.user
+        ? await resolvePostLoginDestination(supabase, signInData.user.id, next)
+        : next;
+      router.push(destination);
       router.refresh();
     } catch (err: any) {
       setError(err.message ?? "Something went wrong.");

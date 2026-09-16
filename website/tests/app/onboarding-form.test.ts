@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach } from "vitest";
 
 import { supabase, resetSupabaseMock, setTableResult, callsFor } from "../helpers/supabase.mock";
 
-import { branchesForCourse, isOnboardingComplete, saveOnboardingProfile } from "@/app/onboarding/OnboardingForm";
+import {
+  branchesForCourse,
+  isOnboardingComplete,
+  saveOnboardingProfile,
+  ONBOARDING_COMPLETE_REDIRECT,
+} from "@/app/onboarding/OnboardingForm";
 
 beforeEach(() => resetSupabaseMock());
 
@@ -49,6 +54,12 @@ describe("isOnboardingComplete (Continue button gate)", () => {
 
   it("is true only once all three are chosen", () => {
     expect(isOnboardingComplete("B.Tech", "CSE", "1st Year")).toBe(true);
+  });
+});
+
+describe("ONBOARDING_COMPLETE_REDIRECT", () => {
+  it("sends a newly-onboarded user to the home page, not /account", () => {
+    expect(ONBOARDING_COMPLETE_REDIRECT).toBe("/");
   });
 });
 

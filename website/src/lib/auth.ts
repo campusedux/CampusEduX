@@ -1,6 +1,9 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { isAcademicComplete } from "@/lib/academic";
+
+export { isAcademicComplete };
 
 /**
  * `cache()` is a React Server Components primitive: in the Next.js server
@@ -86,14 +89,6 @@ export const getAccountUser = requestCache(async (): Promise<AccountUser | null>
 });
 
 /**
- * course / branch / year are the only fields the onboarding gate checks —
- * mirrors mobile-app/src/store/authStore.ts's isAcademicComplete exactly.
- */
-export function isAcademicComplete(account: Pick<AccountUser, "course" | "branch" | "year">): boolean {
-  return !!(account.course && account.branch && account.year);
-}
-
-/**
  * The one gate every /account page passes through. A signed-in Supabase
  * session with no matching `profiles` row shouldn't normally happen (the
  * `handle_new_user` trigger creates one on signup — see mobile-app
@@ -111,6 +106,22 @@ export async function requireUser(): Promise<AccountUser> {
   if (!account) redirect("/login");
   if (!isAcademicComplete(account)) redirect("/onboarding");
   return account;
+}
+
+/**
+ * Where the browser should land right after a successful OAuth sign-in —
+ * used by src/app/auth/callback/route.ts once `exchangeCodeForSession`
+ * succeeds. An incomplete profile is sent to /onboarding regardless of
+ * `next` (onboarding must happen before anywhere else); `next` itself must
+ * already be `safeInternalPath`-validated by the caller. The password-login
+ * flow (src/app/login/page.tsx) makes the same decision client-side via
+ * `@/lib/academic`'s `isAcademicComplete`, since this module's
+ * `createAuthedServerSupabase` import isn't usable from a Client Component.
+ */
+export async function postLoginDestination(next: string): Promise<string> {
+  const account = await getAccountUser();
+  if (account && !isAcademicComplete(account)) return "/onboarding";
+  return next;
 }
 
 /**

@@ -34,6 +34,9 @@ export function isOnboardingComplete(course: string, branch: string, year: strin
   return !!(course && branch && year);
 }
 
+/** Where a successful onboarding submit sends the browser — exported so the redirect target is testable without rendering. */
+export const ONBOARDING_COMPLETE_REDIRECT = "/";
+
 type ProfilesTable = ReturnType<typeof createBrowserSupabase>;
 
 /** Isolated from the component so the write can be tested without rendering. */
@@ -81,7 +84,7 @@ export default function OnboardingForm({
       setError(saveError);
       return;
     }
-    router.push("/account");
+    router.push(ONBOARDING_COMPLETE_REDIRECT);
     router.refresh();
   }
 

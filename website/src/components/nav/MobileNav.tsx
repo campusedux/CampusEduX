@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, ChevronRight, Crown } from "lucide-react";
 import { Drawer } from "@/components/ui";
 import { useSessionProfile } from "@/lib/useSessionProfile";
+import { loginHrefFor } from "@/lib/nav";
 import { DRAWER_LINKS } from "./navConfig";
 import { cn } from "@/lib/cn";
 
@@ -120,7 +121,7 @@ export function MobileNav() {
           ) : (
             <div className="flex flex-col gap-2 px-1 pb-1 pt-1">
               <Link
-                href="/login"
+                href={loginHrefFor(pathname)}
                 className="flex h-11 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white transition hover:bg-primary-600 active:scale-[.98] motion-reduce:active:scale-100"
               >
                 Log in

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { safeInternalPath } from "@/lib/nav";
+import { postLoginDestination } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -33,5 +34,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=oauth", request.url));
   }
 
-  return NextResponse.redirect(new URL(next, request.url));
+  // An incomplete profile (new Google sign-up) is sent to /onboarding instead
+  // of `next` — same gate password login applies client-side.
+  const destination = await postLoginDestination(next);
+  return NextResponse.redirect(new URL(destination, request.url));
 }
