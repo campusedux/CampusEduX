@@ -45,7 +45,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
   const [grids, hits] = await Promise.all([getLearningGrids(), q ? searchLearning(q, 30) : Promise.resolve([])]);
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       {grids.length > 0 ? (
         <JsonLd
           data={courseListJsonLd(

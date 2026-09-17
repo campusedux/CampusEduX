@@ -61,7 +61,7 @@ export default async function CustomProjectsPage() {
   }
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <h1 className="text-3xl font-bold text-ink">Custom Projects</h1>
       <p className="mt-3 max-w-2xl text-ink-muted">
         Need something the marketplace doesn&apos;t have yet? Describe what you need, pay a small token to start, and the
@@ -78,7 +78,7 @@ export default async function CustomProjectsPage() {
       </div>
 
       <h2 className="mt-12 text-xl font-bold text-ink">How it works</h2>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {STEPS.map((s, i) => (
           <div key={s} className="flex items-start gap-3 rounded-2xl border border-line bg-white p-4 shadow-card">
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
@@ -92,7 +92,7 @@ export default async function CustomProjectsPage() {
       {typeStarting.length > 0 && (
         <>
           <h2 className="mt-12 text-xl font-bold text-ink">Starting price by project type</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {typeStarting.map((t) => (
               <div
                 key={t.type}
@@ -110,7 +110,7 @@ export default async function CustomProjectsPage() {
       {platforms.length > 0 && (
         <>
           <h2 className="mt-12 text-xl font-bold text-ink">Platform options</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {platforms.map((p: { platform: string; label: string; charge: number }) => (
               <div
                 key={p.platform}

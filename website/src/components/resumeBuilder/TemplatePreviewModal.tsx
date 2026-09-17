@@ -68,7 +68,7 @@ export function TemplatePreviewModal({
   return (
     <div className="fixed inset-0 z-[120] flex flex-col bg-ink/70" role="dialog" aria-modal="true" aria-label={`${template.label} template preview`}>
       {/* Top bar */}
-      <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white px-4 py-3 sm:px-6">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="truncate text-base font-bold text-ink">{template.label}</span>
           {template.atsFriendly && <Badge tone="success">ATS friendly</Badge>}
@@ -114,7 +114,7 @@ export function TemplatePreviewModal({
       </div>
 
       {/* Bottom bar */}
-      <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-white px-4 py-3 sm:px-6">
+      <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-white px-5 py-4">
         <p className="hidden text-xs text-ink-faint sm:block">{template.description}</p>
         <button
           type="button"

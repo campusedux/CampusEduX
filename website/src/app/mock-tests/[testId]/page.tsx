@@ -34,7 +34,7 @@ export default async function MockTestPage({ params }: { params: { testId: strin
 
       <header>
         <h1 className="text-2xl font-bold text-ink sm:text-3xl">{test.title}</h1>
-        {test.description ? <p className="mt-2 text-ink-muted">{test.description}</p> : null}
+        {test.description ? <p className="mt-3 text-ink-muted">{test.description}</p> : null}
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-ink-muted">
           <span className="inline-flex items-center gap-1.5">
             <ListChecks className="h-4 w-4 text-ink-faint" aria-hidden /> {test.question_count} question

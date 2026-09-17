@@ -13,7 +13,7 @@ export async function LearningResources() {
   if (grids.length === 0) return null;
 
   return (
-    <section className="container-page pt-10 sm:pt-14">
+    <section className="container-page pt-12 sm:pt-16">
       <SectionHeader title="Learning" viewAllHref="/learning" viewAllLabel="All resources" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {grids.slice(0, 6).map((g) => (

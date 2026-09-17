@@ -13,7 +13,7 @@ export default async function AccountLayout({ children }: { children: React.Reac
   await ensureLegalConsent("website");
 
   return (
-    <div className="container-page py-8 sm:py-10">
+    <div className="page-shell">
       <div className="grid gap-8 md:grid-cols-[210px_1fr]">
         <aside>
           <div className="mb-4">

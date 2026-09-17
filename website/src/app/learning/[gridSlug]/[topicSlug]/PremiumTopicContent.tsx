@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { Markdown } from "@/components/learning/Markdown";
-import { Button } from "@/components/ui";
+import { Button, EmptyState } from "@/components/ui";
 import type { LearningContentBlock } from "@/lib/learning.types";
 
 type Phase = "checking" | "locked" | "unlocked";
@@ -73,7 +73,7 @@ export function PremiumTopicContent({
     return (
       <div className="max-w-none">
         {blocks.length === 0 ? (
-          <p className="text-ink-muted">This topic has no content yet — check back soon.</p>
+          <EmptyState title="No content yet" subtitle="This topic's content is on its way — check back soon." />
         ) : (
           blocks.map((block) => (
             <section key={block.id} className="mb-8">

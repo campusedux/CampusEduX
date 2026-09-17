@@ -42,7 +42,7 @@ export default async function PremiumPage() {
   }
 
   return (
-    <div className="container-page py-8 sm:py-12">
+    <div className="page-shell">
       {/* Hero */}
       <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 text-center sm:px-10 sm:py-12">
         <p className="eyebrow">Premium</p>

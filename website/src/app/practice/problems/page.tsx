@@ -54,7 +54,7 @@ export default async function PracticeProblemsPage({ searchParams }: { searchPar
   const clearAllHref = query.q ? `/practice/problems?q=${encodeURIComponent(query.q)}` : "/practice/problems";
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <JsonLd
         data={breadcrumbJsonLd([
           { name: "Practice", path: "/practice" },

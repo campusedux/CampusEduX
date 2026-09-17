@@ -68,7 +68,7 @@ export default async function ResumeBuilderPage() {
 
   if (!user) {
     return (
-      <div className="container-page py-8 sm:py-12">
+      <div className="page-shell">
         <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 sm:px-10 sm:py-12">
           <p className="eyebrow">CampusEduX Résumé Builder</p>
           <h1 className="h-hero mt-4 max-w-2xl">Pick a template, start from a real résumé, ship a PDF.</h1>
@@ -152,7 +152,7 @@ export default async function ResumeBuilderPage() {
   });
 
   return (
-    <div className="container-page py-10">
+    <div className="page-shell">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-ink">Résumé Builder</h1>

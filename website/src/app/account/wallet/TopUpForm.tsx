@@ -91,7 +91,7 @@ export default function TopUpForm() {
           const next = Number(e.target.value);
           setAmount(Number.isFinite(next) ? next : 0);
         }}
-        className="w-28 rounded-lg border border-line bg-white px-3 py-2 text-sm"
+        className="h-11 w-28 rounded-xl border border-line bg-white px-3.5 text-sm"
       />
       <Button onClick={handleTopUp} loading={status === "processing"}>
         {status === "processing" ? "Opening checkout…" : "Top up"}

@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: { params: { category: string 
 export default async function CategoryPage({ params }: { params: { category: string } }) {
   const { name, projects } = await getData(params.category);
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <JsonLd
         data={breadcrumbJsonLd([
           { name: "Projects", path: "/projects" },

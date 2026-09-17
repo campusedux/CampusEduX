@@ -56,7 +56,7 @@ export default async function PracticeSubmissionsPage({
   const user = await getOptionalUser();
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <PageHeader eyebrow="Practice" title="Submissions" />
       <div className="mt-8">{children}</div>
     </div>

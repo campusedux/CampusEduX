@@ -7,6 +7,7 @@ import { Markdown } from "@/components/learning/Markdown";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { DocsShell } from "../../_components/DocsShell";
+import { EmptyState } from "@/components/ui";
 import { LearningBookmarkButton } from "./LearningBookmarkButton";
 import { PremiumTopicContent } from "./PremiumTopicContent";
 import { TopicPractice } from "./_components/TopicPractice";
@@ -81,7 +82,7 @@ export default async function TopicPage({
         <article>
           <header>
             <h1 className="text-3xl font-bold text-ink">{topic.title}</h1>
-            {topic.short_description ? <p className="mt-2 text-ink-muted">{topic.short_description}</p> : null}
+            {topic.short_description ? <p className="mt-3 text-ink-muted">{topic.short_description}</p> : null}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <LearningBookmarkButton topicId={topic.id} slugPath={`/learning/${grid.slug}/${topic.slug}`} />
               {topic.is_premium ? (
@@ -105,7 +106,7 @@ export default async function TopicPage({
               loginNext={`/learning/${grid.slug}/${topic.slug}`}
             />
           ) : contents.length === 0 ? (
-            <p className="text-ink-muted">This topic has no content yet — check back soon.</p>
+            <EmptyState title="No content yet" subtitle="This topic's content is on its way — check back soon." />
           ) : (
             <div className="max-w-none">
               {contents.map((block) => (

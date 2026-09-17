@@ -119,7 +119,7 @@ export function MobileNav() {
               <span className="text-[15px] font-semibold text-danger">Logout</span>
             </Link>
           ) : (
-            <div className="flex flex-col gap-2 px-1 pb-1 pt-1">
+            <div className="flex flex-col gap-2 px-3 pb-2 pt-2">
               <Link
                 href={loginHrefFor(pathname)}
                 className="flex h-11 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white transition hover:bg-primary-600 active:scale-[.98] motion-reduce:active:scale-100"

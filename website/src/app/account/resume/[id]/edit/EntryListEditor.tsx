@@ -88,7 +88,7 @@ export default function EntryListEditor({
             </button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label={labels.title} htmlFor={`e-title-${entry.id}`}>
               <Input id={`e-title-${entry.id}`} value={entry.title} onChange={(e) => patch(entry.id, { title: e.target.value })} />
             </Field>

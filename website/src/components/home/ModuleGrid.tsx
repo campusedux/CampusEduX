@@ -38,7 +38,7 @@ const MODULES: ModuleTile[] = [
 
 export function ModuleGrid() {
   return (
-    <section className="container-page pt-10 sm:pt-12" aria-label="Explore CampusEduX">
+    <section className="container-page pt-12 sm:pt-16" aria-label="Explore CampusEduX">
       <div className="mb-6">
         <span className="eyebrow inline-flex items-center gap-1.5">
           <Compass className="h-3.5 w-3.5" aria-hidden />

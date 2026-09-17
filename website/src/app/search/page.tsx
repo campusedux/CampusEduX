@@ -37,7 +37,7 @@ export default async function SearchPage({ searchParams }: { searchParams: SP })
     : { groups: [], total: 0 };
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <PageHeader title="Search" />
 
       <GlobalSearchField

@@ -21,7 +21,7 @@ export function TemplateShowcaseCard({ template }: { template: ResolvedTemplate 
           </span>
         )}
       </div>
-      <div className="p-3">
+      <div className="p-4">
         <div className="truncate text-sm font-semibold text-ink">{template.label}</div>
         <div className="mt-0.5 line-clamp-1 text-xs text-ink-faint">{template.description}</div>
       </div>

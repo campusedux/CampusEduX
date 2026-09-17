@@ -115,7 +115,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
   const clearAllHref = searchParams.q ? `/projects?q=${encodeURIComponent(searchParams.q)}` : "/projects";
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <PageHeader eyebrow="Marketplace" title="Project Marketplace" />
 
       <div className="mt-8">

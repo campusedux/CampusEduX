@@ -30,7 +30,7 @@ export default async function FaqPage() {
   }, {});
 
   return (
-    <div className="container-prose py-10">
+    <div className="page-shell-narrow">
       {faqs.length > 0 && <JsonLd data={faqJsonLd(faqs)} />}
       <h1 className="text-3xl font-bold text-ink">Frequently Asked Questions</h1>
       {faqs.length === 0 ? (

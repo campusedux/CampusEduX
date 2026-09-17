@@ -54,7 +54,7 @@ export default async function PracticeHubPage() {
   const totalProblems = categories.reduce((n, c) => n + (c.problem_count || 0), 0);
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Practice", path: "/practice" }])} />
       <PageHeader
         eyebrow="Practice"
@@ -67,7 +67,7 @@ export default async function PracticeHubPage() {
           <Link
             key={t.href}
             href={t.href}
-            className="card card-hover group flex flex-col p-6"
+            className="card card-hover group flex flex-col p-5"
           >
             <span
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl"

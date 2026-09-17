@@ -38,7 +38,7 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
   const { company, jobs } = res;
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <JsonLd
         data={breadcrumbJsonLd([
           { name: "Companies", path: "/jobs/companies" },

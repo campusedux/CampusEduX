@@ -87,7 +87,7 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
   const [lead, ...restFeatured] = featured;
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Blog", path: "/blog" }])} />
 
       <PageHeader eyebrow="Blog" title={HERO_TITLE} />

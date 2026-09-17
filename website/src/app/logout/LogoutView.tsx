@@ -18,5 +18,9 @@ export default function LogoutView() {
         router.refresh();
       });
   }, [router]);
-  return <div className="mx-auto max-w-sm px-6 py-16 text-center text-ink-muted">Signing out…</div>;
+  return (
+    <div className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center px-4 py-12 text-center text-ink-muted sm:px-6">
+      Signing out…
+    </div>
+  );
 }

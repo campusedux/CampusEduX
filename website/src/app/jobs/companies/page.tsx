@@ -32,7 +32,7 @@ export default async function CompaniesPage() {
     companies = (data ?? []) as CompanyCardData[];
   }
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <h1 className="text-3xl font-bold text-ink">Companies</h1>
       {companies.length === 0 ? (
         <EmptyState className="mt-8" title="No companies listed yet" />

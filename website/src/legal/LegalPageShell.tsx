@@ -21,7 +21,7 @@ export function LegalPageShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="container-prose py-10 sm:py-14">
+    <div className="page-shell-narrow">
       <Link
         href="/legal"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted transition-colors hover:text-primary"

@@ -67,7 +67,7 @@ export default async function JobsPage({ searchParams }: { searchParams: SP }) {
   const clearAllHref = searchParams.q ? `/jobs?q=${encodeURIComponent(searchParams.q)}` : "/jobs";
 
   return (
-    <div className="container-page py-8 sm:py-10 lg:py-12">
+    <div className="page-shell">
       <PageHeader eyebrow="Careers" title="Jobs & Internships" />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[250px_1fr] lg:items-start">

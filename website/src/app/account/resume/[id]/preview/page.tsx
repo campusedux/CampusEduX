@@ -35,7 +35,7 @@ export default async function ResumePreviewPage({ params }: { params: { id: stri
   const spec = resolveDesign(templateSpec(resume.template), resume.design);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
+    <div className="container-prose py-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Link href="/resume" className="text-sm text-ink-muted hover:text-ink">
           &larr; Back to your resumes

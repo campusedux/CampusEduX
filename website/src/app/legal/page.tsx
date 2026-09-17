@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 
 export default function LegalHubPage() {
   return (
-    <div className="container-prose py-10 sm:py-14">
+    <div className="page-shell-narrow">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Legal &amp; Privacy</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Policies</h1>
       <p className="mt-3 text-[15px] leading-relaxed text-ink-muted">

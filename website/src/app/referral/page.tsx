@@ -28,7 +28,7 @@ export default async function ReferralPage() {
   }
 
   return (
-    <div className="container-prose py-10">
+    <div className="page-shell-narrow">
       <h1 className="text-3xl font-bold text-ink">Referral Program</h1>
       <p className="mt-3 text-ink-muted">
         Every CampusEduX student gets a referral code. When a friend joins through it, credit is added directly to your
