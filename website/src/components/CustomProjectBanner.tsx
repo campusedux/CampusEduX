@@ -33,10 +33,11 @@ export function CustomProjectBanner() {
         src={BANNER_SRC}
         alt="Custom Project Development — Have a project idea? We'll build it for you. Website, mobile app, web app, final year project, or custom software — share your idea and our team turns it into a complete, working project."
         fill
+        priority
         placeholder="blur"
         blurDataURL={IMAGE_BLUR_DATA_URL}
         className="object-contain"
-        sizes="100vw"
+        sizes="(max-width: 639px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), calc(100vw - 64px)"
       />
       <Link
         href="/custom-projects/start"
