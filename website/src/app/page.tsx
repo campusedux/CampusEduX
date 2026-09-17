@@ -8,7 +8,7 @@ import JobCard, { JobCardData } from "@/components/JobCard";
 import { SectionHeader, Rating, Reveal, Button, SearchBar } from "@/components/ui";
 import { LearningResources } from "@/components/home/LearningResources";
 import { ModuleGrid } from "@/components/home/ModuleGrid";
-import { CustomProjectBanner } from "@/components/CustomProjectBanner";
+import { CustomProjectHero } from "@/components/home/CustomProjectHero";
 import { HeroVisual } from "@/components/home/HeroVisual";
 import { BlogCard } from "@/components/blog/BlogCard";
 import { getLatestPosts } from "@/lib/blog";
@@ -79,7 +79,7 @@ export default async function HomePage() {
   return (
     <div className="pb-16 sm:pb-20">
       <section className="container-page pt-8 sm:pt-12" aria-label="Custom project development">
-        <CustomProjectBanner />
+        <CustomProjectHero />
       </section>
 
       {/* Hero — an admin `banners` row for placement 'home' overrides the default copy. */}
