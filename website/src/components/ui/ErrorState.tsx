@@ -28,7 +28,7 @@ export function ErrorState({
       )}
       role="alert"
     >
-      <AlertCircle className="h-8 w-8 text-danger" aria-hidden />
+      <AlertCircle className="h-9 w-9 text-danger" aria-hidden />
       <p className="mt-3 font-semibold text-ink">{title}</p>
       <p className="mt-1 max-w-sm text-sm text-ink-muted">{message}</p>
       {onRetry && (

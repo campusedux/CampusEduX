@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { formatINR } from "@/lib/format";
 import { absoluteUrl } from "@/lib/seo";
+import { PageHeader } from "@/components/ui";
 
 export const revalidate = 300;
 export const metadata: Metadata = {
@@ -62,11 +63,10 @@ export default async function CustomProjectsPage() {
 
   return (
     <div className="page-shell">
-      <h1 className="text-3xl font-bold text-ink">Custom Projects</h1>
-      <p className="mt-3 max-w-2xl text-ink-muted">
-        Need something the marketplace doesn&apos;t have yet? Describe what you need, pay a small token to start, and the
-        CampusEduX team builds and delivers it — tracked the same way as everything else in your account.
-      </p>
+      <PageHeader
+        title="Custom Projects"
+        description="Need something the marketplace doesn't have yet? Describe what you need, pay a small token to start, and the CampusEduX team builds and delivers it — tracked the same way as everything else in your account."
+      />
 
       <div className="mt-5 flex flex-wrap gap-3">
         <Link href="/custom-projects/start" className="btn-primary">

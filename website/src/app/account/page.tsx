@@ -46,7 +46,7 @@ export default async function AccountOverviewPage() {
             <Link
               key={c.href}
               href={c.href}
-              className="group rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+              className="group card card-hover p-5"
             >
               <div className="flex items-center justify-between">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
@@ -73,7 +73,7 @@ export default async function AccountOverviewPage() {
             <Link
               key={s.href}
               href={s.href}
-              className="group flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+              className="group card card-hover flex items-center gap-3 p-4"
             >
               <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface">
                 <Icon className="h-[18px] w-[18px] text-ink-muted group-hover:text-primary" aria-hidden />

@@ -118,7 +118,7 @@ export default function Footer() {
           {/* Brand — always visible above the link groups. */}
           <div className="pb-8 sm:col-span-3 sm:pb-0 lg:col-span-1">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-base font-black text-white shadow-[0_4px_12px_-3px_rgba(79,57,246,0.5)]">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary text-base font-black text-white shadow-[0_4px_12px_-3px_rgba(79,57,246,0.5)]">
                 C
               </span>
               <span className="text-base font-bold tracking-tight text-ink">

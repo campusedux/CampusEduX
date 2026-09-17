@@ -11,7 +11,7 @@ export function TemplateShowcaseCard({ template }: { template: ResolvedTemplate 
   return (
     <Link
       href="/resume/templates"
-      className="group block overflow-hidden rounded-2xl border border-line bg-white shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+      className="group card card-hover block overflow-hidden"
     >
       <div className="relative border-b border-line bg-surface">
         <ResumeThumbnail template={template} model={model} />
