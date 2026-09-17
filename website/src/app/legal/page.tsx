@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { LEGAL, CURRENT_LEGAL_VERSION, formatLegalDate } from "@/legal/config";
 import { fillTokens } from "@/legal/interpolate";
 import { LEGAL_INDEX } from "@/legal/registry";
@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     description: `The policies that govern your use of ${LEGAL.appName}, on the web and in the app.`,
     url: absoluteUrl("/legal"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
   robots: { index: true, follow: true },
 };

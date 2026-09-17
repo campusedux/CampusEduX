@@ -4,7 +4,7 @@ import { ListChecks } from "lucide-react";
 import { getLearningTree, getLearningGridBrief, getLearningGridSlugs, getGridScopedTests, firstTopicOf } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
 import { Breadcrumb, Button } from "@/components/ui";
-import { absoluteUrl, breadcrumbJsonLd, courseJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, courseJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { DocsShell } from "../_components/DocsShell";
 import { CourseHeader } from "../_components/CourseHeader";
 import { TopicSection } from "../_components/TopicSection";
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: { params: { gridSlug: string 
       description,
       url: absoluteUrl(`/learning/${grid.slug}`),
       type: "website",
-      ...(grid.cover_image_url ? { images: [{ url: grid.cover_image_url }] } : {}),
+      images: grid.cover_image_url ? [{ url: grid.cover_image_url }] : [DEFAULT_OG_IMAGE],
     },
   };
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Code2, TerminalSquare, History, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/ui";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { getPracticeCategories } from "@/lib/practice";
 
 export const revalidate = 300;
@@ -18,6 +18,7 @@ export const metadata: Metadata = {
     description: "Coding problems, an online compiler, and your submissions — all in one place.",
     url: absoluteUrl("/practice"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
 };
 

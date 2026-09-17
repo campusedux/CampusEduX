@@ -13,7 +13,7 @@ import { BlogCard } from "@/components/blog/BlogCard";
 import { EmptyState, Pagination, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { BRAND } from "@/lib/brand";
 
 export const revalidate = 300;
@@ -31,6 +31,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: absoluteUrl("/blog"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: { card: "summary_large_image", title: `Blog · ${BRAND.name}`, description: DESCRIPTION },
 };

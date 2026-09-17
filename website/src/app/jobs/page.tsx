@@ -5,7 +5,7 @@ import JobCard, { JobCardData } from "@/components/JobCard";
 import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { JobFilters } from "@/components/marketplace/JobFilters";
 import { getCachedJobsPage } from "@/lib/cache";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobSort, parsePage, totalPages } from "@/lib/marketplace";
 
 const DESCRIPTION =
@@ -20,6 +20,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: absoluteUrl("/jobs"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
 };
 export const revalidate = 120;

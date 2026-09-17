@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { CompanyCard, type CompanyCardData, EmptyState } from "@/components/ui";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 const DESCRIPTION =
   "See which companies are hiring on CampusEduX and browse each employer's live job and internship openings in one place.";
@@ -16,6 +16,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: absoluteUrl("/jobs/companies"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
 };
 

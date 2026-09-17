@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCodingProblem } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { CodingProblemBody } from "./CodingProblemBody";
 import { CodingProblemPremiumGate } from "./CodingProblemPremiumGate";
 
@@ -40,7 +40,7 @@ export async function generateMetadata({
     title: `${problem.title} · Coding Problem`,
     description,
     alternates: { canonical: url },
-    openGraph: { title: problem.title, description, url, type: "article" },
+    openGraph: { title: problem.title, description, url, type: "article", images: [DEFAULT_OG_IMAGE] },
     twitter: { card: "summary", title: problem.title, description },
     other: { "topic:name": topic.title },
   };

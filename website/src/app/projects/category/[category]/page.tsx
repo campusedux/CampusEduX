@@ -5,7 +5,7 @@ import type { ProjectCardData } from "@/components/ProjectCard";
 import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
 import { getCachedCategoryPreview, getCachedCategoryIds } from "@/lib/cache";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 export const revalidate = 300;
 
@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: { params: { category: string 
     title: `${name} projects`,
     description,
     alternates: { canonical: url },
-    openGraph: { title: `${name} projects | CampusEduX`, description, url, type: "website" },
+    openGraph: { title: `${name} projects | CampusEduX`, description, url, type: "website", images: [DEFAULT_OG_IMAGE] },
   };
 }
 

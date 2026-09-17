@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, ChevronRight, Lock, Download, Video } from "luci
 import { getLearningTree, getLearningTopicPage } from "@/lib/learning";
 import { Markdown } from "@/components/learning/Markdown";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { DocsShell } from "../../_components/DocsShell";
 import { LearningBookmarkButton } from "./LearningBookmarkButton";
 import { PremiumTopicContent } from "./PremiumTopicContent";
@@ -39,7 +39,7 @@ export async function generateMetadata({
     title: `${topic.title} · ${grid.name}`,
     description,
     alternates: { canonical: url },
-    openGraph: { title: topic.title, description, url, type: "article" },
+    openGraph: { title: topic.title, description, url, type: "article", images: [DEFAULT_OG_IMAGE] },
     twitter: { card: "summary", title: topic.title, description },
   };
 }

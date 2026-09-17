@@ -3,7 +3,7 @@ import { getPublicSupabase } from "@/lib/supabase/server";
 import { DEFAULT_RESOLVED_TEMPLATES, resolveTemplate, type ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
 import { demoRenderModel, demoResume } from "@/lib/resumeBuilder/demoResumes";
 import { TemplateGallery, type TemplateDemo } from "./TemplateGallery";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 const DESCRIPTION =
   "Browse résumé templates on CampusEduX — each one opens with a complete, realistic demo résumé you can edit or clear and make your own.";
@@ -18,6 +18,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: absoluteUrl("/resume/templates"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
 };
 

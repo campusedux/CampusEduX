@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import CompilerWorkspace from "./CompilerWorkspace";
 import { CompilerFallback } from "./CompilerFallback";
 
@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     description: "Write, run and practise programming code online with CampusEduX.",
     url: absoluteUrl("/compiler"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
     card: "summary",

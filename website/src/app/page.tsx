@@ -17,6 +17,7 @@ import { BRAND } from "@/lib/brand";
 import { inWindow } from "@/lib/home";
 import { getCachedHomeData } from "@/lib/cache";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image";
+import { DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 export const revalidate = 300; // 5-min ISR — catalog + CMS change via the admin panel, not per request
 
@@ -62,7 +63,7 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title: "CampusEduX",
       description: "Projects · Jobs · Placement Prep · Resume · Custom Projects — for students.",
-      images: banner?.image_url ? [{ url: banner.image_url }] : undefined,
+      images: banner?.image_url ? [{ url: banner.image_url }] : [DEFAULT_OG_IMAGE],
     },
   };
 }

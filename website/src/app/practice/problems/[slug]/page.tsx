@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getPracticeProblem } from "@/lib/practice";
 import { practiceCrumbs } from "@/lib/practice.types";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { CodingProblemBody } from "@/app/coding-problems/[problemSlug]/CodingProblemBody";
 import { PracticeProblemPremiumGate } from "./PracticeProblemPremiumGate";
 
@@ -41,7 +41,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     title: `${problem.title} · Practice`,
     description,
     alternates: { canonical: url },
-    openGraph: { title: problem.title, description, url, type: "article" },
+    openGraph: { title: problem.title, description, url, type: "article", images: [DEFAULT_OG_IMAGE] },
     twitter: { card: "summary", title: problem.title, description },
     other: { "topic:name": categoryName },
   };

@@ -7,7 +7,7 @@ import { Building2, MapPin, Clock, Wallet } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import JsonLd from "@/components/JsonLd";
 import { TagPill, Breadcrumb } from "@/components/ui";
-import { absoluteUrl, breadcrumbJsonLd, jobPostingIdentifier, hiringOrganizationJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, jobPostingIdentifier, hiringOrganizationJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { getCachedJobDetail, getCachedRecentJobIds } from "@/lib/cache";
 import JobApplyPanel from "./JobApplyPanel";
 
@@ -44,7 +44,12 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     title: `${job.title} at ${company}`,
     description: (job.description || `${job.title} — ${company}`).slice(0, 155),
     alternates: { canonical: absoluteUrl(`/jobs/${params.id}`) },
-    openGraph: { title: `${job.title} at ${company}`, url: absoluteUrl(`/jobs/${params.id}`), type: "website" },
+    openGraph: {
+      title: `${job.title} at ${company}`,
+      url: absoluteUrl(`/jobs/${params.id}`),
+      type: "website",
+      images: [DEFAULT_OG_IMAGE],
+    },
     twitter: { card: "summary", title: `${job.title} at ${company}` },
   };
 }

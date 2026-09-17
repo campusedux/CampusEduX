@@ -6,7 +6,7 @@ import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import { FilterSheet, Pagination, EmptyState, PageHeader } from "@/components/ui";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
 import { getCachedProjectsPage, getCachedCategories } from "@/lib/cache";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import {
   PROJECT_PAGE_SIZE,
   PROJECT_SORTS,
@@ -29,6 +29,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: absoluteUrl("/projects"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
 };
 export const revalidate = 120;

@@ -6,6 +6,15 @@ export function absoluteUrl(path: string): string {
   return `${SITE_URL.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+// Next.js metadata objects replace per-key rather than deep-merge: a page
+// that sets its own `openGraph` (almost every route here, for a custom
+// title/description) fully shadows the layout's `openGraph.images` *and*
+// the app/opengraph-image.tsx file-convention default for that page. So the
+// sitewide fallback has to be listed explicitly in each page's own
+// `openGraph.images` when it has no image of its own — this is that shared
+// value, not a new asset (it's the same app/opengraph-image.tsx route).
+export const DEFAULT_OG_IMAGE = absoluteUrl("/opengraph-image");
+
 /** schema.org BreadcrumbList for a detail page. */
 export function breadcrumbJsonLd(items: { name: string; path: string }[]): Record<string, unknown> {
   return {

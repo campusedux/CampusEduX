@@ -5,7 +5,7 @@ import { getLearningGrids, searchLearning } from "@/lib/learning";
 import type { LearningGridCard } from "@/lib/learning";
 import { EmptyState, Badge, ResourceCard, PageHeader } from "@/components/ui";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, courseListJsonLd } from "@/lib/seo";
+import { absoluteUrl, courseListJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 export const revalidate = 300;
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description:
     "Free, structured learning resources on CampusEduX — tutorials and documentation across programming, DSA, web development, databases and more.",
   alternates: { canonical: absoluteUrl("/learning") },
-  openGraph: { title: "Learning · CampusEduX", url: absoluteUrl("/learning"), type: "website" },
+  openGraph: { title: "Learning · CampusEduX", url: absoluteUrl("/learning"), type: "website", images: [DEFAULT_OG_IMAGE] },
 };
 
 type SP = { q?: string };

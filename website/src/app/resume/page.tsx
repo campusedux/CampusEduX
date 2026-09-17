@@ -10,7 +10,7 @@ import { computeCompletion } from "@/lib/resumeBuilder/content";
 import { DEFAULT_RESOLVED_TEMPLATES, resolveTemplate, templateSpec, type ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
 import { TemplateShowcaseCard } from "@/components/resumeBuilder/TemplateShowcaseCard";
 import { ResumeDashboard, type DashboardResume } from "@/components/resumeBuilder/ResumeDashboard";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 const DESCRIPTION =
   "Build an ATS-friendly résumé on CampusEduX — pick a template, start from real demo content, track your ATS score, and export a polished PDF.";
@@ -24,6 +24,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: absoluteUrl("/resume"),
     type: "website",
+    images: [DEFAULT_OG_IMAGE],
   },
 };
 export const dynamic = "force-dynamic";

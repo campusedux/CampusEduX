@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import JsonLd from "@/components/JsonLd";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import { Badge, Rating, PriceDisplay, TagPill, ReviewCard, SectionHeader, EmptyState, Breadcrumb } from "@/components/ui";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { getCachedProjectDetail, getCachedTopProjectIds } from "@/lib/cache";
 import ProjectPurchasePanel from "./ProjectPurchasePanel";
 import Gallery from "./Gallery";
@@ -52,7 +52,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const result = await getProject(params.id);
   if (!result?.project) return { title: "Project not found", robots: { index: false, follow: false } };
   const { project } = result;
-  const image = project.thumbnail_url ? [{ url: project.thumbnail_url }] : undefined;
+  const image = project.thumbnail_url ? [{ url: project.thumbnail_url }] : [DEFAULT_OG_IMAGE];
   return {
     title: project.title,
     description: (project.description || "").slice(0, 155),
