@@ -1,16 +1,17 @@
 /** @type {import('next').NextConfig} */
 
 // Deliberately permissive enough for what this app actually loads: the
-// Supabase project (REST + Edge Functions + Storage) and Razorpay's checkout
-// script/iframe (wallet top-up + Premium). Fonts are self-hosted by
-// next/font, so no external font host is needed. Nothing else.
+// Supabase project (REST + Edge Functions + Storage), Razorpay's checkout
+// script/iframe (wallet top-up + Premium), and GA4's gtag.js (script) plus
+// its collect beacon (connect). Fonts are self-hosted by next/font, so no
+// external font host is needed. Nothing else.
 //
 // `next dev` (Fast Refresh / HMR / webpack eval source-maps) evaluates code
 // with eval(), so 'unsafe-eval' is required in development only. A production
 // build never needs it, so it stays out of the deployed policy.
 const isDev = process.env.NODE_ENV !== "production";
 const scriptSrc = [
-  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com",
   isDev ? "'unsafe-eval'" : "",
 ]
   .filter(Boolean)
@@ -22,7 +23,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self' data: https://*.supabase.co",
-  "connect-src 'self' https://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com",
+  "connect-src 'self' https://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://www.google-analytics.com https://analytics.google.com",
   "frame-src https://api.razorpay.com https://checkout.razorpay.com",
   "frame-ancestors 'none'",
   // Nothing on the site uses <object>/<embed>/<applet>, and there is no
