@@ -13,6 +13,21 @@ import JobApplyPanel from "./JobApplyPanel";
 
 export const revalidate = 300;
 
+// `jobs.job_type` is DB-constrained (mobile-app/supabase/migrations/0010_jobs.sql)
+// to exactly these 4 values. Google's JobPosting `employmentType` only accepts a
+// fixed enum (FULL_TIME, PART_TIME, CONTRACTOR, TEMPORARY, INTERN, VOLUNTEER,
+// PER_DIEM, OTHER) — "Internship"/"Contract" do NOT uppercase-transform into
+// valid members of it, so each value is mapped explicitly instead of
+// string-transformed. A `job_type` outside this map (shouldn't happen given the
+// DB constraint, but the column is nullable) safely omits `employmentType`
+// rather than guessing — never fabricate a value the source data doesn't support.
+const EMPLOYMENT_TYPE: Record<string, string> = {
+  "Full Time": "FULL_TIME",
+  "Part Time": "PART_TIME",
+  Internship: "INTERN",
+  Contract: "CONTRACTOR",
+};
+
 // See the note in projects/[id]/page.tsx — registering generateStaticParams is
 // what turns this route into ISR instead of per-request dynamic rendering.
 export async function generateStaticParams() {
@@ -23,7 +38,7 @@ const getJob = cache((id: string) => getCachedJobDetail(id));
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const job = await getJob(params.id);
-  if (!job) return { title: "Job not found" };
+  if (!job) return { title: "Job not found", robots: { index: false, follow: false } };
   const company = job.company_name || job.company?.name || "a CampusEduX employer";
   return {
     title: `${job.title} at ${company}`,
@@ -48,7 +63,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
     description: job.description || job.title,
     identifier: jobPostingIdentifier(company, job.id),
     datePosted: job.posted_at,
-    employmentType: job.job_type?.toUpperCase().replace(" ", "_"),
+    employmentType: job.job_type ? EMPLOYMENT_TYPE[job.job_type] : undefined,
     hiringOrganization: hiringOrganizationJsonLd({ name: company, logoUrl: logo, website: job.company?.website ?? null }),
     jobLocation: { "@type": "Place", address: job.location || "India" },
   };

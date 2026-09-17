@@ -24,7 +24,7 @@ const getCompany = cache(async (id: string) => {
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const res = await getCompany(params.id);
-  if (!res) return { title: "Company not found" };
+  if (!res) return { title: "Company not found", robots: { index: false, follow: false } };
   return {
     title: `${res.company.name} — jobs`,
     description: (res.company.about || `Open roles at ${res.company.name}`).slice(0, 155),

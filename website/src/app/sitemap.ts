@@ -32,7 +32,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ] = await Promise.all([
       supabase.from("projects").select("id,updated_at").limit(1000),
       supabase.from("jobs").select("id,updated_at").limit(1000),
-      supabase.from("categories").select("id").limit(200),
+      supabase.from("categories").select("id,updated_at").limit(200),
       supabase.from("companies").select("id,updated_at").limit(500),
       supabase.rpc("learning_sitemap", { p_platform: "website" }),
       supabase.rpc("coding_problems_sitemap", { p_platform: "website" }),
@@ -46,7 +46,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     projects?.forEach((p) => entries.push({ url: `${siteUrl}/projects/${p.id}`, lastModified: new Date(p.updated_at) }));
     jobs?.forEach((j) => entries.push({ url: `${siteUrl}/jobs/${j.id}`, lastModified: new Date(j.updated_at) }));
-    categories?.forEach((c) => entries.push({ url: `${siteUrl}/projects/category/${c.id}` }));
+    categories?.forEach((c) => entries.push({ url: `${siteUrl}/projects/category/${c.id}`, lastModified: new Date(c.updated_at) }));
     companies?.forEach((c) => entries.push({ url: `${siteUrl}/jobs/companies/${c.id}`, lastModified: new Date(c.updated_at) }));
 
     // Published, website-visible Learning grid + topic URLs (row with a null

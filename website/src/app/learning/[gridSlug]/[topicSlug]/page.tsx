@@ -30,7 +30,7 @@ export async function generateMetadata({
   params: { gridSlug: string; topicSlug: string };
 }): Promise<Metadata> {
   const page = await getLearningTopicPage(params.gridSlug, params.topicSlug);
-  if (!page) return { title: "Topic not found" };
+  if (!page) return { title: "Topic not found", robots: { index: false, follow: false } };
   const { topic, grid } = page;
   const bodyText = page.contents.map((c) => c.body).join(" ").replace(/[#>*`_|\-]+/g, " ").trim();
   const description = (topic.short_description || bodyText || `${topic.title} — ${grid.name} on CampusEduX.`).slice(0, 155);

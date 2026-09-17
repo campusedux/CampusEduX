@@ -50,7 +50,7 @@ const getProject = cache(async (id: string) => {
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const result = await getProject(params.id);
-  if (!result?.project) return { title: "Project not found" };
+  if (!result?.project) return { title: "Project not found", robots: { index: false, follow: false } };
   const { project } = result;
   const image = project.thumbnail_url ? [{ url: project.thumbnail_url }] : undefined;
   return {

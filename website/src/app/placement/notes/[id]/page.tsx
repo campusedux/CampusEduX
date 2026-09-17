@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 import { resolveLegacyNotePath } from "@/lib/learning";
 
 export const revalidate = 300;
@@ -11,5 +11,5 @@ export const revalidate = 300;
  * published Learning topic yet.
  */
 export default async function LegacyNoteRedirect({ params }: { params: { id: string } }) {
-  redirect(await resolveLegacyNotePath(params.id));
+  permanentRedirect(await resolveLegacyNotePath(params.id));
 }

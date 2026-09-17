@@ -36,7 +36,7 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const post = await getBlogPost(params.slug);
-  if (!post) return { title: "Article not found" };
+  if (!post) return { title: "Article not found", robots: { index: false, follow: false } };
 
   const description =
     post.seo_description || post.excerpt || stripMarkdown(post.content).slice(0, 155);

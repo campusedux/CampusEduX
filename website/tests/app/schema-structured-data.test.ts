@@ -99,6 +99,59 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
     expect(job).not.toHaveProperty("applicantLocationRequirements");
   });
 
+  it.each([
+    ["Full Time", "FULL_TIME"],
+    ["Part Time", "PART_TIME"],
+    ["Internship", "INTERN"],
+    ["Contract", "CONTRACTOR"],
+  ])("maps job_type %s to the valid Google enum %s", async (jobType, expected) => {
+    vi.mocked(getCachedJobDetail).mockResolvedValueOnce({
+      id: "job-1",
+      title: "Engineer",
+      description: "Do engineering.",
+      posted_at: "2026-01-01T00:00:00.000Z",
+      job_type: jobType,
+      location: "Bengaluru",
+      salary_min_lpa: null,
+      salary_max_lpa: null,
+      company_name: "Acme Corp",
+      company_logo_url: null,
+      company: { id: "c1", name: "Acme Corp", logo_url: null, about: "", website: null },
+    });
+
+    const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
+    const element = (await JobDetailPage({ params: { id: "job-1" } })) as unknown as Node;
+    const blocks = jsonLdBlocks(element);
+    const job = blocks.find((d) => d["@type"] === "JobPosting") as Record<string, unknown>;
+
+    expect(job.employmentType).toBe(expected);
+  });
+
+  it("omits employmentType for a job_type outside the known 4 DB values, instead of guessing", async () => {
+    vi.mocked(getCachedJobDetail).mockResolvedValueOnce({
+      id: "job-2",
+      title: "Engineer",
+      description: "Do engineering.",
+      posted_at: "2026-01-01T00:00:00.000Z",
+      job_type: "Freelance",
+      location: "Bengaluru",
+      salary_min_lpa: null,
+      salary_max_lpa: null,
+      company_name: "Acme Corp",
+      company_logo_url: null,
+      company: { id: "c1", name: "Acme Corp", logo_url: null, about: "", website: null },
+    });
+
+    const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
+    const element = (await JobDetailPage({ params: { id: "job-2" } })) as unknown as Node;
+    const blocks = jsonLdBlocks(element);
+    const job = blocks.find((d) => d["@type"] === "JobPosting") as Record<string, unknown>;
+
+    // `JSON.stringify` (inside <JsonLd>) drops undefined-valued keys entirely
+    // from the rendered script tag, so this never emits a fabricated enum.
+    expect(job.employmentType).toBeUndefined();
+  });
+
   it("omits logo/sameAs when the company row has neither", async () => {
     vi.mocked(getCachedJobDetail).mockResolvedValueOnce({
       id: "job-99",
