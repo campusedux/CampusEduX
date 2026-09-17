@@ -5,6 +5,7 @@ import { BottomNav } from "@/components/nav/BottomNav";
 import { AnnouncementBar } from "@/components/home/AnnouncementBar";
 import Footer from "@/components/Footer";
 import JsonLd from "@/components/JsonLd";
+import GoogleAnalytics from "@/components/analytics/GoogleAnalytics";
 import { BRAND } from "@/lib/brand";
 import { websiteJsonLd } from "@/lib/seo";
 
@@ -82,6 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <JsonLd data={organizationJsonLd} />
         <JsonLd data={websiteJsonLd()} />
+        <GoogleAnalytics />
         <Header />
         <AnnouncementBar />
         <main id="main-content" className="min-h-[60vh]">
