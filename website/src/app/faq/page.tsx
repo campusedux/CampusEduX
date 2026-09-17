@@ -4,9 +4,13 @@ import JsonLd from "@/components/JsonLd";
 import { EmptyState } from "@/components/ui";
 import { absoluteUrl, faqJsonLd } from "@/lib/seo";
 
+const DESCRIPTION =
+  "Frequently asked questions about CampusEduX, organised by category, with straightforward answers to help you get started or find what you need.";
+
 export const revalidate = 300;
 export const metadata: Metadata = {
   title: "Frequently Asked Questions",
+  description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/faq") },
 };
 

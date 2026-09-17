@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { absoluteUrl } from "@/lib/seo";
 
+const DESCRIPTION =
+  "CampusEduX brings together the project marketplace, jobs & internships, learning resources, a resume builder and custom project development — all in one app, backed by one account.";
+
 export const metadata: Metadata = {
   title: "About CampusEduX",
+  description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/about") },
 };
 
