@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getCodingProblem } from "@/lib/learning";
+import { getCodingProblem, getCodingProblemRelated } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { CodingProblemBody } from "./CodingProblemBody";
@@ -47,7 +47,10 @@ export async function generateMetadata({
 }
 
 export default async function CodingProblemPage({ params }: { params: { problemSlug: string } }) {
-  const detail = await getCodingProblem(params.problemSlug);
+  const [detail, relatedData] = await Promise.all([
+    getCodingProblem(params.problemSlug),
+    getCodingProblemRelated(params.problemSlug),
+  ]);
   if (!detail) notFound();
   const { problem, topic, locked } = detail;
   const backToTopic = `/learning/${topic.grid_slug}/${topic.topic_slug}`;
@@ -71,6 +74,8 @@ export default async function CodingProblemPage({ params }: { params: { problemS
       ) : (
         <CodingProblemBody
           detail={detail}
+          related={relatedData?.related}
+          adjacent={relatedData ? { prev: relatedData.prev, next: relatedData.next } : undefined}
           submitEndpoint="/api/coding-problems/submit"
           submissionsHref="/practice/submissions"
         />

@@ -162,6 +162,30 @@ export interface CodingProblemDetail {
   solution_approach: string;
 }
 
+// ---------------------------------------------------------------------------
+// Internal linking — related problems + prev/next problem nav (migration
+// 0102/074 RPCs: coding_problem_related / practice_problem_related). Shared
+// shape for both the Learning topic-practice and global Practice systems.
+// ---------------------------------------------------------------------------
+export interface RelatedProblemCard {
+  slug: string;
+  title: string;
+  difficulty: string;
+  is_premium: boolean;
+  supported_languages: string[];
+}
+
+export interface AdjacentProblem {
+  slug: string;
+  title: string;
+}
+
+export interface CodingProblemRelated {
+  related: RelatedProblemCard[];
+  prev: AdjacentProblem | null;
+  next: AdjacentProblem | null;
+}
+
 export interface MockTestDetail {
   id: string;
   title: string;

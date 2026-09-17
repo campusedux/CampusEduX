@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, ChevronRight, Lock, Download, Video } from "lucide-react";
 import { getLearningTree, getLearningTopicPage } from "@/lib/learning";
-import { Markdown } from "@/components/learning/Markdown";
+import { Markdown, createTopicLinkState } from "@/components/learning/Markdown";
+import { buildTopicLinkIndex } from "@/lib/topicLinks";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { DocsShell } from "../../_components/DocsShell";
@@ -56,6 +57,11 @@ export default async function TopicPage({
   ]);
   if (!tree || !page) notFound();
   const { topic, section, grid, locked, contents, prev, next } = page;
+  // Internal-linking glossary for this page — built once from the already-
+  // fetched grid tree (no extra query), shared across every content block's
+  // <Markdown> call below so a given topic is only ever auto-linked once.
+  const topicLinkIndex = buildTopicLinkIndex(tree, grid.slug, topic.slug);
+  const topicLinkState = createTopicLinkState();
 
   return (
     <>
@@ -115,7 +121,7 @@ export default async function TopicPage({
                   {block.content_format === "plain" ? (
                     <p className="whitespace-pre-line leading-7 text-ink-muted">{block.body}</p>
                   ) : (
-                    <Markdown source={block.body} />
+                    <Markdown source={block.body} topicLinks={topicLinkIndex} linkState={topicLinkState} />
                   )}
                   {(block.file_url || block.video_url) && (
                     <div className="mt-4 flex flex-wrap gap-3">

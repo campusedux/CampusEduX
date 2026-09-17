@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ChevronRight, Lock } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, ChevronRight, Lock } from "lucide-react";
 import { Markdown } from "@/components/learning/Markdown";
-import type { CodingProblemDetail } from "@/lib/learning.types";
+import type { AdjacentProblem, CodingProblemDetail, RelatedProblemCard } from "@/lib/learning.types";
 import { cn } from "@/lib/cn";
 import { ProblemTabs } from "./ProblemTabs";
 
@@ -35,10 +35,33 @@ export function defaultProblemCrumbs(detail: CodingProblemDetail): ProblemCrumb[
  * `nav` overrides the breadcrumb: the Learning topic-practice route lets it
  * default to `Learning → topic → <problem title>`; the global Practice route
  * passes `Practice → Coding Problems → <problem title>`.
+ *
+ * `related`/`adjacent` are the internal-linking additions from migration
+ * 0102/074 (`coding_problem_related` / `practice_problem_related`) — optional
+ * so callers that don't pass them (none currently) render unchanged.
+ * `problemBasePath` picks the right route prefix for those links: topic-
+ * scoped problems live under `/coding-problems`, Practice problems under
+ * `/practice/problems` — the two systems are never cross-linked.
  */
-export function ProblemPanel({ detail, nav }: { detail: CodingProblemDetail; nav?: ProblemCrumb[] }) {
-  const { problem, editorial, solution_approach } = detail;
+export function ProblemPanel({
+  detail,
+  nav,
+  related,
+  adjacent,
+  problemBasePath = "/coding-problems",
+}: {
+  detail: CodingProblemDetail;
+  nav?: ProblemCrumb[];
+  related?: RelatedProblemCard[];
+  adjacent?: { prev: AdjacentProblem | null; next: AdjacentProblem | null };
+  problemBasePath?: string;
+}) {
+  const { problem, topic, editorial, solution_approach } = detail;
   const crumbs: ProblemCrumb[] = nav ?? defaultProblemCrumbs(detail);
+  // Only the Learning topic-scoped system has a real tutorial relationship in
+  // the data model — Practice problems (empty grid_slug/topic_slug, see
+  // `getPracticeProblem`) never get a fabricated "Learn the Concept" link.
+  const tutorialHref = topic.grid_slug && topic.topic_slug ? `/learning/${topic.grid_slug}/${topic.topic_slug}` : null;
 
   const statement = problem.description ? (
     <Markdown source={problem.description} />
@@ -147,6 +170,15 @@ export function ProblemPanel({ detail, nav }: { detail: CodingProblemDetail; nav
         ) : null}
       </div>
 
+      {tutorialHref ? (
+        <Link
+          href={tutorialHref}
+          className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+        >
+          <BookOpen className="h-4 w-4" aria-hidden /> Learn the Concept: {topic.title}
+        </Link>
+      ) : null}
+
       <div className="mt-4">
         <ProblemTabs
           problem={statement}
@@ -156,6 +188,69 @@ export function ProblemPanel({ detail, nav }: { detail: CodingProblemDetail; nav
           editorial={editorialNode}
         />
       </div>
+
+      {related?.length ? (
+        <section className="mt-8 border-t border-line pt-6" aria-label="Related Problems">
+          <h2 className="text-lg font-bold text-ink">Related Problems</h2>
+          <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+            {related.map((r) => (
+              <li key={r.slug} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-ink">{r.title}</span>
+                  {r.is_premium ? (
+                    <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-500" aria-hidden />
+                  ) : null}
+                </div>
+                <div className="mt-1 text-xs text-ink-faint">
+                  {r.difficulty}
+                  {r.supported_languages?.length ? ` · ${r.supported_languages.join(", ")}` : ""}
+                </div>
+                <Link
+                  href={`${problemBasePath}/${r.slug}`}
+                  className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                >
+                  Solve Problem <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {adjacent?.prev || adjacent?.next ? (
+        <nav className="mt-8 flex items-stretch justify-between gap-3 border-t border-line pt-6" aria-label="Problem navigation">
+          {adjacent.prev ? (
+            <Link
+              href={`${problemBasePath}/${adjacent.prev.slug}`}
+              className="group flex flex-1 flex-col rounded-xl border border-line p-3 text-left hover:border-primary/30 hover:bg-surface"
+            >
+              <span className="flex items-center gap-1 text-xs text-ink-faint">
+                <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Previous Problem
+              </span>
+              <span className="mt-0.5 text-sm font-semibold text-ink group-hover:text-primary">
+                {adjacent.prev.title}
+              </span>
+            </Link>
+          ) : (
+            <span className="flex-1" />
+          )}
+          {adjacent.next ? (
+            <Link
+              href={`${problemBasePath}/${adjacent.next.slug}`}
+              className="group flex flex-1 flex-col items-end rounded-xl border border-line p-3 text-right hover:border-primary/30 hover:bg-surface"
+            >
+              <span className="flex items-center gap-1 text-xs text-ink-faint">
+                Next Problem <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+              </span>
+              <span className="mt-0.5 text-sm font-semibold text-ink group-hover:text-primary">
+                {adjacent.next.title}
+              </span>
+            </Link>
+          ) : (
+            <span className="flex-1" />
+          )}
+        </nav>
+      ) : null}
     </div>
   );
 }

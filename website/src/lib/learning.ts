@@ -14,6 +14,7 @@ import type {
   LearningSearchHit,
   TopicPractice,
   CodingProblemDetail,
+  CodingProblemRelated,
   MockTestDetail,
 } from "@/lib/learning.types";
 
@@ -41,6 +42,9 @@ export type {
   TopicMockTestCard,
   TopicCodingProblemCard,
   CodingProblemDetail,
+  CodingProblemRelated,
+  RelatedProblemCard,
+  AdjacentProblem,
   MockTestDetail,
 } from "@/lib/learning.types";
 export { firstTopicOf, flattenTopics } from "@/lib/learning.types";
@@ -232,6 +236,22 @@ export const getCodingProblem = cache(async (slug: string): Promise<CodingProble
   });
   if (error || !data) return null;
   return data as CodingProblemDetail;
+});
+
+/** Up to 3 related coding problems (same topic, topped up from sibling topics
+ *  in the same grid when the topic itself doesn't have 3) plus prev/next
+ *  problem within the same topic, for a topic-scoped coding problem —
+ *  `coding_problem_related()` (migration 0102/074). Powers the internal-
+ *  linking "Related Problems" section + prev/next nav on `/coding-problems/*`. */
+export const getCodingProblemRelated = cache(async (slug: string): Promise<CodingProblemRelated | null> => {
+  const supabase = getPublicSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("coding_problem_related", {
+    p_slug: slug,
+    p_platform: PLATFORM,
+  });
+  if (error || !data) return null;
+  return data as CodingProblemRelated;
 });
 
 /** One topic Mock Test's meta for `/mock-tests/<id>` (instruction card +

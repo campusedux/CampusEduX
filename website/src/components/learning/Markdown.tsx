@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { CodeBlock } from "./CodeBlock";
 import { slugId } from "@/lib/blogText";
+import { createTopicLinkState, type TopicLinkEntry, type TopicLinkState } from "@/lib/topicLinks";
 
 export { slugId } from "@/lib/blogText";
+export { createTopicLinkState } from "@/lib/topicLinks";
 
 /** Allow only safe URL schemes for admin-authored Markdown links / images.
  *  Blocks `javascript:`, `vbscript:`, `data:` (except images), unknown schemes.
@@ -28,6 +31,8 @@ export function Markdown({
   source,
   className,
   headingLevelOffset = 1,
+  topicLinks,
+  linkState,
 }: {
   source: string;
   className?: string;
@@ -38,8 +43,95 @@ export function Markdown({
    * section (e.g. the blog article body) pass `0`.
    */
   headingLevelOffset?: number;
+  /**
+   * Internal-linking glossary (see `buildTopicLinkIndex` in `@/lib/topicLinks`).
+   * When provided, the FIRST mention of another topic's title in paragraph /
+   * list-item text (never headings, never inside an existing link/code span)
+   * becomes a link to that topic's canonical page. Omitted by every existing
+   * caller (blog body, problem statement/editorial) — behavior there is
+   * unchanged.
+   */
+  topicLinks?: TopicLinkEntry[];
+  /**
+   * Shared, mutable dedup/cap state across MULTIPLE `<Markdown>` calls that
+   * together make up one page (e.g. one call per content block) — a topic
+   * page passes the SAME state object to every block's `<Markdown>` so a
+   * given topic is linked at most once, and the total link count is capped,
+   * across the whole page rather than per block. Defaults to a fresh
+   * (per-call) state when omitted.
+   */
+  linkState?: TopicLinkState;
 }) {
-  return <div className={className}>{renderBlocks(source ?? "", headingLevelOffset)}</div>;
+  const linkCtx = buildLinkCtx(topicLinks, linkState);
+  return <div className={className}>{renderBlocks(source ?? "", headingLevelOffset, linkCtx)}</div>;
+}
+
+// --- topic auto-linking ----------------------------------------------------
+interface LinkCtx {
+  regex: RegExp;
+  termToEntry: Map<string, TopicLinkEntry>;
+  state: TopicLinkState;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildLinkCtx(entries: TopicLinkEntry[] | undefined, state: TopicLinkState | undefined): LinkCtx | null {
+  if (!entries?.length) return null;
+  const termToEntry = new Map<string, TopicLinkEntry>();
+  const allTerms: string[] = [];
+  for (const entry of entries) {
+    for (const term of entry.terms) {
+      if (termToEntry.has(term)) continue;
+      termToEntry.set(term, entry);
+      allTerms.push(term);
+    }
+  }
+  if (allTerms.length === 0) return null;
+  // Longest term first, so multi-word phrases win over a shorter overlapping term.
+  allTerms.sort((a, b) => b.length - a.length);
+  const pattern = allTerms.map(escapeRegExp).join("|");
+  return { regex: new RegExp(`\\b(?:${pattern})\\b`, "gi"), termToEntry, state: state ?? createTopicLinkState() };
+}
+
+/** Splits the PLAIN STRING nodes of an already-tokenized `renderInline()`
+ *  result on glossary terms, turning the first unused mention of each topic
+ *  into a link. Never touches non-string nodes (existing links/code/bold/
+ *  italic/images), so it can never nest inside them or corrupt a code span. */
+function applyTopicLinks(nodes: ReactNode[], ctx: LinkCtx | null, keyBase: string): ReactNode[] {
+  if (!ctx || ctx.state.linksLeft <= 0) return nodes;
+  const out: ReactNode[] = [];
+  let idx = 0;
+  for (const node of nodes) {
+    if (typeof node !== "string") {
+      out.push(node);
+      continue;
+    }
+    let last = 0;
+    ctx.regex.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while (ctx.state.linksLeft > 0 && (m = ctx.regex.exec(node))) {
+      const matched = m[0];
+      const entry = ctx.termToEntry.get(matched.toLowerCase());
+      if (!entry || ctx.state.usedTopics.has(entry.topicKey)) continue;
+      if (m.index > last) out.push(node.slice(last, m.index));
+      out.push(
+        <Link
+          key={`${keyBase}-tl${idx++}`}
+          href={entry.href}
+          className="font-medium text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
+        >
+          {matched}
+        </Link>,
+      );
+      ctx.state.usedTopics.add(entry.topicKey);
+      ctx.state.linksLeft -= 1;
+      last = m.index + matched.length;
+    }
+    if (last < node.length) out.push(node.slice(last));
+  }
+  return out;
 }
 
 // --- inline ----------------------------------------------------------------
@@ -87,7 +179,7 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
 }
 
 // --- blocks --------------------------------------------------------------
-function renderBlocks(src: string, headingLevelOffset = 1): ReactNode[] {
+function renderBlocks(src: string, headingLevelOffset = 1, linkCtx: LinkCtx | null = null): ReactNode[] {
   const lines = src.replace(/\r\n/g, "\n").split("\n");
   const out: ReactNode[] = [];
   let i = 0;
@@ -207,7 +299,7 @@ function renderBlocks(src: string, headingLevelOffset = 1): ReactNode[] {
         if (!item) break;
         items.push(
           <li key={`li${i}`} className="py-0.5 leading-relaxed">
-            {renderInline(item[2], `li${i}`)}
+            {applyTopicLinks(renderInline(item[2], `li${i}`), linkCtx, `li${i}`)}
           </li>,
         );
         i += 1;
@@ -241,7 +333,7 @@ function renderBlocks(src: string, headingLevelOffset = 1): ReactNode[] {
     }
     out.push(
       <p key={`b${k++}`} className="my-3 leading-7 text-ink-muted">
-        {renderInline(buf.join(" "), `b${k}`)}
+        {applyTopicLinks(renderInline(buf.join(" "), `b${k}`), linkCtx, `b${k}`)}
       </p>,
     );
   }

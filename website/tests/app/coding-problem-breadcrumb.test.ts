@@ -85,6 +85,7 @@ describe("Phase 3 Batch 2: defaultProblemCrumbs (Learning topic-practice breadcr
 // ---------------------------------------------------------------------------
 vi.mock("@/lib/learning", () => ({
   getCodingProblem: vi.fn(),
+  getCodingProblemRelated: vi.fn().mockResolvedValue(null),
 }));
 
 describe("Phase 3 Batch 2: /coding-problems/[problemSlug] page", () => {
@@ -126,6 +127,7 @@ describe("Phase 3 Batch 2: /coding-problems/[problemSlug] page", () => {
 // ---------------------------------------------------------------------------
 vi.mock("@/lib/practice", () => ({
   getPracticeProblem: vi.fn(),
+  getPracticeProblemRelated: vi.fn().mockResolvedValue(null),
 }));
 
 function makePracticeProblemDetail(title: string, locked = false): PracticeProblemDetail {

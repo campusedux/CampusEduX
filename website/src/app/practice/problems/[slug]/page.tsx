@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getPracticeProblem } from "@/lib/practice";
+import { getPracticeProblem, getPracticeProblemRelated } from "@/lib/practice";
 import { practiceCrumbs } from "@/lib/practice.types";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
@@ -48,7 +48,10 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 export default async function PracticeProblemPage({ params }: { params: { slug: string } }) {
-  const detail = await getPracticeProblem(params.slug);
+  const [detail, relatedData] = await Promise.all([
+    getPracticeProblem(params.slug),
+    getPracticeProblemRelated(params.slug),
+  ]);
   if (!detail) notFound();
   const { problem, category, locked } = detail;
 
@@ -72,6 +75,9 @@ export default async function PracticeProblemPage({ params }: { params: { slug: 
         <CodingProblemBody
           detail={detail}
           nav={practiceCrumbs(problem.title)}
+          related={relatedData?.related}
+          adjacent={relatedData ? { prev: relatedData.prev, next: relatedData.next } : undefined}
+          problemBasePath="/practice/problems"
           judgeEndpoint={JUDGE_ENDPOINT}
           submitEndpoint={SUBMIT_ENDPOINT}
           submissionsHref={SUBMISSIONS_HREF}

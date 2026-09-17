@@ -8,6 +8,9 @@ import type {
   PracticeQuery,
 } from "@/lib/practice.types";
 import { PRACTICE_PAGE_SIZE } from "@/lib/practice.types";
+import type { CodingProblemRelated } from "@/lib/learning.types";
+
+export type { CodingProblemRelated } from "@/lib/learning.types";
 
 /**
  * Read layer for the global Practice → Coding Problems section. Everything goes
@@ -98,6 +101,21 @@ export const getPracticeProblem = cache(async (slug: string): Promise<PracticePr
       title: payload.category?.name ?? payload.topic?.title ?? "Practice",
     },
   };
+});
+
+/** Up to 3 related practice problems (same category) plus prev/next problem
+ *  within the same category — `practice_problem_related()` (migration
+ *  0102/074). Powers the internal-linking "Related Problems" section +
+ *  prev/next nav on `/practice/problems/*`. */
+export const getPracticeProblemRelated = cache(async (slug: string): Promise<CodingProblemRelated | null> => {
+  const supabase = getPublicSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("practice_problem_related", {
+    p_slug: slug,
+    p_platform: PLATFORM,
+  });
+  if (error || !data) return null;
+  return data as CodingProblemRelated;
 });
 
 /** Published, website-visible practice problem slugs + last-modified, for `sitemap.ts`. */

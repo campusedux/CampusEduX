@@ -1,4 +1,4 @@
-import type { CodingProblemDetail } from "@/lib/learning.types";
+import type { AdjacentProblem, CodingProblemDetail, RelatedProblemCard } from "@/lib/learning.types";
 import CodingProblemWorkspace from "./CodingProblemWorkspace";
 import { CodingProblemLayout } from "./_components/CodingProblemLayout";
 import { ProblemPanel, type ProblemCrumb } from "./_components/ProblemPanel";
@@ -20,12 +20,18 @@ import { ProblemPanel, type ProblemCrumb } from "./_components/ProblemPanel";
 export function CodingProblemBody({
   detail,
   nav,
+  related,
+  adjacent,
+  problemBasePath,
   judgeEndpoint,
   submitEndpoint,
   submissionsHref,
 }: {
   detail: CodingProblemDetail;
   nav?: ProblemCrumb[];
+  related?: RelatedProblemCard[];
+  adjacent?: { prev: AdjacentProblem | null; next: AdjacentProblem | null };
+  problemBasePath?: string;
   judgeEndpoint?: string;
   submitEndpoint?: string;
   submissionsHref?: string;
@@ -35,7 +41,7 @@ export function CodingProblemBody({
 
   return (
     <CodingProblemLayout
-      left={<ProblemPanel detail={detail} nav={nav} />}
+      left={<ProblemPanel detail={detail} nav={nav} related={related} adjacent={adjacent} problemBasePath={problemBasePath} />}
       right={
         <CodingProblemWorkspace
           slug={problem.slug}
