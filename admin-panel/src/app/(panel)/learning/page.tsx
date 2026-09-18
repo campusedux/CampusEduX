@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Plus, LayoutGrid, FolderTree, FileText, BookOpen, Code2, ArrowRight } from 'lucide-react';
+import { Plus, LayoutGrid, FolderTree, FileText, BookOpen, Code2, MessageSquareText, ArrowRight } from 'lucide-react';
 import { requireModule } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, EmptyState } from '@/components/ui/primitives';
@@ -72,6 +72,24 @@ export default async function LearningDashboard({ searchParams }: { searchParams
             <div className="font-semibold text-ink">Coding Practice</div>
             <div className="text-sm text-ink-muted">
               The global Practice → Coding Problems library (separate from the grids below).
+            </div>
+          </div>
+        </div>
+        <ArrowRight size={18} className="flex-shrink-0 text-ink-faint" />
+      </Link>
+
+      <Link
+        href="/learning/interview-questions"
+        className="flex items-center justify-between gap-4 rounded-xl border border-border bg-white p-4 transition-colors hover:border-brand/40 hover:bg-surface-subtle"
+      >
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <MessageSquareText size={18} />
+          </span>
+          <div>
+            <div className="font-semibold text-ink">Interview Questions</div>
+            <div className="text-sm text-ink-muted">
+              Practice → Interview Questions — Category (language) → Topic → Question.
             </div>
           </div>
         </div>

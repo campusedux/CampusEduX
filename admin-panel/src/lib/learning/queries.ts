@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { safe, safeCount } from '@/lib/utils';
-import type { LearningStatus, ContentFormat, GridType } from '@/lib/learning/constants';
+import type { LearningStatus, ContentFormat, GridType, Difficulty } from '@/lib/learning/constants';
 import { LEARNING_PAGE_SIZE } from '@/lib/learning/constants';
 
 export { LEARNING_PAGE_SIZE } from '@/lib/learning/constants';
@@ -481,4 +481,151 @@ export async function getPracticeProblem(id: string): Promise<PracticeProblemRow
     .is('learning_topic_id', null)
     .maybeSingle();
   return (data ?? null) as unknown as PracticeProblemRow | null;
+}
+
+// ---------------------------------------------------------------------------
+// PRACTICE ▸ INTERVIEW QUESTIONS  (admin migration 075 · mobile 0103)
+// 3-level catalog, separate from both Learning and Practice ▸ Coding Problems:
+// `interview_categories` (one row per language, e.g. "Java") ->
+// `interview_topics` (e.g. "OOP") -> `interview_questions`. Managed under the
+// same `learning` permission module.
+// ---------------------------------------------------------------------------
+export interface InterviewCategoryRow {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  icon: string;
+  sort_order: number;
+  status: LearningStatus;
+  show_on_website: boolean;
+  show_on_mobile: boolean;
+  topic_count: number;
+}
+
+export interface InterviewTopicRow {
+  id: string;
+  category_id: string;
+  name: string;
+  slug: string;
+  description: string;
+  sort_order: number;
+  status: LearningStatus;
+  show_on_website: boolean;
+  show_on_mobile: boolean;
+  category_name?: string;
+  category_slug?: string;
+  question_count: number;
+}
+
+export interface InterviewQuestionRow {
+  id: string;
+  topic_id: string;
+  question: string;
+  answer: string;
+  example: string;
+  important_point: string;
+  difficulty: Difficulty;
+  sort_order: number;
+  status: LearningStatus;
+  show_on_website: boolean;
+  show_on_mobile: boolean;
+  topic_name?: string;
+  topic_slug?: string;
+  category_name?: string;
+  category_slug?: string;
+}
+
+export async function listInterviewCategories(): Promise<InterviewCategoryRow[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('interview_categories')
+    .select('id,name,slug,description,icon,sort_order,status,show_on_website,show_on_mobile')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  const rows = (data ?? []) as Omit<InterviewCategoryRow, 'topic_count'>[];
+  const ids = rows.map((r) => r.id);
+  const counts = new Map<string, number>();
+  if (ids.length) {
+    const { data: topics } = await supabase.from('interview_topics').select('category_id').in('category_id', ids);
+    for (const t of (topics ?? []) as { category_id: string }[]) {
+      counts.set(t.category_id, (counts.get(t.category_id) ?? 0) + 1);
+    }
+  }
+  return rows.map((r) => ({ ...r, topic_count: counts.get(r.id) ?? 0 }));
+}
+
+export async function listInterviewTopics(categoryId?: string): Promise<InterviewTopicRow[]> {
+  const supabase = createClient();
+  const categories = await listInterviewCategories();
+  const catById = new Map(categories.map((c) => [c.id, c]));
+  let query = supabase
+    .from('interview_topics')
+    .select('id,category_id,name,slug,description,sort_order,status,show_on_website,show_on_mobile')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (categoryId) query = query.eq('category_id', categoryId);
+  const { data } = await query;
+  const rows = (data ?? []) as Omit<InterviewTopicRow, 'question_count' | 'category_name'>[];
+  const ids = rows.map((r) => r.id);
+  const counts = new Map<string, number>();
+  if (ids.length) {
+    const { data: questions } = await supabase.from('interview_questions').select('topic_id').in('topic_id', ids);
+    for (const q of (questions ?? []) as { topic_id: string }[]) {
+      counts.set(q.topic_id, (counts.get(q.topic_id) ?? 0) + 1);
+    }
+  }
+  return rows.map((r) => ({
+    ...r,
+    category_name: catById.get(r.category_id)?.name,
+    category_slug: catById.get(r.category_id)?.slug,
+    question_count: counts.get(r.id) ?? 0,
+  }));
+}
+
+const INTERVIEW_QUESTION_COLS =
+  'id,topic_id,question,answer,example,important_point,difficulty,sort_order,status,show_on_website,show_on_mobile';
+
+export async function listInterviewQuestions(opts: {
+  page: number;
+  q?: string;
+  topic?: string;
+  category?: string;
+  difficulty?: string;
+  status?: string;
+}): Promise<{ rows: InterviewQuestionRow[]; total: number; categories: InterviewCategoryRow[]; topics: InterviewTopicRow[] }> {
+  const supabase = createClient();
+  const [categories, topics] = await Promise.all([listInterviewCategories(), listInterviewTopics()]);
+  const topicById = new Map(topics.map((t) => [t.id, t]));
+  const topicIdsInCategory = opts.category ? topics.filter((t) => t.category_id === opts.category).map((t) => t.id) : null;
+  if (topics.length === 0) return { rows: [], total: 0, categories, topics };
+
+  const from = (opts.page - 1) * LEARNING_PAGE_SIZE;
+  let query = supabase
+    .from('interview_questions')
+    .select(INTERVIEW_QUESTION_COLS, { count: 'exact' })
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+    .range(from, from + LEARNING_PAGE_SIZE - 1);
+  if (opts.topic) query = query.eq('topic_id', opts.topic);
+  else if (topicIdsInCategory) query = query.in('topic_id', topicIdsInCategory.length ? topicIdsInCategory : ['__none__']);
+  if (opts.q) query = query.ilike('question', `%${opts.q}%`);
+  if (opts.difficulty) query = query.eq('difficulty', opts.difficulty);
+  if (opts.status) query = query.eq('status', opts.status);
+
+  const { data, count, error } = await query;
+  const rows = ((error ? [] : (data ?? [])) as unknown as InterviewQuestionRow[]).map((r) => ({
+    ...r,
+    topic_name: topicById.get(r.topic_id)?.name,
+    topic_slug: topicById.get(r.topic_id)?.slug,
+    category_name: topicById.get(r.topic_id)?.category_name,
+    category_slug: topicById.get(r.topic_id)?.category_slug,
+  }));
+  return { rows, total: error ? 0 : count ?? 0, categories, topics };
+}
+
+export async function getInterviewQuestion(id: string): Promise<InterviewQuestionRow | null> {
+  const supabase = createClient();
+  const { data } = await supabase.from('interview_questions').select(INTERVIEW_QUESTION_COLS).eq('id', id).maybeSingle();
+  return (data ?? null) as unknown as InterviewQuestionRow | null;
 }

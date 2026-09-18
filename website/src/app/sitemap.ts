@@ -6,7 +6,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.campusedux.com"
 const STATIC_ROUTES = [
   "", "/projects", "/projects/trending",
   "/jobs", "/jobs/companies", "/learning", "/blog", "/compiler", "/resume", "/resume/templates", "/custom-projects",
-  "/practice", "/practice/problems",
+  "/practice", "/practice/problems", "/practice/interview-questions", "/practice/interview-questions/java",
   "/premium", "/referral", "/faq", "/about", "/contact", "/support",
   "/legal", "/privacy-policy", "/terms", "/refund-policy", "/project-license", "/community-guidelines",
   "/disclaimer", "/data-and-permissions", "/cookie-policy", "/grievance", "/delete-account",
@@ -29,6 +29,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       { data: codingProblems },
       { data: practiceProblems },
       { data: blogPosts },
+      { data: interviewTopics },
     ] = await Promise.all([
       supabase.from("projects").select("id,updated_at").limit(1000),
       supabase.from("jobs").select("id,updated_at").limit(1000),
@@ -42,6 +43,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         .select("slug,updated_at")
         .eq("status", "published")
         .limit(1000),
+      supabase.rpc("interview_questions_sitemap", { p_platform: "website" }),
     ]);
 
     projects?.forEach((p) => entries.push({ url: `${siteUrl}/projects/${p.id}`, lastModified: new Date(p.updated_at) }));
@@ -74,6 +76,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // above is belt-and-braces.
     (blogPosts as { slug: string; updated_at: string }[] | null)?.forEach((row) => {
       entries.push({ url: `${siteUrl}/blog/${row.slug}`, lastModified: new Date(row.updated_at) });
+    });
+
+    // Published, website-visible Interview Questions topics (migration 0103/075).
+    (interviewTopics as { category_slug: string; topic_slug: string; updated_at: string }[] | null)?.forEach((row) => {
+      entries.push({
+        url: `${siteUrl}/practice/interview-questions/${row.category_slug}/${row.topic_slug}`,
+        lastModified: new Date(row.updated_at),
+      });
     });
   }
 

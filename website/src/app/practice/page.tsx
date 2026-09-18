@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Code2, TerminalSquare, History, ArrowRight } from "lucide-react";
+import { Code2, TerminalSquare, History, MessageSquareText, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/ui";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
@@ -46,6 +46,14 @@ const TILES = [
     body: "Every solution you submit, with its verdict, language, run time and the tests it passed.",
     tint: "#7C3AED",
     bg: "#EDE9FE",
+  },
+  {
+    href: "/practice/interview-questions",
+    icon: MessageSquareText,
+    title: "Interview Questions",
+    body: "Interview questions and answers by topic — a clear answer, an example, and a key point to remember for every question.",
+    tint: "#DB2777",
+    bg: "#FCE7F3",
   },
 ];
 
