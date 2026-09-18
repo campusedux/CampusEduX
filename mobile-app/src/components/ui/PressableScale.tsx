@@ -1,7 +1,16 @@
 import React, { useRef } from "react";
-import { Animated, Pressable, PressableProps, StyleProp, ViewStyle } from "react-native";
+import { Animated, Platform, Pressable, PressableProps, StyleProp, ViewStyle } from "react-native";
+import { cssInterop } from "nativewind";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// On web, NativeWind does not process `className` on the Animated wrapper, so
+// every utility on a PressableScale (flex-row, padding, radius, margin, ...)
+// was silently dropped and cards collapsed into unstyled stacks. Registering
+// the wrapper maps className -> style there. Native is left exactly as it was.
+if (Platform.OS === "web") {
+  cssInterop(AnimatedPressable, { className: "style" });
+}
 
 interface PressableScaleProps extends Omit<PressableProps, "style"> {
   /** nativewind classes for the touch target (same as any Pressable). */
