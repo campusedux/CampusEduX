@@ -4,28 +4,38 @@ import { EmptyState } from "@/components/ui";
 import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
-export const metadata: Metadata = {
-  title: "Referral Program",
-  alternates: { canonical: absoluteUrl("/referral") },
-};
+
+type RewardSettings = {
+  bonus_type?: string;
+  bonus_value?: number;
+  max_payout?: number;
+  reward_on_signup?: boolean;
+  bonus_validity_days?: number;
+} | null;
+
+async function getRewardSettings(): Promise<RewardSettings> {
+  const supabase = getPublicSupabase();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("reward_settings")
+    .select("bonus_type,bonus_value,max_payout,reward_on_signup,bonus_validity_days")
+    .eq("id", 1)
+    .maybeSingle();
+  return data;
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getRewardSettings();
+  return {
+    title: "Referral Program",
+    alternates: { canonical: absoluteUrl("/referral") },
+    // No reward rule configured yet -> don't index a page with no terms to show.
+    robots: settings ? undefined : { index: false, follow: true },
+  };
+}
 
 export default async function ReferralPage() {
-  const supabase = getPublicSupabase();
-  let settings: {
-    bonus_type?: string;
-    bonus_value?: number;
-    max_payout?: number;
-    reward_on_signup?: boolean;
-    bonus_validity_days?: number;
-  } | null = null;
-  if (supabase) {
-    const { data } = await supabase
-      .from("reward_settings")
-      .select("bonus_type,bonus_value,max_payout,reward_on_signup,bonus_validity_days")
-      .eq("id", 1)
-      .maybeSingle();
-    settings = data;
-  }
+  const settings = await getRewardSettings();
 
   return (
     <div className="page-shell-narrow">

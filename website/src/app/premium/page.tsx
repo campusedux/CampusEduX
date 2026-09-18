@@ -7,10 +7,6 @@ import { Sparkles, Zap, BookOpen, Headphones, Crown, ShieldCheck } from "lucide-
 import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
-export const metadata: Metadata = {
-  title: "Premium",
-  alternates: { canonical: absoluteUrl("/premium") },
-};
 
 type Plan = {
   id: string;
@@ -25,21 +21,31 @@ type Feature = { id: string; title: string; subtitle: string | null };
 
 const FEATURE_ICONS = [Sparkles, Zap, BookOpen, Headphones, Crown, ShieldCheck];
 
-export default async function PremiumPage() {
+async function getPremiumData(): Promise<{ plans: Plan[]; features: Feature[] }> {
   const supabase = getPublicSupabase();
-  let plans: Plan[] = [];
-  let features: Feature[] = [];
-  if (supabase) {
-    const [{ data: p }, { data: f }] = await Promise.all([
-      supabase
-        .from("premium_plans")
-        .select("id,name,monthly_price,yearly_price,yearly_discount_percent,features,is_popular")
-        .order("sort_order"),
-      supabase.from("premium_features").select("id,title,subtitle").order("sort_order"),
-    ]);
-    plans = (p ?? []) as Plan[];
-    features = (f ?? []) as Feature[];
-  }
+  if (!supabase) return { plans: [], features: [] };
+  const [{ data: p }, { data: f }] = await Promise.all([
+    supabase
+      .from("premium_plans")
+      .select("id,name,monthly_price,yearly_price,yearly_discount_percent,features,is_popular")
+      .order("sort_order"),
+    supabase.from("premium_features").select("id,title,subtitle").order("sort_order"),
+  ]);
+  return { plans: (p ?? []) as Plan[], features: (f ?? []) as Feature[] };
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { plans } = await getPremiumData();
+  return {
+    title: "Premium",
+    alternates: { canonical: absoluteUrl("/premium") },
+    // No plans published yet -> don't index a page with no pricing to show.
+    robots: plans.length === 0 ? { index: false, follow: true } : undefined,
+  };
+}
+
+export default async function PremiumPage() {
+  const { plans, features } = await getPremiumData();
 
   return (
     <div className="page-shell">

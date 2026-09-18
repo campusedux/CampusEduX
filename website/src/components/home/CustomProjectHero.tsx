@@ -54,8 +54,8 @@ interface TrustStat {
 }
 
 const TRUST_STRIP: TrustStat[] = [
-  { title: "Trusted by Students", desc: "Across India", icon: Users },
-  { title: "100+ Projects", desc: "Delivered successfully", icon: PackageCheck },
+  { title: "Built for Students", desc: "By people who get college deadlines", icon: Users },
+  { title: "Source Code Included", desc: "Yours to keep and explain", icon: PackageCheck },
   { title: "High Quality", desc: "Clean & well documented", icon: ShieldCheck },
   { title: "Ongoing Support", desc: "Even after delivery", icon: LifeBuoy },
 ];

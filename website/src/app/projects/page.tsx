@@ -20,18 +20,6 @@ import {
 const DESCRIPTION =
   "Buy or browse final-year and mini projects on CampusEduX — filter by category, price and rating to find ready-to-submit source code from student sellers.";
 
-export const metadata: Metadata = {
-  title: "Project Marketplace",
-  description: DESCRIPTION,
-  alternates: { canonical: absoluteUrl("/projects") },
-  openGraph: {
-    title: "Project Marketplace | CampusEduX",
-    description: DESCRIPTION,
-    url: absoluteUrl("/projects"),
-    type: "website",
-    images: [DEFAULT_OG_IMAGE],
-  },
-};
 export const revalidate = 120;
 
 type SP = {
@@ -43,6 +31,36 @@ type SP = {
   flag?: string;
   page?: string;
 };
+
+export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
+  const { count } = await getCachedProjectsPage({
+    page: 1,
+    from: 0,
+    size: 1,
+    sortColumn: PROJECT_SORTS[projectSort(searchParams.sort)].column,
+    sortAscending: PROJECT_SORTS[projectSort(searchParams.sort)].ascending,
+    q: searchParams.q,
+    category: searchParams.category,
+    min: parsePrice(searchParams.min),
+    max: parsePrice(searchParams.max),
+    flag: searchParams.flag === "premium" || searchParams.flag === "bestseller" ? searchParams.flag : undefined,
+  });
+  return {
+    title: "Project Marketplace",
+    description: DESCRIPTION,
+    alternates: { canonical: absoluteUrl("/projects") },
+    openGraph: {
+      title: "Project Marketplace | CampusEduX",
+      description: DESCRIPTION,
+      url: absoluteUrl("/projects"),
+      type: "website",
+      images: [DEFAULT_OG_IMAGE],
+    },
+    // No results for this view (e.g. the catalog is empty, or the filters
+    // matched nothing) -> don't index an empty shell page.
+    robots: (count ?? 0) === 0 ? { index: false, follow: true } : undefined,
+  };
+}
 
 export default async function ProjectsPage({ searchParams }: { searchParams: SP }) {
   const page = parsePage(searchParams.page);

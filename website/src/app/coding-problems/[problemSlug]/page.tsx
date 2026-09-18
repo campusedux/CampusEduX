@@ -36,6 +36,15 @@ export async function generateMetadata({
     .trim()
     .slice(0, 155);
   const url = absoluteUrl(`/coding-problems/${problem.slug}`);
+  // No examples, constraints, or starter code -> nothing but a generic
+  // description actually renders (a currently-unrewritten seed batch).
+  // Don't index a page that thin; unaffected pages (which all have at least
+  // one of these populated) are untouched.
+  const isThin =
+    !locked &&
+    problem.examples.length === 0 &&
+    problem.constraints.length === 0 &&
+    Object.keys(problem.starter_code ?? {}).length === 0;
   return {
     title: `${problem.title} · Coding Problem`,
     description,
@@ -43,6 +52,7 @@ export async function generateMetadata({
     openGraph: { title: problem.title, description, url, type: "article", images: [DEFAULT_OG_IMAGE] },
     twitter: { card: "summary", title: problem.title, description },
     other: { "topic:name": topic.title },
+    robots: isThin ? { index: false, follow: true } : undefined,
   };
 }
 

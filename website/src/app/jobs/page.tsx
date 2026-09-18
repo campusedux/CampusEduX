@@ -11,21 +11,36 @@ import { JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobSort, parsePage, totalPages }
 const DESCRIPTION =
   "Browse jobs and internships on CampusEduX — filter by location, role type and freshness to find and apply to openings that match your career goals.";
 
-export const metadata: Metadata = {
-  title: "Jobs & Internships",
-  description: DESCRIPTION,
-  alternates: { canonical: absoluteUrl("/jobs") },
-  openGraph: {
-    title: "Jobs & Internships | CampusEduX",
-    description: DESCRIPTION,
-    url: absoluteUrl("/jobs"),
-    type: "website",
-    images: [DEFAULT_OG_IMAGE],
-  },
-};
 export const revalidate = 120;
 
 type SP = { q?: string; location?: string; type?: string; sort?: string; page?: string };
+
+export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
+  const s = JOB_SORTS[jobSort(searchParams.sort)];
+  const { count } = await getCachedJobsPage({
+    from: 0,
+    size: 1,
+    sortColumn: s.column,
+    sortAscending: s.ascending,
+    q: searchParams.q,
+    location: searchParams.location,
+    type: searchParams.type,
+  });
+  return {
+    title: "Jobs & Internships",
+    description: DESCRIPTION,
+    alternates: { canonical: absoluteUrl("/jobs") },
+    openGraph: {
+      title: "Jobs & Internships | CampusEduX",
+      description: DESCRIPTION,
+      url: absoluteUrl("/jobs"),
+      type: "website",
+      images: [DEFAULT_OG_IMAGE],
+    },
+    // No results for this view -> don't index an empty shell page.
+    robots: (count ?? 0) === 0 ? { index: false, follow: true } : undefined,
+  };
+}
 
 export default async function JobsPage({ searchParams }: { searchParams: SP }) {
   const page = parsePage(searchParams.page);

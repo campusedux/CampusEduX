@@ -13,7 +13,8 @@ import {
   formatBlogDate,
   stripMarkdown,
 } from "@/lib/blog";
-import { Markdown } from "@/components/learning/Markdown";
+import { Markdown, createTopicLinkState } from "@/components/learning/Markdown";
+import { BLOG_TOPIC_LINKS } from "@/lib/blogLinks";
 import { Breadcrumb } from "@/components/ui";
 import { BlogCard } from "@/components/blog/BlogCard";
 import { BlogImage } from "@/components/blog/BlogImage";
@@ -165,7 +166,12 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
             ) : null}
 
             <div className="mt-8">
-              <Markdown source={post.content} headingLevelOffset={0} />
+              <Markdown
+                source={post.content}
+                headingLevelOffset={0}
+                topicLinks={BLOG_TOPIC_LINKS}
+                linkState={createTopicLinkState(3)}
+              />
             </div>
 
             {/* Tags */}

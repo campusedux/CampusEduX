@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { AlertTriangle, XCircle, ChevronDown, Sparkles } from "lucide-react";
+import { AlertTriangle, XCircle, ChevronDown } from "lucide-react";
 
 const RUNTIME_HINTS: Array<[RegExp, string]> = [
   [/NullPointerException/i, "Your code tried to use an object that was null."],
@@ -53,9 +53,8 @@ const TONE = {
 /**
  * Friendly replacement for a raw stderr/compiler-output dump: a short heading,
  * a one-line plain-language guess at the cause (a small pattern match over
- * common exception/error text — best-effort, not a real diagnosis), the full
- * trace collapsed behind "Show details", and an "Ask AI to fix" placeholder —
- * there's no backend wired up for it yet, so the click just acknowledges it.
+ * common exception/error text — best-effort, not a real diagnosis), and the
+ * full trace collapsed behind "Show details".
  */
 export function RuntimeErrorCard({
   kind,
@@ -67,24 +66,10 @@ export function RuntimeErrorCard({
   hint?: ReactNode;
 }) {
   const [showDetails, setShowDetails] = useState(false);
-  const [askedAi, setAskedAi] = useState(false);
   const tone = TONE[kind];
   const Icon = kind === "runtime" ? AlertTriangle : XCircle;
   const reason =
     kind === "runtime" ? explainRuntimeError(detail) : "Your code didn't compile — check the syntax error below.";
-
-  // TODO: "Ask AI to fix" has no backend. To finish it, add a POST
-  // /api/compiler/assist route modelled on /api/resume/assist (server-side
-  // ANTHROPIC_API_KEY via src/lib/resumeBuilder/aiAssist.ts, a compiler-fix
-  // system prompt, per-user rate limiting, and COMPILER_REQUIRE_AUTH-aware
-  // auth), then render the returned suggestion as an accept/reject diff.
-  // Left as a flagged stub in the Phase 2 cleanup: it's a feature build, not
-  // a mechanical fix. Until then the click only acknowledges (label → "Coming
-  // soon…" for 2s).
-  function askAiToFix() {
-    setAskedAi(true);
-    setTimeout(() => setAskedAi(false), 2000);
-  }
 
   return (
     <div role="alert" className={`space-y-2.5 rounded-xl border p-3.5 ${tone.border} ${tone.bg}`}>
@@ -105,14 +90,6 @@ export function RuntimeErrorCard({
         >
           <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showDetails ? "rotate-180" : ""}`} aria-hidden />
           {showDetails ? "Hide details" : "Show details"}
-        </button>
-        <button
-          type="button"
-          onClick={askAiToFix}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-primary-400/40 bg-primary-500/10 px-2.5 py-1 text-xs font-semibold text-primary-200 transition hover:bg-primary-500/20 active:scale-[.98] motion-reduce:transform-none"
-        >
-          <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          {askedAi ? "Coming soon…" : "Ask AI to fix"}
         </button>
       </div>
       {showDetails ? (

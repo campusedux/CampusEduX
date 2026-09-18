@@ -24,7 +24,8 @@ describe("Phase 3: previously-broken canonicals now self-reference", () => {
   });
 
   it("/faq", async () => {
-    const { metadata } = await import("@/app/faq/page");
+    const { generateMetadata } = await import("@/app/faq/page");
+    const metadata = await generateMetadata();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/faq");
   });
 
@@ -34,12 +35,14 @@ describe("Phase 3: previously-broken canonicals now self-reference", () => {
   });
 
   it("/premium", async () => {
-    const { metadata } = await import("@/app/premium/page");
+    const { generateMetadata } = await import("@/app/premium/page");
+    const metadata = await generateMetadata();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/premium");
   });
 
   it("/referral", async () => {
-    const { metadata } = await import("@/app/referral/page");
+    const { generateMetadata } = await import("@/app/referral/page");
+    const metadata = await generateMetadata();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/referral");
   });
 
@@ -49,21 +52,22 @@ describe("Phase 3: previously-broken canonicals now self-reference", () => {
   });
 
   it("/projects/trending", async () => {
-    const { metadata } = await import("@/app/projects/trending/page");
+    const { generateMetadata } = await import("@/app/projects/trending/page");
+    const metadata = await generateMetadata();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/projects/trending");
   });
 
   it("none of the 7 pages canonicalize to the homepage anymore", async () => {
-    const modules = await Promise.all([
-      import("@/app/about/page"),
-      import("@/app/faq/page"),
-      import("@/app/support/page"),
-      import("@/app/premium/page"),
-      import("@/app/referral/page"),
-      import("@/app/custom-projects/page"),
-      import("@/app/projects/trending/page"),
+    const [about, faq, support, premium, referral, customProjects, trending] = await Promise.all([
+      import("@/app/about/page").then((m) => m.metadata),
+      import("@/app/faq/page").then((m) => m.generateMetadata()),
+      import("@/app/support/page").then((m) => m.metadata),
+      import("@/app/premium/page").then((m) => m.generateMetadata()),
+      import("@/app/referral/page").then((m) => m.generateMetadata()),
+      import("@/app/custom-projects/page").then((m) => m.metadata),
+      import("@/app/projects/trending/page").then((m) => m.generateMetadata()),
     ]);
-    for (const { metadata } of modules) {
+    for (const metadata of [about, faq, support, premium, referral, customProjects, trending]) {
       expect(metadata.alternates?.canonical).not.toBe("https://www.campusedux.com/");
       expect(metadata.alternates?.canonical).not.toBe("/");
       expect(metadata.alternates?.canonical).toBeTruthy();

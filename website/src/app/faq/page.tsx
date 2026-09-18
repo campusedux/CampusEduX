@@ -8,21 +8,29 @@ const DESCRIPTION =
   "Frequently asked questions about CampusEduX, organised by category, with straightforward answers to help you get started or find what you need.";
 
 export const revalidate = 300;
-export const metadata: Metadata = {
-  title: "Frequently Asked Questions",
-  description: DESCRIPTION,
-  alternates: { canonical: absoluteUrl("/faq") },
-};
 
 type Faq = { id: string; question: string; answer: string; category: string };
 
-export default async function FaqPage() {
+async function getFaqs(): Promise<Faq[]> {
   const supabase = getPublicSupabase();
-  let faqs: Faq[] = [];
-  if (supabase) {
-    const { data } = await supabase.from("faqs").select("id,question,answer,category").eq("status", "active").order("sort_order");
-    faqs = (data ?? []) as Faq[];
-  }
+  if (!supabase) return [];
+  const { data } = await supabase.from("faqs").select("id,question,answer,category").eq("status", "active").order("sort_order");
+  return (data ?? []) as Faq[];
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const faqs = await getFaqs();
+  return {
+    title: "Frequently Asked Questions",
+    description: DESCRIPTION,
+    alternates: { canonical: absoluteUrl("/faq") },
+    // No FAQs published yet -> don't let an empty shell page get indexed.
+    robots: faqs.length === 0 ? { index: false, follow: true } : undefined,
+  };
+}
+
+export default async function FaqPage() {
+  const faqs = await getFaqs();
 
   const grouped = faqs.reduce<Record<string, Faq[]>>((acc, f) => {
     (acc[f.category] ??= []).push(f);

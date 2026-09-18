@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, ChevronRight, Lock, Download, Video } from "luci
 import { getLearningTree, getLearningTopicPage } from "@/lib/learning";
 import { Markdown, createTopicLinkState } from "@/components/learning/Markdown";
 import { buildTopicLinkIndex } from "@/lib/topicLinks";
+import { isTemplatedGenerativeAiBody } from "@/lib/contentQuality";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { DocsShell } from "../../_components/DocsShell";
@@ -37,12 +38,20 @@ export async function generateMetadata({
   const bodyText = page.contents.map((c) => c.body).join(" ").replace(/[#>*`_|\-]+/g, " ").trim();
   const description = (topic.short_description || bodyText || `${topic.title} — ${grid.name} on CampusEduX.`).slice(0, 155);
   const url = absoluteUrl(`/learning/${grid.slug}/${topic.slug}`);
+  // Generative AI tutorial topics (migration 0069/041) are a mail-merge
+  // template: the same filler paragraphs repeat verbatim regardless of the
+  // topic's actual subject. Keep the page available to logged-in users, just
+  // don't send it to search — one topic in this grid is genuinely original
+  // and is left indexable, since this checks actual body content, not grid
+  // membership.
+  const isThinTemplate = isTemplatedGenerativeAiBody(bodyText);
   return {
     title: `${topic.title} · ${grid.name}`,
     description,
     alternates: { canonical: url },
     openGraph: { title: topic.title, description, url, type: "article", images: [DEFAULT_OG_IMAGE] },
     twitter: { card: "summary", title: topic.title, description },
+    robots: isThinTemplate ? { index: false, follow: true } : undefined,
   };
 }
 

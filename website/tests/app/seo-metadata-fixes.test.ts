@@ -3,9 +3,14 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 // The five fixed static-metadata pages import UI/data modules that touch
 // Supabase only inside functions (never at module top-level), so importing
 // them for their `metadata` export is safe without mocking.
+// /projects, /jobs and /jobs/companies now noindex an empty result set (see
+// the "dynamic page safety" tests below), so their `metadata` export became
+// an async `generateMetadata()`. Supabase env vars are unset under Vitest, so
+// `getPublicSupabase()` returns null and these resolve with no DB round-trip.
 describe("static page metadata (canonical + description + OG)", () => {
   it("/projects has a self-referencing canonical, description and OG copy", async () => {
-    const { metadata } = await import("@/app/projects/page");
+    const { generateMetadata } = await import("@/app/projects/page");
+    const metadata = await generateMetadata({ searchParams: {} });
     expect(metadata.description).toBeTruthy();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/projects");
     expect(metadata.openGraph?.title).toBeTruthy();
@@ -14,7 +19,8 @@ describe("static page metadata (canonical + description + OG)", () => {
   });
 
   it("/jobs has a self-referencing canonical, description and OG copy", async () => {
-    const { metadata } = await import("@/app/jobs/page");
+    const { generateMetadata } = await import("@/app/jobs/page");
+    const metadata = await generateMetadata({ searchParams: {} });
     expect(metadata.description).toBeTruthy();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/jobs");
     expect(metadata.openGraph?.title).toBeTruthy();
@@ -32,7 +38,8 @@ describe("static page metadata (canonical + description + OG)", () => {
   });
 
   it("/jobs/companies has a self-referencing canonical, description and OG copy", async () => {
-    const { metadata } = await import("@/app/jobs/companies/page");
+    const { generateMetadata } = await import("@/app/jobs/companies/page");
+    const metadata = await generateMetadata();
     expect(metadata.description).toBeTruthy();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/jobs/companies");
     expect(metadata.openGraph?.title).toBeTruthy();
@@ -50,28 +57,28 @@ describe("static page metadata (canonical + description + OG)", () => {
   });
 
   it("none of the five pages point their canonical at the homepage anymore", async () => {
-    const modules = await Promise.all([
-      import("@/app/projects/page"),
-      import("@/app/jobs/page"),
-      import("@/app/resume/page"),
-      import("@/app/jobs/companies/page"),
-      import("@/app/resume/templates/page"),
+    const [projects, jobs, resume, companies, resumeTemplates] = await Promise.all([
+      import("@/app/projects/page").then((m) => m.generateMetadata({ searchParams: {} })),
+      import("@/app/jobs/page").then((m) => m.generateMetadata({ searchParams: {} })),
+      import("@/app/resume/page").then((m) => m.metadata),
+      import("@/app/jobs/companies/page").then((m) => m.generateMetadata()),
+      import("@/app/resume/templates/page").then((m) => m.metadata),
     ]);
-    for (const { metadata } of modules) {
+    for (const metadata of [projects, jobs, resume, companies, resumeTemplates]) {
       expect(metadata.alternates?.canonical).not.toBe("https://www.campusedux.com/");
       expect(metadata.alternates?.canonical).not.toBe("/");
     }
   });
 
   it("descriptions are unique across the five fixed pages (no duplicate-meta-description regression)", async () => {
-    const modules = await Promise.all([
-      import("@/app/projects/page"),
-      import("@/app/jobs/page"),
-      import("@/app/resume/page"),
-      import("@/app/jobs/companies/page"),
-      import("@/app/resume/templates/page"),
+    const [projects, jobs, resume, companies, resumeTemplates] = await Promise.all([
+      import("@/app/projects/page").then((m) => m.generateMetadata({ searchParams: {} })),
+      import("@/app/jobs/page").then((m) => m.generateMetadata({ searchParams: {} })),
+      import("@/app/resume/page").then((m) => m.metadata),
+      import("@/app/jobs/companies/page").then((m) => m.generateMetadata()),
+      import("@/app/resume/templates/page").then((m) => m.metadata),
     ]);
-    const descriptions = modules.map((m) => m.metadata.description);
+    const descriptions = [projects, jobs, resume, companies, resumeTemplates].map((m) => m.description);
     expect(new Set(descriptions).size).toBe(descriptions.length);
     // None should equal the generic root-layout fallback description that was
     // previously being inherited.
@@ -84,10 +91,20 @@ describe("static page metadata (canonical + description + OG)", () => {
 // The category page builds metadata dynamically from a category id, and must
 // URL-encode that id into the canonical/OG url. Mock the cache layer so the
 // test never touches Supabase.
-vi.mock("@/lib/cache", () => ({
-  getCachedCategoryPreview: vi.fn(async () => ({ name: "Web & Mobile", projects: [] })),
-  getCachedCategoryIds: vi.fn(async () => []),
-}));
+// `getCachedProjectsPage` / `getCachedJobsPage` wrap `next/cache`'s
+// `unstable_cache`, which needs a real Next.js request context and throws
+// ("incrementalCache missing") under plain Vitest — stub them like the
+// category-preview helpers below rather than calling through to `actual`.
+vi.mock("@/lib/cache", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/cache")>();
+  return {
+    ...actual,
+    getCachedCategoryPreview: vi.fn(async () => ({ name: "Web & Mobile", projects: [] })),
+    getCachedCategoryIds: vi.fn(async () => []),
+    getCachedProjectsPage: vi.fn(async () => ({ projects: [], count: 5 })),
+    getCachedJobsPage: vi.fn(async () => ({ jobs: [], count: 5 })),
+  };
+});
 
 // `react`'s `cache()` (used to memoize the per-request fetch) is only
 // available on the canary build Next.js aliases "react" to at build time;

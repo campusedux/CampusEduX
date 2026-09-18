@@ -46,7 +46,8 @@ describe("Phase 4B: /about and /faq have distinct, page-specific meta descriptio
   });
 
   it("/faq description is set, non-empty, and not the sitewide default", async () => {
-    const { metadata } = await import("@/app/faq/page");
+    const { generateMetadata } = await import("@/app/faq/page");
+    const metadata = await generateMetadata();
     expect(metadata.description).toBeTruthy();
     expect(metadata.description).not.toBe(ROOT_LAYOUT_DEFAULT_DESCRIPTION);
     // Title unchanged by this fix.
@@ -55,7 +56,8 @@ describe("Phase 4B: /about and /faq have distinct, page-specific meta descriptio
 
   it("/about and /faq descriptions differ from each other", async () => {
     const { metadata: aboutMetadata } = await import("@/app/about/page");
-    const { metadata: faqMetadata } = await import("@/app/faq/page");
+    const { generateMetadata } = await import("@/app/faq/page");
+    const faqMetadata = await generateMetadata();
     expect(aboutMetadata.description).not.toBe(faqMetadata.description);
   });
 });

@@ -24,7 +24,7 @@ const getData = cache(async (categoryId: string) => {
 });
 
 export async function generateMetadata({ params }: { params: { category: string } }): Promise<Metadata> {
-  const { name } = await getData(params.category);
+  const { name, projects } = await getData(params.category);
   const description = `${name} projects on CampusEduX — browse student-built final-year and mini projects in this category.`;
   const url = absoluteUrl(`/projects/category/${encodeURIComponent(params.category)}`);
   return {
@@ -32,6 +32,8 @@ export async function generateMetadata({ params }: { params: { category: string 
     description,
     alternates: { canonical: url },
     openGraph: { title: `${name} projects | CampusEduX`, description, url, type: "website", images: [DEFAULT_OG_IMAGE] },
+    // No projects in this category yet -> don't index an empty shell page.
+    robots: projects.length === 0 ? { index: false, follow: true } : undefined,
   };
 }
 
