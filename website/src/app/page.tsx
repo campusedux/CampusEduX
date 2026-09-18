@@ -2,7 +2,7 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { FileText, Wrench, Gift, ArrowRight, Sparkles } from "lucide-react";
+import { FileText, Wrench, Gift, ArrowRight, Sparkles, Code2, ClipboardList, MessageSquareText } from "lucide-react";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import { SectionHeader, Rating, Reveal, Button, SearchBar } from "@/components/ui";
@@ -168,6 +168,57 @@ export default async function HomePage() {
 
       <Reveal>
         <LearningResources />
+      </Reveal>
+
+      {/* Practice — quick links into the existing Practice section (coding problems,
+       * mock tests via Learning, interview questions). No new routes or data. */}
+      <Reveal>
+        <section className="container-page pt-12 sm:pt-16">
+          <SectionHeader title="Practice" viewAllHref="/practice" viewAllLabel="All practice" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                href: "/practice/problems",
+                title: "Coding Practice",
+                body: "Solve coding problems in Java, Python, C, C++ or JavaScript, with instant feedback.",
+                icon: Code2,
+                cta: "Start Coding",
+              },
+              {
+                href: "/learning",
+                title: "Mock Tests",
+                body: "Timed mock tests on Learning topics to check how exam-ready you are.",
+                icon: ClipboardList,
+                cta: "Take a Test",
+              },
+              {
+                href: "/practice/interview-questions",
+                title: "Interview Questions",
+                body: "Common interview questions by topic, with clear answers and key points to remember.",
+                icon: MessageSquareText,
+                cta: "Practice Interview Questions",
+              },
+            ].map((p) => {
+              const Icon = p.icon;
+              return (
+                <Link key={p.href} href={p.href} className="card card-hover group flex flex-col p-5">
+                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
+                    <Icon className="h-5 w-5 text-primary" aria-hidden />
+                  </span>
+                  <span className="mt-3 font-bold tracking-tight text-ink group-hover:text-primary">{p.title}</span>
+                  <span className="mt-1 flex-1 text-sm text-ink-muted">{p.body}</span>
+                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                    {p.cta}
+                    <ArrowRight
+                      className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none"
+                      aria-hidden
+                    />
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
       </Reveal>
 
       {jobs.length > 0 && (
