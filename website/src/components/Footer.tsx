@@ -107,9 +107,7 @@ function FooterLinkList({ links }: { links: readonly FooterLink[] }) {
 export default function Footer() {
   const year = new Date().getFullYear();
   const entity = process.env.NEXT_PUBLIC_LEGAL_ENTITY_NAME?.trim() || BRAND.name;
-  // `BRAND.supportEmail` can be an empty string when the env var is set-but-blank
-  // (`"" ?? x` keeps `""`); fall back to the canonical address brand.ts declares.
-  const supportEmail = BRAND.supportEmail || "support@campusedux.app";
+  const supportEmail = "campusedux@ganil.com";
 
   return (
     <footer className="border-t border-line bg-surface">

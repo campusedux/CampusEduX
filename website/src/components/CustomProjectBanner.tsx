@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image";
+import { whatsAppSupportUrl } from "@/lib/whatsapp";
 
 const BANNER_SRC = "/images/custom-project-banner.webp";
 
@@ -34,6 +35,7 @@ export function CustomProjectBanner() {
         alt="Custom Project Development — Have a project idea? We'll build it for you. Website, mobile app, web app, final year project, or custom software — share your idea and our team turns it into a complete, working project."
         fill
         priority
+        quality={100}
         placeholder="blur"
         blurDataURL={IMAGE_BLUR_DATA_URL}
         className="object-contain"
@@ -50,9 +52,11 @@ export function CustomProjectBanner() {
           height: `${CTA.start.height}%`,
         }}
       />
-      <Link
-        href="/custom-projects"
-        aria-label="Get a free consultation"
+      <a
+        href={whatsAppSupportUrl()}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Get a free consultation on WhatsApp"
         className="absolute rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         style={{
           left: `${CTA.learnMore.left}%`,
