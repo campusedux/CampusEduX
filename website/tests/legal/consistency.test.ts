@@ -103,11 +103,44 @@ describe("every legal document is complete and wired up", () => {
   });
 });
 
-describe("owner-input placeholders are surfaced, not silently blank", () => {
-  it("keeps jurisdiction / address / grievance officer bracketed until the owner fills them", () => {
-    expect(LEGAL.governingCityState).toContain("[");
-    expect(LEGAL.registeredAddress).toContain("[");
-    expect(LEGAL.grievanceOfficerName).toContain("[");
+describe("owner information is resolved to the verified values", () => {
+  const PLACEHOLDERS = ["[GOVERNING CITY, STATE]", "[REGISTERED BUSINESS ADDRESS]", "[GRIEVANCE OFFICER NAME]"];
+
+  it("no bracketed owner-input placeholder remains in the raw config", () => {
+    for (const p of PLACEHOLDERS) {
+      expect(LEGAL.governingCityState).not.toBe(p);
+      expect(LEGAL.registeredAddress).not.toBe(p);
+      expect(LEGAL.grievanceOfficerName).not.toBe(p);
+    }
+  });
+
+  it("no bracketed owner-input placeholder is left in any rendered legal document", () => {
+    for (const id of ALL_IDS) {
+      const filled = JSON.stringify(interpolateDocument(LEGAL_DOCUMENTS[id]));
+      for (const p of PLACEHOLDERS) {
+        expect(filled, `${id} still contains ${p}`).not.toContain(p);
+      }
+    }
+  });
+
+  it("owner facts match the verified values", () => {
+    expect(LEGAL.entityDescription).toContain("Ganesh Pache");
+    expect(LEGAL.governingCityState).toBe("Pune, Maharashtra");
+    expect(LEGAL.registeredAddress).toBe("Kharadi, Pune, Pune, Maharashtra 411014, India");
+    expect(LEGAL.grievanceOfficerName).toContain("Mukund P.");
+    expect(LEGAL.grievanceOfficerName).toContain("Customer Support Manager");
+    expect(LEGAL.grievanceEmail).toBe("studyfact8545@gmail.com");
+    expect(LEGAL.supportEmail).toBe("campusedux@gmail.com");
+    expect(LEGAL.legalEmail).toBe("campusedux@gmail.com");
+    expect(LEGAL.privacyEmail).toBe("campusedux@gmail.com");
+  });
+
+  it("no grievance phone number is configured or rendered", () => {
+    expect(LEGAL).not.toHaveProperty("grievancePhone");
+    for (const id of ALL_IDS) {
+      const filled = JSON.stringify(interpolateDocument(LEGAL_DOCUMENTS[id]));
+      expect(filled).not.toMatch(/\{\{grievancePhone\}\}/);
+    }
   });
 
   it("exposes a current policies version", () => {

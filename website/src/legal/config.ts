@@ -7,10 +7,8 @@
  * etc.) edit it there, bump the relevant version, then run `npm run legal:sync`.
  * `src/legal/__tests__/legal-consistency.test.ts` fails if the copies drift.
  *
- * Owner-input placeholders (`[GOVERNING CITY, STATE]`, `[REGISTERED BUSINESS
- * ADDRESS]`, `[GRIEVANCE OFFICER NAME]`) are intentionally left bracketed so
- * they are obvious wherever they render, on the website and in the app, until
- * the owner supplies real values. Never fabricate them.
+ * Owner facts (address, grievance officer, jurisdiction) are filled in as of
+ * 2026-09-18 — see `website/LEGAL_OWNER_FINALIZATION_REPORT.md`.
  */
 import raw from "./legal.config.json";
 import type { LegalDocId, LegalDocumentVersion, SharedLegalDocId } from "./types";
@@ -28,7 +26,7 @@ export const CURRENT_LEGAL_VERSION = raw.currentLegalVersion;
 /** Website-only documents/pages that are not part of the mobile canonical set. */
 const WEB_ONLY_VERSIONS: Record<"cookie-policy" | "grievance", LegalDocumentVersion> = {
   "cookie-policy": { version: "1.1.0", effectiveDate: "2026-09-18" },
-  grievance: { version: "1.0.0", effectiveDate: "2026-08-31" },
+  grievance: { version: "1.1.0", effectiveDate: "2026-09-18" },
 };
 
 /** Per-document `{ version, effectiveDate }` — shared docs from the synced
