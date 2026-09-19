@@ -158,7 +158,10 @@ export interface CodingProblemDetail {
   topic: { grid_slug: string; topic_slug: string; title: string };
   locked: boolean;
   editorial: string;
+  /** Empty `{}` until the caller has submitted an attempt (or is admin) — see `solution_locked`. */
   solution_code: Record<string, string>;
+  /** true = a solution exists but is withheld until the user submits an attempt. */
+  solution_locked?: boolean;
   solution_approach: string;
 }
 

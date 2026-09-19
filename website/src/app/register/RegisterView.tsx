@@ -8,6 +8,7 @@ import { emitSessionChange } from "@/lib/sessionSignal";
 import { Field, Input } from "@/components/ui";
 import { CURRENT_LEGAL_VERSION, LEGAL_VERSIONS } from "@/legal/config";
 import { absoluteUrl } from "@/lib/seo";
+import { safeInternalPath } from "@/lib/nav";
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -79,7 +80,7 @@ function RegisterForm() {
           .then(undefined, () => undefined);
         // Session cookie is set — flip the header nav to signed-in without a reload.
         emitSessionChange();
-        router.push("/account");
+        router.push(searchParams.get("next") ? safeInternalPath(searchParams.get("next")) : "/account");
         router.refresh();
       } else {
         setCheckEmail(true);

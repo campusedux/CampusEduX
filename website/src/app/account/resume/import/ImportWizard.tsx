@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { Upload, Trash2, Plus } from "lucide-react";
 import { Field, Input, Textarea, Button } from "@/components/ui";
 import { createResumeFromImportAction } from "@/lib/actions/resumeBuilder";
+import { RESUME_MAX_MB } from "@/lib/resume";
 import type { ParsedResumeResult } from "@/lib/resumeBuilder/parser";
 import type { ResumeEducationEntry } from "@/lib/resumeBuilder/types";
 
-const MAX_FILE_MB = 8;
+const MAX_FILE_MB = RESUME_MAX_MB;
 
 type ReviewState = {
   fullName: string;

@@ -12,7 +12,7 @@ import { judgeCase, MAX_JUDGE_CASES, type RunCase, type JudgeCaseResult } from "
  * Practice coding problem AND persist the attempt.
  *
  *   Browser → this route → practice_problem_run_cases() RPC → execution provider
- *     → per-case pass/fail → INSERT coding_submissions (owner-only RLS)
+ *     → per-case pass/fail → record_coding_submission() RPC (judge-secret gated)
  *       + UPSERT user_dsa_progress (solved / attempted, never downgraded)
  *
  * Requires a signed-in user. Same sandbox + hidden-case redaction as
@@ -158,22 +158,22 @@ export async function POST(req: Request) {
   // Persist the attempt (owner-only RLS). A write failure doesn't fail the run —
   // the user still sees their results.
   let saved = true;
-  const { data: inserted, error: insErr } = await supabase
-    .from("coding_submissions")
-    .insert({
-      user_id: user.id,
-      problem_id: problemId,
-      problem_slug: slug,
-      language,
-      source_code: source.slice(0, MAX_CODE_BYTES),
-      verdict,
-      passed,
-      total,
-      runtime_ms: maxTimeMs || null,
-      memory_kb: maxMemoryKb ?? null,
-    })
-    .select("id")
-    .maybeSingle();
+  // Recorded through record_coding_submission() (0120/092): clients can no longer INSERT
+  // coding_submissions directly, and the RPC needs the server-only judge secret, so a user cannot
+  // fake a row to unlock the solution.
+  const { data: insertedId, error: insErr } = await supabase.rpc("record_coding_submission", {
+    p_secret: secret,
+    p_problem_id: problemId,
+    p_slug: slug,
+    p_language: language,
+    p_source: source.slice(0, MAX_CODE_BYTES),
+    p_verdict: verdict,
+    p_passed: passed,
+    p_total: total,
+    p_runtime_ms: maxTimeMs || null,
+    p_memory_kb: maxMemoryKb ?? null,
+  });
+  const inserted = typeof insertedId === "string" ? { id: insertedId } : null;
   if (insErr) saved = false;
 
   if (allPassed) {

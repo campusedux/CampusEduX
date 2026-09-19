@@ -7,6 +7,9 @@ import { LANGUAGES, resolveLanguage, starterFor } from "@/lib/compiler/languages
 import type { NormalizedRun } from "@/lib/compiler/providers/types";
 import type { JudgeCaseResult } from "@/lib/codingProblems";
 import { CompilerPanel } from "./_components/CompilerPanel";
+import { SignInToRun } from "@/components/SignInToRun";
+import { describeRunFailure } from "@/lib/runErrors";
+import { useRunAccess } from "@/lib/useRunAccess";
 
 const DRAFT_PREFIX = "campusedux:coding:draft:";
 
@@ -28,6 +31,7 @@ interface Props {
 type RunState =
   | { phase: "idle" }
   | { phase: "running" }
+  | { phase: "signin" }
   | { phase: "run-done"; run: NormalizedRun }
   | {
       phase: "judge-done";
@@ -102,6 +106,7 @@ export default function CodingProblemWorkspace({
   const [runState, setRunState] = useState<RunState>({ phase: "idle" });
   const [ready, setReady] = useState(false);
   const runningRef = useRef(false);
+  const { anonymous, next } = useRunAccess();
 
   const activeLang = useMemo(() => resolveLanguage(languageId) ?? languages[0], [languageId, languages]);
 
@@ -141,6 +146,10 @@ export default function CodingProblemWorkspace({
   const clearOutput = useCallback(() => setRunState({ phase: "idle" }), []);
 
   const run = useCallback(async () => {
+    if (anonymous) {
+      setRunState({ phase: "signin" });
+      return;
+    }
     if (runningRef.current || !code.trim()) {
       if (!code.trim()) setRunState({ phase: "error", message: "Write some code first." });
       return;
@@ -155,7 +164,8 @@ export default function CodingProblemWorkspace({
       });
       const data: { ok?: boolean; error?: string; run?: NormalizedRun } = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok || !data.run) {
-        setRunState({ phase: "error", message: data.error || `The compiler request failed (${res.status}).` });
+        const f = describeRunFailure(res.status, data, res.headers.get("retry-after"));
+        setRunState(f.kind === "auth" ? { phase: "signin" } : { phase: "error", message: f.message });
         return;
       }
       setRunState({ phase: "run-done", run: data.run });
@@ -164,10 +174,14 @@ export default function CodingProblemWorkspace({
     } finally {
       runningRef.current = false;
     }
-  }, [code, languageId, stdin]);
+  }, [code, languageId, stdin, anonymous]);
 
   const callJudge = useCallback(
     async (endpoint: string, submitted: boolean) => {
+      if (anonymous) {
+        setRunState({ phase: "signin" });
+        return;
+      }
       if (runningRef.current || !code.trim()) {
         if (!code.trim()) setRunState({ phase: "error", message: "Write some code first." });
         return;
@@ -188,12 +202,9 @@ export default function CodingProblemWorkspace({
           compileError?: string;
           verdict?: string;
         } = await res.json().catch(() => ({}));
-        if (res.status === 401) {
-          setRunState({ phase: "error", message: data.error || "Sign in to submit your solution." });
-          return;
-        }
         if (!res.ok || !data.ok || !data.results || !data.summary) {
-          setRunState({ phase: "error", message: data.error || `Couldn't run the tests (${res.status}).` });
+          const f = describeRunFailure(res.status, data, res.headers.get("retry-after"));
+          setRunState(f.kind === "auth" ? { phase: "signin" } : { phase: "error", message: f.message });
           return;
         }
         setRunState({
@@ -204,13 +215,15 @@ export default function CodingProblemWorkspace({
           submitted,
           verdict: data.verdict,
         });
+        // A recorded submission unlocks the solution tab (ProblemSolution re-checks on this event).
+        if (submitted) window.dispatchEvent(new Event("cx:submission-recorded"));
       } catch {
         setRunState({ phase: "error", message: "Network error — check your connection and try again." });
       } finally {
         runningRef.current = false;
       }
     },
-    [code, languageId, slug],
+    [code, languageId, slug, anonymous],
   );
 
   const judge = useCallback(() => callJudge(judgeEndpoint, false), [callJudge, judgeEndpoint]);
@@ -240,14 +253,27 @@ export default function CodingProblemWorkspace({
       onSubmit={submitEndpoint ? submit : undefined}
       onReset={resetToStarter}
       busy={busy}
+      signInRequired={anonymous}
       canClearOutput={runState.phase !== "idle"}
-      output={<OutputBody state={runState} submissionsHref={submissionsHref} />}
+      output={<OutputBody state={runState} submissionsHref={submissionsHref} anonymous={anonymous} next={next} />}
     />
   );
 }
 
-function OutputBody({ state, submissionsHref }: { state: RunState; submissionsHref: string }) {
-  return state.phase === "idle" ? (
+function OutputBody({
+  state,
+  submissionsHref,
+  anonymous,
+  next,
+}: {
+  state: RunState;
+  submissionsHref: string;
+  anonymous: boolean;
+  next: string;
+}) {
+  return state.phase === "signin" || (anonymous && state.phase === "idle") ? (
+    <SignInToRun next={next} />
+  ) : state.phase === "idle" ? (
     <p className="text-slate-500">Run your code to see output here...</p>
   ) : state.phase === "running" ? (
     <p className="flex items-center gap-2 text-slate-300">

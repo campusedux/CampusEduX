@@ -14,6 +14,7 @@ import {
   fileExtension,
   resumeStoragePath,
 } from "@/lib/resume";
+import { resolveUploadContentType, withContentType } from "@/lib/uploads";
 import { timeAgo } from "@/lib/format";
 import { Button } from "@/components/ui";
 
@@ -136,9 +137,15 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
         }
         const supabase = createBrowserSupabase();
         const path = resumeStoragePath(userId, file.name);
+        // Explicit, extension-derived type (never octet-stream): the bucket allow-list checks it.
+        const contentType = resolveUploadContentType(file, RESUME_MIME_TYPES);
+        if (!contentType) {
+          setSubmitError("Please choose a PDF, DOC or DOCX file.");
+          return;
+        }
         const { error: uploadError } = await supabase.storage
           .from(RESUME_STORAGE_BUCKET)
-          .upload(path, file, { contentType: file.type || "application/pdf", upsert: true });
+          .upload(path, withContentType(file, contentType), { contentType, upsert: true });
         if (uploadError) {
           setSubmitError(`Upload failed: ${uploadError.message}`);
           return;

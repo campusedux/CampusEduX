@@ -4,6 +4,7 @@ import { Markdown } from "@/components/learning/Markdown";
 import type { AdjacentProblem, CodingProblemDetail, RelatedProblemCard } from "@/lib/learning.types";
 import { cn } from "@/lib/cn";
 import { ProblemTabs } from "./ProblemTabs";
+import { ProblemSolution } from "./ProblemSolution";
 
 const DIFF_CLASS: Record<string, string> = {
   Easy: "bg-emerald-50 text-emerald-700",
@@ -122,11 +123,13 @@ export function ProblemPanel({
     </div>
   ) : null;
 
+  const solutionKind = problemBasePath === "/practice/problems" ? "practice" : "coding";
   const editorialNode =
-    editorial || solution_approach ? (
+    editorial || solution_approach || detail.solution_locked === true ? (
       <div className="space-y-3">
         {solution_approach ? <p className="text-sm text-ink-muted">{solution_approach}</p> : null}
         {editorial ? <Markdown source={editorial} /> : null}
+        {detail.solution_locked === true ? <ProblemSolution kind={solutionKind} slug={problem.slug} /> : null}
       </div>
     ) : null;
 

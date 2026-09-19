@@ -4,6 +4,7 @@ import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import CompilerWorkspace from "./CompilerWorkspace";
 import { CompilerFallback } from "./CompilerFallback";
+import { compilerAuthRequired } from "@/lib/apiAuth";
 
 export const metadata: Metadata = {
   title: "Online Code Compiler",
@@ -45,7 +46,7 @@ export default function CompilerPage() {
         ])}
       />
       <Suspense fallback={<CompilerFallback />}>
-        <CompilerWorkspace />
+        <CompilerWorkspace requireAuth={compilerAuthRequired()} />
       </Suspense>
     </>
   );

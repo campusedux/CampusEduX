@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveApiCaller } from "@/lib/apiAuth";
+import { RESUME_MAX_BYTES, RESUME_MAX_MB } from "@/lib/resume";
 import { limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { detectFileType, extractResumeText } from "@/lib/resumeBuilder/fileExtraction";
 import { parseResumeText } from "@/lib/resumeBuilder/parser";
@@ -29,7 +30,6 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
-const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const file = formData.get("file");
   if (!(file instanceof File)) return corsJson({ error: "No file uploaded." }, 400);
   if (file.size === 0) return corsJson({ error: "That file is empty." }, 400);
-  if (file.size > MAX_FILE_BYTES) return corsJson({ error: "That file is too large (max 8 MB)." }, 400);
+  if (file.size > RESUME_MAX_BYTES) return corsJson({ error: `That file is too large (max ${RESUME_MAX_MB} MB).` }, 400);
 
   const fileType = detectFileType(file.name, file.type);
   if (!fileType) return corsJson({ error: "Please upload a PDF or DOCX file." }, 400);

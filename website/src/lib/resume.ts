@@ -2,8 +2,9 @@
 // what the mobile app accepts in usePickAndUploadResume() /
 // mobile-app/src/hooks/useJobs.ts — PDF / DOC / DOCX — so a resume uploaded on
 // the web behaves identically to one uploaded in the app. The size cap is a
-// website-only guard (the mobile flow has none); 10 MB is generous for a
-// resume and well under the Supabase Storage object limit.
+// guard shared by every résumé upload path: the `resumes` bucket limit (5 MB,
+// migration 0117/089), the job-apply upload, /api/resume/parse and the import
+// wizard. tests/lib/uploadLimits.test.ts fails if this drifts from the SQL.
 export const RESUME_MIME_TYPES = [
   "application/pdf",
   "application/msword",
@@ -12,8 +13,8 @@ export const RESUME_MIME_TYPES = [
 
 export const RESUME_EXTENSIONS = [".pdf", ".doc", ".docx"] as const;
 
-export const RESUME_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-export const RESUME_MAX_MB = 10;
+export const RESUME_MAX_MB = 5;
+export const RESUME_MAX_BYTES = RESUME_MAX_MB * 1024 * 1024;
 
 export const RESUME_STORAGE_BUCKET = "resumes"; // private bucket, migration 0029
 export const RESUME_SIGNED_URL_TTL = 60 * 60 * 24 * 365; // 1 year, matches job.service.uploadResume

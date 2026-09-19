@@ -22,6 +22,9 @@ import type { CursorPosition } from "./CodeEditor";
 import { CompilerShell } from "./CompilerShell";
 import { CompilerToolbar } from "./CompilerToolbar";
 import { RuntimeErrorCard } from "./RuntimeErrorCard";
+import { SignInToRun } from "@/components/SignInToRun";
+import { describeRunFailure } from "@/lib/runErrors";
+import { useRunAccess } from "@/lib/useRunAccess";
 
 const LANG_STORAGE_KEY = "campusedux:compiler:lang";
 const FONT_STORAGE_KEY = "campusedux:compiler:fontsize";
@@ -33,6 +36,7 @@ const FONT_DEFAULT = 14;
 type RunState =
   | { phase: "idle" }
   | { phase: "running" }
+  | { phase: "signin" }
   | { phase: "done"; run: NormalizedRun; hadEmptyStdin: boolean }
   | { phase: "error"; message: string };
 
@@ -54,8 +58,11 @@ function clampFont(n: number): number {
   return Math.min(FONT_MAX, Math.max(FONT_MIN, n));
 }
 
-export default function CompilerWorkspace() {
+export default function CompilerWorkspace({ requireAuth = true }: { requireAuth?: boolean } = {}) {
   const searchParams = useSearchParams();
+  const { anonymous, next } = useRunAccess(requireAuth);
+  const anonymousRef = useRef(false);
+  anonymousRef.current = anonymous;
 
   const [languageId, setLanguageId] = useState<string>(DEFAULT_LANGUAGE_ID);
   const [code, setCode] = useState<string>("");
@@ -79,6 +86,10 @@ export default function CompilerWorkspace() {
   const doRun = useCallback(
     async (source: string, lang: string, input: string) => {
       if (runningRef.current) return;
+      if (anonymousRef.current) {
+        setRunState({ phase: "signin" });
+        return;
+      }
       if (!source.trim()) {
         setRunState({ phase: "error", message: "Write some code first." });
         return;
@@ -98,14 +109,8 @@ export default function CompilerWorkspace() {
           /* handled below */
         }
         if (!res.ok || !data.ok || !data.run) {
-          setRunState({
-            phase: "error",
-            message:
-              data.error ||
-              (res.status === 503
-                ? "The compiler isn't configured yet. Please try again later."
-                : `The compiler request failed (${res.status}).`),
-          });
+          const failure = describeRunFailure(res.status, data, res.headers.get("retry-after"));
+          setRunState(failure.kind === "auth" ? { phase: "signin" } : { phase: "error", message: failure.message });
           return;
         }
         const hadEmptyStdin = !input.trim();
@@ -306,6 +311,7 @@ export default function CompilerWorkspace() {
         className={fullscreen ? "flex-1" : "lg:h-[calc(100vh-11rem)] lg:min-h-[600px]"}
         toolbar={
           <CompilerToolbar
+            signInRequired={anonymous}
             languages={LANGUAGES}
             languageId={languageId}
             onLanguageChange={switchLanguage}
@@ -337,7 +343,7 @@ export default function CompilerWorkspace() {
         stdin={stdin}
         onStdinChange={setStdin}
         onClearStdin={() => setStdin("")}
-        output={<OutputBody state={runState} />}
+        output={<OutputBody state={runState} anonymous={anonymous} next={next} />}
         onCopyOutput={copyOutput}
         copiedOutput={copiedOutput}
         canCopyOutput={
@@ -374,8 +380,10 @@ function StatusPill({
   );
 }
 
-function OutputBody({ state }: { state: RunState }) {
-  return state.phase === "idle" ? (
+function OutputBody({ state, anonymous, next }: { state: RunState; anonymous: boolean; next: string }) {
+  return state.phase === "signin" || (anonymous && state.phase === "idle") ? (
+    <SignInToRun next={next} />
+  ) : state.phase === "idle" ? (
     <p className="text-slate-400">Run your code to see the output here.</p>
   ) : state.phase === "running" ? (
     <p className="flex items-center gap-2 text-slate-300">

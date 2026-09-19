@@ -27,6 +27,7 @@ import {
   type Platform,
 } from "@/lib/customProjects";
 import { useDraft } from "../_builder/useDraft";
+import { resolveUploadContentType, withContentType } from "@/lib/uploads";
 import { BottomBar } from "../_builder/BottomBar";
 import { ConfigSummary } from "../_builder/ConfigSummary";
 import { CollapsibleCategory } from "../_builder/CollapsibleCategory";
@@ -155,7 +156,8 @@ export default function BuilderFeatures({
     setUploadError(null);
     const f = list[0];
     if (!f || !userId) return;
-    if (!CP_IMAGE_TYPES.includes(f.type)) {
+    const imageType = resolveUploadContentType(f, CP_IMAGE_TYPES);
+    if (!imageType) {
       setUploadError("Project image must be a PNG, JPEG or WebP.");
       return;
     }
@@ -169,7 +171,7 @@ export default function BuilderFeatures({
       const path = `${userId}/uploads/image_${Date.now()}.${ext}`;
       const { error } = await createBrowserSupabase()
         .storage.from(CP_UPLOADS_BUCKET)
-        .upload(path, f, { contentType: f.type || `image/${ext}`, upsert: true });
+        .upload(path, withContentType(f, imageType), { contentType: imageType, upsert: true });
       if (error) {
         setUploadError(`Upload failed: ${error.message}`);
         return;
@@ -192,7 +194,8 @@ export default function BuilderFeatures({
           setUploadError(`"${f.name}" is over ${CP_MAX_FILE_MB} MB and was skipped.`);
           continue;
         }
-        if (f.type && !CP_DOC_TYPES.includes(f.type)) {
+        const docType = resolveUploadContentType(f, CP_DOC_TYPES);
+        if (!docType) {
           setUploadError(`"${f.name}" is not an accepted file type and was skipped.`);
           continue;
         }
@@ -201,7 +204,7 @@ export default function BuilderFeatures({
         const path = `${userId}/uploads/ref_${Date.now()}_${safe}`;
         const { error } = await supabase.storage
           .from(CP_UPLOADS_BUCKET)
-          .upload(path, f, { contentType: f.type || "application/octet-stream", upsert: true });
+          .upload(path, withContentType(f, docType), { contentType: docType, upsert: true });
         if (error) {
           setUploadError(`Upload failed for "${f.name}": ${error.message}`);
           continue;
