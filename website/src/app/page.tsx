@@ -1,3 +1,4 @@
+import { safeHref } from "@/lib/safeUrl";
 import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -63,7 +64,7 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title: "CampusEduX",
       description: "Projects · Jobs · Placement Prep · Resume · Custom Projects — for students.",
-      images: banner?.image_url ? [{ url: banner.image_url }] : [DEFAULT_OG_IMAGE],
+      images: safeHref(banner?.image_url) ? [{ url: safeHref(banner?.image_url) as string }] : [DEFAULT_OG_IMAGE],
     },
   };
 }
@@ -86,7 +87,7 @@ export default async function HomePage() {
       <header className="container-page pb-8 pt-8 sm:pb-10 sm:pt-12">
         {banner ? (
           <Link
-            href={banner.target_url || "/projects"}
+            href={safeHref(banner.target_url) ?? "/projects"}
             className="group block overflow-hidden rounded-3xl border border-line bg-primary-50 shadow-card transition hover:shadow-card-lg"
           >
             <div className="grid items-center gap-6 p-6 sm:grid-cols-2 sm:p-10">
@@ -97,10 +98,10 @@ export default async function HomePage() {
                   Explore
                 </span>
               </div>
-              {banner.image_url && (
+              {safeHref(banner.image_url) && (
                 <div className="relative aspect-[16/10] overflow-hidden rounded-xl bg-primary-50">
                   <Image
-                    src={banner.image_url}
+                    src={safeHref(banner.image_url) ?? ""}
                     alt=""
                     fill
                     priority

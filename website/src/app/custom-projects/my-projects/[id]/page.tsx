@@ -1,3 +1,4 @@
+import { safeHref } from "@/lib/safeUrl";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -189,8 +190,8 @@ export default async function Page({ params }: Params) {
                 <span className="text-ink-muted">
                   {f.file_name || f.label} <span className="text-xs">({f.size_mb} MB)</span>
                 </span>
-                {f.url ? (
-                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-ink underline">
+                {safeHref(f.url) ? (
+                  <a href={safeHref(f.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="text-ink underline">
                     Download
                   </a>
                 ) : (
@@ -224,9 +225,9 @@ export default async function Page({ params }: Params) {
           <h2 className="text-lg font-bold text-ink">Delivery</h2>
           {delivery.delivered_at && <p className="text-xs text-ink-muted">Delivered {timeAgo(delivery.delivered_at)}</p>}
           {delivery.notes && <p className="mt-2 whitespace-pre-line text-sm text-ink">{delivery.notes}</p>}
-          {delivery.demo_url && (
+          {safeHref(delivery.demo_url) && (
             <p className="mt-2 text-sm">
-              <a href={delivery.demo_url} target="_blank" rel="noopener noreferrer" className="text-ink underline">
+              <a href={safeHref(delivery.demo_url) ?? undefined} target="_blank" rel="noopener noreferrer" className="text-ink underline">
                 Live demo
               </a>
             </p>
@@ -238,8 +239,8 @@ export default async function Page({ params }: Params) {
                   <span className="text-ink-muted">
                     {a.label || a.file_name} <span className="text-xs">({a.kind})</span>
                   </span>
-                  {a.url ? (
-                    <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-ink underline">
+                  {safeHref(a.url) ? (
+                    <a href={safeHref(a.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="text-ink underline">
                       Download
                     </a>
                   ) : (

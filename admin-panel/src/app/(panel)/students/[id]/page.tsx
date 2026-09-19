@@ -22,7 +22,7 @@ export default async function StudentOverviewPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { created?: string; saved?: string; status?: string };
+  searchParams: { created?: string; saved?: string; status?: string; warn?: string };
 }) {
   const [student, summary] = await Promise.all([getStudent(params.id), getStudentSummary(params.id)]);
   if (!student) return null; // layout already handled notFound
@@ -38,6 +38,13 @@ export default async function StudentOverviewPage({
   return (
     <div className="space-y-5">
       {flash ? <FlashToast title={flash} /> : null}
+      {searchParams.warn === 'auth_ban_skipped' ? (
+        <FlashToast
+          variant="info"
+          title="Blocked at database level only"
+          description="SUPABASE_SERVICE_ROLE_KEY is not set, so the Auth-level ban was skipped (DB-level block still enforced)."
+        />
+      ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Orders" value={formatNumber(summary.orders)} icon={ShoppingCart} />

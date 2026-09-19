@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { judgeRpcSecret, resolveApiCaller } from "@/lib/apiAuth";
+import { JUDGE_BUCKET, judgeMax, judgeWindowSeconds, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { resolveLanguage } from "@/lib/compiler/languages";
-import { MAX_CODE_BYTES, byteLength, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/compiler/limits";
-import { checkRateLimit } from "@/lib/compiler/rateLimit";
+import { MAX_CODE_BYTES, byteLength } from "@/lib/compiler/limits";
 import { runCode } from "@/lib/compiler/run";
 import { judgeCase, MAX_JUDGE_CASES, type RunCase, type JudgeCaseResult } from "@/lib/codingProblems";
 
@@ -48,42 +47,23 @@ type Verdict =
   | "time_limit_exceeded"
   | "error";
 
-/**
- * Mobile sends `Authorization: Bearer <supabase JWT>`; the website keeps using its
- * cookie session. A Bearer token that Supabase Auth rejects is treated as "no token".
- */
-function bearerClient(req: Request) {
-  const header = req.headers.get("authorization");
-  if (!header?.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length).trim();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!token || !url || !anonKey) return null;
-  const client = createClient(url, anonKey, {
-    auth: { persistSession: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-  return { client, token };
-}
-
 export async function POST(req: Request) {
-  // Bearer token (mobile) OR cookie session (website). An Authorization header that
-  // Supabase rejects is a 401 — it never silently falls back to another identity.
-  const bearer = bearerClient(req);
-  const supabase = bearer ? bearer.client : createAuthedServerSupabase();
-  const {
-    data: { user },
-  } = bearer ? await bearer.client.auth.getUser(bearer.token) : await supabase.auth.getUser();
-  if (!user) {
+  // Auth required (cookie session or Bearer). A rejected Bearer is a 401 — no silent fallback.
+  const caller = await resolveApiCaller(req);
+  if (!caller) {
     return NextResponse.json({ ok: false, error: "Sign in to submit your solution." }, { status: 401 });
   }
+  const { supabase, user } = caller;
 
-  const rate = checkRateLimit(`practice-submit:${user.id}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
-  if (!rate.ok) {
-    return NextResponse.json(
-      { ok: false, error: "You're submitting very quickly. Please wait a moment." },
-      { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
-    );
+  // One request = up to MAX_JUDGE_CASES sandbox runs, so the cap is on requests (see rateLimitDb.ts).
+  const limited = limitResponse(await rlHit(supabase, JUDGE_BUCKET, judgeMax(), judgeWindowSeconds()), {
+    message: "You're submitting very quickly. Please wait a moment.",
+  });
+  if (limited) return limited;
+
+  const secret = judgeRpcSecret();
+  if (!secret) {
+    return NextResponse.json({ ok: false, error: "Judge is not configured." }, { status: 503 });
   }
 
   let json: unknown;
@@ -102,7 +82,7 @@ export async function POST(req: Request) {
   const { language, source } = parsed.data;
   const slug = parsed.data.slug.toLowerCase();
 
-  const { data: casesData, error: casesErr } = await supabase.rpc("practice_problem_run_cases", { p_slug: slug });
+  const { data: casesData, error: casesErr } = await supabase.rpc("practice_problem_run_cases", { p_slug: slug, p_secret: secret });
   if (casesErr) {
     return NextResponse.json({ ok: false, error: "Couldn't load this problem's tests." }, { status: 502 });
   }

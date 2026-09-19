@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
-import { getOptionalUser } from "@/lib/auth";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
-import { checkRateLimit } from "@/lib/compiler/rateLimit";
+import { resolveApiCaller } from "@/lib/apiAuth";
+import { AI_DAILY_LIMIT_ASSIST, aiBudgetTake, budgetResponse, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { getAssistSuggestion, ASSIST_SECTIONS } from "@/lib/resumeBuilder/aiAssist";
 
 /**
@@ -39,7 +37,7 @@ export async function OPTIONS() {
 }
 
 const RATE_LIMIT_MAX = 20;
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 
 const bodySchema = z.object({
   resumeId: z.string().uuid().nullable().optional(),
@@ -50,38 +48,17 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  let userId: string;
-  let supabase: ReturnType<typeof createAuthedServerSupabase> | ReturnType<typeof createClient>;
+  const caller = await resolveApiCaller(req);
+  if (!caller) return corsJson({ error: "Please sign in again." }, 401);
+  const userId = caller.user.id;
+  const supabase = caller.supabase;
 
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice("Bearer ".length).trim();
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anonKey) return corsJson({ error: "Server misconfigured." }, 500);
-
-    const bearerClient = createClient(url, anonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false },
-    });
-    const { data, error } = await bearerClient.auth.getUser(token);
-    if (error || !data.user) return corsJson({ error: "Please sign in again." }, 401);
-    userId = data.user.id;
-    supabase = bearerClient;
-  } else {
-    const user = await getOptionalUser();
-    if (!user) return corsJson({ error: "Please sign in again." }, 401);
-    userId = user.id;
-    supabase = createAuthedServerSupabase();
-  }
-
-  const rate = checkRateLimit(`resume-assist:${userId}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
-  if (!rate.ok) {
-    return NextResponse.json(
-      { error: "You're requesting suggestions very quickly. Please wait a moment." },
-      { status: 429, headers: { ...CORS_HEADERS, "Retry-After": String(rate.retryAfter) } },
-    );
-  }
+  const limited = limitResponse(await rlHit(supabase, "resume-assist", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS), {
+    message: "You're requesting suggestions very quickly. Please wait a moment.",
+    withOk: false,
+    headers: CORS_HEADERS,
+  });
+  if (limited) return limited;
 
   let json: unknown;
   try {
@@ -93,6 +70,13 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return corsJson({ error: parsed.error.issues[0]?.message ?? "Invalid request." }, 400);
   }
+
+  // Daily per-user AI budget, consumed BEFORE the billable call (failed calls count).
+  const overBudget = budgetResponse(await aiBudgetTake(supabase, "resume_assist", AI_DAILY_LIMIT_ASSIST()), {
+    message: "You've reached today's AI suggestion limit. Please try again tomorrow.",
+    headers: CORS_HEADERS,
+  });
+  if (overBudget) return overBudget;
 
   const result = await getAssistSuggestion(supabase, {
     userId,

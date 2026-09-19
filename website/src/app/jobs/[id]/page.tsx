@@ -1,3 +1,4 @@
+import { safeHref } from "@/lib/safeUrl";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -88,7 +89,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
   const logo = job.company_logo_url || job.company?.logo_url || null;
 
   const deadline: string | null = job.application_deadline ?? null;
-  const applyUrl: string | null = job.apply_url ?? null;
+  const applyUrl: string | null = safeHref(job.apply_url);
   const facts: [string, string | null][] = [
     ["Category", job.category],
     ["Experience", job.experience],
@@ -107,7 +108,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
     identifier: jobPostingIdentifier(company, job.id),
     datePosted: job.posted_at,
     employmentType: job.job_type ? EMPLOYMENT_TYPE[job.job_type] : undefined,
-    hiringOrganization: hiringOrganizationJsonLd({ name: company, logoUrl: logo, website: job.company?.website ?? null }),
+    hiringOrganization: hiringOrganizationJsonLd({ name: company, logoUrl: logo, website: safeHref(job.company?.website) }),
     jobLocation: { "@type": "Place", address: job.location || "India" },
   };
   if (deadline) jobJsonLd.validThrough = deadline;

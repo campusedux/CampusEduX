@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import { resolveTargetingFromForm } from '@/lib/academic-targeting';
@@ -50,6 +51,8 @@ async function recomputeFileSize(projectId: string, category: 'main' | 'document
 // --- project CRUD --------------------------------------------------------
 export async function createProject(_prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('projects', 'add');
+  const urlErr = urlFieldError(fd, { live_demo_url: 'Live demo URL', github_url: 'GitHub URL', thumbnail_url: 'Thumbnail URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
 
   const title = str(fd, 'title');
@@ -93,6 +96,8 @@ export async function createProject(_prev: Result, fd: FormData): Promise<Result
 
 export async function updateProject(id: string, _prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('projects', 'edit');
+  const urlErr = urlFieldError(fd, { live_demo_url: 'Live demo URL', github_url: 'GitHub URL', thumbnail_url: 'Thumbnail URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
 
   const categoryId = str(fd, 'category_id') || null;
@@ -253,6 +258,8 @@ export async function setProjectVideo(projectId: string, files: UploadedFile[]):
 
 export async function setProjectVideoUrl(projectId: string, _prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('projects', 'edit');
+  const urlErr = urlFieldError(fd, { video_url: 'Video URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const url = str(fd, 'video_url') || null;
   const { error } = await supabase.from('projects').update({ video_url: url }).eq('id', projectId);

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import { resolveTargetingFromForm } from '@/lib/academic-targeting';
@@ -55,6 +56,8 @@ async function companyName(supabase: ReturnType<typeof createClient>, companyId:
 // --- jobs -------------------------------------------------------------
 export async function createJob(_prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('jobs', 'add');
+  const urlErr = urlFieldError(fd, { apply_url: 'Apply URL', company_logo_url: 'Company logo URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const title = str(fd, 'title');
   if (!title) return { ok: false, error: 'Title is required.' };
@@ -92,6 +95,8 @@ export async function createJob(_prev: Result, fd: FormData): Promise<Result> {
 
 export async function updateJob(id: string, _prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('jobs', 'edit');
+  const urlErr = urlFieldError(fd, { apply_url: 'Apply URL', company_logo_url: 'Company logo URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const companyId = str(fd, 'company_id') || null;
   const c = (await companyName(supabase, companyId)) as { name: string; logo_url: string | null };
@@ -154,6 +159,8 @@ export async function setJobPriority(id: string, value: number): Promise<Result>
 // --- companies ------------------------------------------------------
 export async function createCompany(_prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('jobs', 'add');
+  const urlErr = urlFieldError(fd, { logo_url: 'Logo URL', website: 'Company website' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const name = str(fd, 'name');
   if (!name) return { ok: false, error: 'Name is required.' };
@@ -174,6 +181,8 @@ export async function createCompany(_prev: Result, fd: FormData): Promise<Result
 
 export async function updateCompany(id: string, _prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('jobs', 'edit');
+  const urlErr = urlFieldError(fd, { logo_url: 'Logo URL', website: 'Company website' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const logoUrl = str(fd, 'logo_url') || null;
   const { error } = await supabase

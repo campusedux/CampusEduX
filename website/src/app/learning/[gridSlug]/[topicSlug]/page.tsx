@@ -1,3 +1,4 @@
+import { safeHref } from "@/lib/safeUrl";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -132,11 +133,11 @@ export default async function TopicPage({
                   ) : (
                     <Markdown source={block.body} topicLinks={topicLinkIndex} linkState={topicLinkState} />
                   )}
-                  {(block.file_url || block.video_url) && (
+                  {(safeHref(block.file_url) || safeHref(block.video_url)) && (
                     <div className="mt-4 flex flex-wrap gap-3">
-                      {block.file_url ? (
+                      {safeHref(block.file_url) ? (
                         <a
-                          href={block.file_url}
+                          href={safeHref(block.file_url) ?? undefined}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface"
@@ -144,9 +145,9 @@ export default async function TopicPage({
                           <Download className="h-4 w-4" aria-hidden /> Attachment
                         </a>
                       ) : null}
-                      {block.video_url ? (
+                      {safeHref(block.video_url) ? (
                         <a
-                          href={block.video_url}
+                          href={safeHref(block.video_url) ?? undefined}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface"

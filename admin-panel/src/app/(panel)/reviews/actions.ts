@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 
@@ -73,6 +74,8 @@ export async function resolveReport(
 // --- testimonials -----------------------------------------------
 export async function createTestimonial(_p: Result, fd: FormData): Promise<Result> {
   await requirePermission('reviews', 'add');
+  const urlErr = urlFieldError(fd, { avatar_url: 'Avatar URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const author = s(fd, 'author_name');
   const quote = s(fd, 'quote');
@@ -94,6 +97,8 @@ export async function createTestimonial(_p: Result, fd: FormData): Promise<Resul
 
 export async function updateTestimonial(id: string, _p: Result, fd: FormData): Promise<Result> {
   await requirePermission('reviews', 'edit');
+  const urlErr = urlFieldError(fd, { avatar_url: 'Avatar URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const { error } = await supabase
     .from('testimonials')

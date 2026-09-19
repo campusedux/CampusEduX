@@ -351,20 +351,40 @@ export async function getTopicMockTests(topicId: string): Promise<TopicMockTest[
   );
 }
 
+
+/** DB-05: `test_cases` / `solution_code` are not readable by table SELECT any
+ *  more (column revoke, migration 0120/092). Admins read them through the
+ *  admin-only `admin_dsa_problem_secrets` RPC and merge them onto the rows. */
+async function attachProblemSecrets<T extends { id: string }>(
+  supabase: ReturnType<typeof createClient>,
+  rows: T[],
+): Promise<(T & { solution_code: unknown; test_cases: unknown })[]> {
+  if (rows.length === 0) return [];
+  const { data } = await supabase.rpc('admin_dsa_problem_secrets', { p_ids: rows.map((r) => r.id) });
+  const byId = new Map<string, { solution_code: unknown; test_cases: unknown }>();
+  for (const r of (data ?? []) as { id: string; solution_code: unknown; test_cases: unknown }[]) byId.set(r.id, r);
+  return rows.map((r) => ({
+    ...r,
+    solution_code: byId.get(r.id)?.solution_code ?? {},
+    test_cases: byId.get(r.id)?.test_cases ?? [],
+  }));
+}
+
 export async function getTopicCodingProblems(topicId: string): Promise<TopicCodingProblem[]> {
   const supabase = createClient();
-  return safe(
+  const rows = await safe(
     supabase
       .from('dsa_problems')
       .select(
-        'id,title,slug,difficulty,description,examples,constraints,starter_code,solution_code,test_cases,hints,editorial,solution_approach,supported_languages,is_premium,status,show_on_website,show_on_mobile,sort_order',
+        'id,title,slug,difficulty,description,examples,constraints,starter_code,hints,editorial,solution_approach,supported_languages,is_premium,status,show_on_website,show_on_mobile,sort_order',
       )
       .eq('learning_topic_id', topicId)
       .is('topic_id', null)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true }),
-    [] as TopicCodingProblem[],
+    [] as Omit<TopicCodingProblem, 'solution_code' | 'test_cases'>[],
   );
+  return (await attachProblemSecrets(supabase, rows)) as TopicCodingProblem[];
 }
 
 /** Published topics of a grid, for the "attach content to a topic" picker on
@@ -411,7 +431,7 @@ export interface PracticeProblemRow extends TopicCodingProblem {
 }
 
 const PRACTICE_PROBLEM_COLS =
-  'id,topic_id,title,slug,difficulty,description,examples,constraints,starter_code,solution_code,test_cases,hints,editorial,solution_approach,supported_languages,is_premium,status,show_on_website,show_on_mobile,sort_order';
+  'id,topic_id,title,slug,difficulty,description,examples,constraints,starter_code,hints,editorial,solution_approach,supported_languages,is_premium,status,show_on_website,show_on_mobile,sort_order';
 
 export async function listPracticeCategories(): Promise<PracticeCategoryRow[]> {
   const supabase = createClient();
@@ -464,7 +484,8 @@ export async function listPracticeProblems(opts: {
   if (opts.status) query = query.eq('status', opts.status);
 
   const { data, count, error } = await query;
-  const rows = ((error ? [] : (data ?? [])) as unknown as PracticeProblemRow[]).map((r) => ({
+  const baseRows = (error ? [] : (data ?? [])) as unknown as PracticeProblemRow[];
+  const rows = (await attachProblemSecrets(supabase, baseRows)).map((r) => ({
     ...r,
     category_name: catById.get(r.topic_id)?.name,
     category_slug: catById.get(r.topic_id)?.slug ?? null,
@@ -480,7 +501,9 @@ export async function getPracticeProblem(id: string): Promise<PracticeProblemRow
     .eq('id', id)
     .is('learning_topic_id', null)
     .maybeSingle();
-  return (data ?? null) as unknown as PracticeProblemRow | null;
+  if (!data) return null;
+  const [withSecrets] = await attachProblemSecrets(supabase, [data as unknown as PracticeProblemRow]);
+  return withSecrets as PracticeProblemRow;
 }
 
 // ---------------------------------------------------------------------------

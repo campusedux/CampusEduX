@@ -6,6 +6,7 @@ import { createClient as createSbClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
+import { setAuthBan } from '@/lib/supabase/adminApi';
 
 type Result = { ok: boolean; error?: string };
 
@@ -137,15 +138,27 @@ export async function setStudentStatus(id: string, _prev: Result, fd: FormData):
   const { error } = await supabase.from('profiles').update(patch).eq('id', id);
   if (error) return { ok: false, error: error.message };
 
+  // DB-04: also ban/unban in Supabase Auth so existing sessions stop refreshing. Needs the
+  // optional server-only SUPABASE_SERVICE_ROLE_KEY; without it the DB-level block still applies.
+  const ban = await setAuthBan(id, block);
+  if (ban.status === 'skipped') console.warn(`[students] ${ban.warning}`);
+  if (ban.status === 'failed') console.error(`[students] Auth ban/unban failed for ${id}: ${ban.error}`);
+
   await logActivity({
     action: block ? 'student.block' : 'student.unblock',
     module: 'students',
     resourceType: 'profiles',
     resourceId: id,
-    details: block ? { reason } : null,
+    details: { ...(block ? { reason } : {}), auth_ban: ban.status },
   });
   revalidatePath(`/students/${id}`);
-  redirect(`/students/${id}?status=1`);
+  if (ban.status === 'failed') {
+    return {
+      ok: false,
+      error: `Student ${block ? 'blocked' : 'unblocked'} in the database, but the Auth-level ${block ? 'ban' : 'unban'} failed: ${ban.error}`,
+    };
+  }
+  redirect(`/students/${id}?status=1${ban.status === 'skipped' ? '&warn=auth_ban_skipped' : ''}`);
 }
 
 export async function adjustStudentWallet(id: string, _prev: Result, fd: FormData): Promise<Result> {

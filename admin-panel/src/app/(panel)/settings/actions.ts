@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient as createSbClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import { MODULES, ADMIN_ROLES, type AdminRole } from '@/lib/permissions';
@@ -17,6 +18,8 @@ const on = (fd: FormData, k: string) => fd.get(k) === 'on';
 // --- general settings -------------------------------------------------
 export async function saveGeneralSettings(_p: Result, fd: FormData): Promise<Result> {
   await requirePermission('settings', 'edit');
+  const urlErr = urlFieldError(fd, { logo_url: 'Logo URL', favicon_url: 'Favicon URL', social_twitter: 'Twitter link', social_linkedin: 'LinkedIn link', social_instagram: 'Instagram link', social_youtube: 'YouTube link' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const {
     data: { user },

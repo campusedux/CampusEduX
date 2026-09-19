@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import type { UploadedFile } from '@/components/ui/UploadDropzone';
@@ -101,6 +102,8 @@ export async function markInboxRead(inboxId: string): Promise<Result> {
 
 export async function saveDelivery(requestId: string, _prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('custom_projects', 'edit');
+  const urlErr = urlFieldError(fd, { demo_url: 'Demo URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const { error } = await supabase
     .from('custom_project_deliveries')
@@ -204,6 +207,9 @@ function parseFeatureForm(fd: FormData):
 
   const category = str(fd, 'category');
   if (!category) return { ok: false, error: 'Category is required.' };
+
+  const urlErr = urlFieldError(fd, { image_url: 'Image URL' });
+  if (urlErr) return { ok: false, error: urlErr };
 
   const project_types = targetArray(fd, 'project_types', TYPES);
   if (project_types.length === 0) return { ok: false, error: 'Pick at least one project type.' };

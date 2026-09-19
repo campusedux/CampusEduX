@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getOptionalUser } from "@/lib/auth";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
-import { checkRateLimit } from "@/lib/compiler/rateLimit";
+import { resolveApiCaller } from "@/lib/apiAuth";
+import { AI_DAILY_LIMIT_UNDERSTAND, aiBudgetTake, budgetResponse, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { getProjectUnderstanding } from "@/lib/customProjects/aiUnderstand";
 import { PLATFORMS, PROJECT_LEVELS, PROJECT_TYPES } from "@/lib/customProjects";
 
 /**
- * POST /api/custom-projects/understand — website-only (cookie session).
+ * POST /api/custom-projects/understand — cookie session or Bearer JWT.
  * Infers project type/level/platform + a short overview + feature
  * suggestions from the Details step's freeform text. Never writes to the
  * draft itself; the Details step applies the result client-side.
@@ -16,7 +15,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const RATE_LIMIT_MAX = 8;
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 
 const bodySchema = z.object({
   title: z.string().trim().min(1, "Missing project name.").max(200),
@@ -31,16 +30,15 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const user = await getOptionalUser();
-  if (!user) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
+  const caller = await resolveApiCaller(req);
+  if (!caller) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
+  const { user, supabase } = caller;
 
-  const rate = checkRateLimit(`custom-projects-understand:${user.id}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
-  if (!rate.ok) {
-    return NextResponse.json(
-      { error: "You're requesting this very quickly. Please wait a moment." },
-      { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
-    );
-  }
+  const limited = limitResponse(await rlHit(supabase, "custom-projects-understand", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS), {
+    message: "You're requesting this very quickly. Please wait a moment.",
+    withOk: false,
+  });
+  if (limited) return limited;
 
   let json: unknown;
   try {
@@ -53,7 +51,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request." }, { status: 400 });
   }
 
-  const supabase = createAuthedServerSupabase();
+  // Daily per-user AI budget, consumed BEFORE the billable call (failed calls count).
+  const overBudget = budgetResponse(await aiBudgetTake(supabase, "project_understand", AI_DAILY_LIMIT_UNDERSTAND()), {
+    message: "You've reached today's AI limit. Please try again tomorrow.",
+  });
+  if (overBudget) return overBudget;
+
   const result = await getProjectUnderstanding(supabase, {
     userId: user.id,
     title: parsed.data.title,
