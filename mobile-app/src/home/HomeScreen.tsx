@@ -73,6 +73,43 @@ const CATEGORIES: HomeCategory[] = [
   },
 ];
 
+interface PracticeCard {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bg: string;
+  go: (nav: any) => void;
+}
+
+/** Mirrors the website Home "Practice" cards (Coding Practice / Mock Tests / Interview Questions). */
+const PRACTICE: PracticeCard[] = [
+  {
+    title: "Coding Practice",
+    subtitle: "Solve problems in 5 languages",
+    icon: "code-slash",
+    color: "#4F39F6",
+    bg: "#EEF0FF",
+    go: (n) => n.navigate("PracticeProblems"),
+  },
+  {
+    title: "Mock Tests",
+    subtitle: "Timed tests on Learning topics",
+    icon: "clipboard",
+    color: "#0D9488",
+    bg: "#CCFBF1",
+    go: (n) => n.getParent()?.navigate("Prep", { screen: "LearningGrids" }),
+  },
+  {
+    title: "Interview Questions",
+    subtitle: "Questions & answers by topic",
+    icon: "chatbubble-ellipses",
+    color: "#DB2777",
+    bg: "#FCE7F3",
+    go: (n) => n.navigate("InterviewCategories"),
+  },
+];
+
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
@@ -119,11 +156,6 @@ export function HomeScreen() {
         </Pressable>
       </View>
 
-      <CustomProjectBanner
-        onStartProject={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
-        onLearnMore={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
-      />
-
       <Pressable
         onPress={() => (navigation as any).navigate("SearchResult")}
         className="flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-4 mb-5"
@@ -140,6 +172,11 @@ export function HomeScreen() {
           returnKeyType="search"
         />
       </Pressable>
+
+      <CustomProjectBanner
+        onStartProject={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
+        onLearnMore={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
+      />
 
       {!user?.isPremium && (
         <PressableScale
@@ -208,6 +245,30 @@ export function HomeScreen() {
         ) : (
           <EmptyState title="No learning resources yet" />
         )}
+      </View>
+
+      <View className="mt-3">
+        <SectionHeader title="Practice" onViewAll={() => (navigation as any).navigate("PracticeHub")} />
+        <View className="flex-row flex-wrap justify-between">
+          {PRACTICE.map((c) => (
+            <PressableScale
+              key={c.title}
+              onPress={() => c.go(navigation)}
+              className="items-center bg-white rounded-2xl border border-gray-100 py-4 px-1 mb-3"
+              style={{ width: "31%", ...CARD_SHADOW }}
+            >
+              <View className="w-12 h-12 rounded-2xl items-center justify-center mb-2" style={{ backgroundColor: c.bg }}>
+                <Ionicons name={c.icon} size={24} color={c.color} />
+              </View>
+              <Text className="text-gray-900 text-[12px] font-bold text-center" numberOfLines={2}>
+                {c.title}
+              </Text>
+              <Text className="text-gray-500 text-[10px] text-center mt-0.5 px-1" numberOfLines={3}>
+                {c.subtitle}
+              </Text>
+            </PressableScale>
+          ))}
+        </View>
       </View>
 
       <View className="mt-3">

@@ -37,6 +37,15 @@ export type HomeStackParamList = {
   LatestJobs: undefined;
   ReferralBanner: undefined;
   OfferBanner: undefined;
+  PracticeHub: undefined;
+  PracticeProblems: { category?: string } | undefined;
+  PracticeProblem: { slug: string; title?: string };
+  PracticeCompiler: undefined;
+  PracticeSubmissions: undefined;
+  PracticeSubmission: { id: string };
+  InterviewCategories: undefined;
+  InterviewTopics: { categorySlug: string };
+  InterviewTopic: { categorySlug: string; topicSlug: string };
 };
 
 export type ProjectStackParamList = {

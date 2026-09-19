@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { resolveLanguage } from "@/lib/compiler/languages";
@@ -47,11 +48,32 @@ type Verdict =
   | "time_limit_exceeded"
   | "error";
 
+/**
+ * Mobile sends `Authorization: Bearer <supabase JWT>`; the website keeps using its
+ * cookie session. A Bearer token that Supabase Auth rejects is treated as "no token".
+ */
+function bearerClient(req: Request) {
+  const header = req.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!token || !url || !anonKey) return null;
+  const client = createClient(url, anonKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  return { client, token };
+}
+
 export async function POST(req: Request) {
-  const supabase = createAuthedServerSupabase();
+  // Bearer token (mobile) OR cookie session (website). An Authorization header that
+  // Supabase rejects is a 401 — it never silently falls back to another identity.
+  const bearer = bearerClient(req);
+  const supabase = bearer ? bearer.client : createAuthedServerSupabase();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = bearer ? await bearer.client.auth.getUser(bearer.token) : await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Sign in to submit your solution." }, { status: 401 });
   }

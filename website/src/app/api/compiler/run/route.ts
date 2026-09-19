@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { runRequestSchema } from "@/lib/compiler/schema";
 import { runCode } from "@/lib/compiler/run";
@@ -24,10 +25,37 @@ function clientKey(req: Request): string {
   return `ua:${(req.headers.get("user-agent") ?? "unknown").slice(0, 100)}`;
 }
 
+/**
+ * Mobile sends `Authorization: Bearer <supabase JWT>`; the website keeps using its
+ * cookie session. A Bearer token that Supabase Auth rejects is treated as "no token".
+ */
+function bearerClient(req: Request) {
+  const header = req.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!token || !url || !anonKey) return null;
+  const client = createClient(url, anonKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  return { client, token };
+}
+
 export async function POST(req: Request) {
+  // A valid Bearer token identifies the user (mobile); rate-limit per user instead of per IP
+  // so many students behind one carrier IP don't block each other.
+  let bearerUserId: string | null = null;
+  const bearer = bearerClient(req);
+  if (bearer) {
+    const { data, error } = await bearer.client.auth.getUser(bearer.token);
+    if (!error && data.user) bearerUserId = data.user.id;
+  }
+
   // Optional gate — off by default so the compiler is usable straight from a
   // tutorial link without signing in.
-  if ((process.env.COMPILER_REQUIRE_AUTH || "").toLowerCase() === "true") {
+  if (!bearerUserId && (process.env.COMPILER_REQUIRE_AUTH || "").toLowerCase() === "true") {
     const supabase = createAuthedServerSupabase();
     const {
       data: { user },
@@ -37,7 +65,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const rate = checkRateLimit(clientKey(req), RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
+  const rate = checkRateLimit(bearerUserId ? `user:${bearerUserId}` : clientKey(req), RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
   if (!rate.ok) {
     return NextResponse.json(
       { ok: false, error: "You're running code very quickly. Please wait a moment." },

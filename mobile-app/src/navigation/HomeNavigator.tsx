@@ -11,6 +11,15 @@ import { NewArrivalScreen } from "@/home/NewArrivalScreen";
 import { LatestJobsScreen } from "@/home/LatestJobsScreen";
 import { ReferralBannerScreen } from "@/home/ReferralBannerScreen";
 import { OfferBannerScreen } from "@/home/OfferBannerScreen";
+import { PracticeHubScreen } from "@/practice/PracticeHubScreen";
+import { PracticeProblemsScreen } from "@/practice/PracticeProblemsScreen";
+import { PracticeProblemScreen } from "@/practice/PracticeProblemScreen";
+import { PracticeCompilerScreen } from "@/practice/PracticeCompilerScreen";
+import { PracticeSubmissionsScreen } from "@/practice/PracticeSubmissionsScreen";
+import { PracticeSubmissionScreen } from "@/practice/PracticeSubmissionScreen";
+import { InterviewCategoriesScreen } from "@/practice/InterviewCategoriesScreen";
+import { InterviewTopicsScreen } from "@/practice/InterviewTopicsScreen";
+import { InterviewTopicScreen } from "@/practice/InterviewTopicScreen";
 import type { HomeStackParamList } from "@/types";
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -34,6 +43,15 @@ export function HomeNavigator() {
       <Stack.Screen name="LatestJobs" component={LatestJobsScreen} />
       <Stack.Screen name="ReferralBanner" component={ReferralBannerScreen} />
       <Stack.Screen name="OfferBanner" component={OfferBannerScreen} />
+      <Stack.Screen name="PracticeHub" component={PracticeHubScreen} />
+      <Stack.Screen name="PracticeProblems" component={PracticeProblemsScreen} />
+      <Stack.Screen name="PracticeProblem" component={PracticeProblemScreen} />
+      <Stack.Screen name="PracticeCompiler" component={PracticeCompilerScreen} />
+      <Stack.Screen name="PracticeSubmissions" component={PracticeSubmissionsScreen} />
+      <Stack.Screen name="PracticeSubmission" component={PracticeSubmissionScreen} />
+      <Stack.Screen name="InterviewCategories" component={InterviewCategoriesScreen} />
+      <Stack.Screen name="InterviewTopics" component={InterviewTopicsScreen} />
+      <Stack.Screen name="InterviewTopic" component={InterviewTopicScreen} />
     </Stack.Navigator>
   );
 }

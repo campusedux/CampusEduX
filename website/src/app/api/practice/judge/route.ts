@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { resolveLanguage } from "@/lib/compiler/languages";
@@ -41,8 +42,39 @@ function clientKey(req: Request): string {
   return ip ? `ip:${ip}` : `ua:${(req.headers.get("user-agent") ?? "unknown").slice(0, 100)}`;
 }
 
+/**
+ * Mobile sends `Authorization: Bearer <supabase JWT>`; the website keeps using its
+ * cookie session. A Bearer token that Supabase Auth rejects is treated as "no token".
+ */
+function bearerClient(req: Request) {
+  const header = req.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!token || !url || !anonKey) return null;
+  const client = createClient(url, anonKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  return { client, token };
+}
+
 export async function POST(req: Request) {
-  const rate = checkRateLimit(`practice-judge:${clientKey(req)}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
+  // A valid Bearer token (mobile) is rate-limited per user instead of per IP, and the
+  // problem RPC then runs as that user (same premium/RLS rules as the cookie session).
+  let bearerSupabase: NonNullable<ReturnType<typeof bearerClient>>["client"] | null = null;
+  let bearerUserId: string | null = null;
+  const bearer = bearerClient(req);
+  if (bearer) {
+    const { data, error } = await bearer.client.auth.getUser(bearer.token);
+    if (!error && data.user) {
+      bearerSupabase = bearer.client;
+      bearerUserId = data.user.id;
+    }
+  }
+
+  const rate = checkRateLimit(`practice-judge:${bearerUserId ? `user:${bearerUserId}` : clientKey(req)}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
   if (!rate.ok) {
     return NextResponse.json(
       { ok: false, error: "You're running code very quickly. Please wait a moment." },
@@ -65,7 +97,7 @@ export async function POST(req: Request) {
   }
   const { slug, language, source } = parsed.data;
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = bearerSupabase ?? createAuthedServerSupabase();
   const { data, error } = await supabase.rpc("practice_problem_run_cases", { p_slug: slug });
   if (error) {
     return NextResponse.json({ ok: false, error: "Couldn't load this problem's tests." }, { status: 502 });
