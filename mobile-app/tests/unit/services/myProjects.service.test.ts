@@ -1,7 +1,7 @@
 jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModule());
 
 import { myProjectsService } from "@/services/myProjects.service";
-import { resetSupabaseMock, setTableResult } from "../../mocks/supabase.mock";
+import { resetSupabaseMock, setTableResult, setRpcResult } from "../../mocks/supabase.mock";
 
 beforeEach(() => resetSupabaseMock());
 
@@ -25,7 +25,7 @@ const projectEmbed = {
 
 describe("myProjectsService.getOwnedProjects", () => {
   it("wraps wishlisted projects as pseudo-orders", async () => {
-    setTableResult("wishlists", { data: [{ project: { ...projectEmbed, category: { name: "Web Development" } } }] });
+    setRpcResult("my_wishlist", { data: [{ ...projectEmbed, project_id: projectEmbed.id, available: true, category_name: "Web Development" }] });
 
     const owned = await myProjectsService.getOwnedProjects("u-1", "wishlist");
 

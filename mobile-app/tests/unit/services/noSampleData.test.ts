@@ -3,7 +3,7 @@ jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModul
 import { homeService } from "@/services/home.service";
 import { projectService } from "@/services/project.service";
 import { resumeService } from "@/services/resume.service";
-import { resetSupabaseMock, setTableResult } from "../../mocks/supabase.mock";
+import { resetSupabaseMock, setTableResult, setRpcResult } from "../../mocks/supabase.mock";
 
 /** jest-expo sets __DEV__ = true; these tests exercise the release-build paths. */
 const g = globalThis as unknown as { __DEV__: boolean };
@@ -41,7 +41,6 @@ describe("production build: catalog errors throw, empty stays empty", () => {
       ["projects", () => projectService.getAllProjects()],
       ["projects", () => projectService.getCategoryProjects("c1")],
       ["projects", () => projectService.getSimilarProjects("p1", "c1")],
-      ["wishlists", () => projectService.getWishlist("u1")],
       ["purchases", () => projectService.getPurchasedProjects("u1")],
       ["downloads", () => projectService.getDownloadHistory("u1")],
     ];
@@ -49,6 +48,8 @@ describe("production build: catalog errors throw, empty stays empty", () => {
       setTableResult(table, boom);
       await expect(call()).rejects.toThrow("boom");
     }
+    setRpcResult("my_wishlist", boom);
+    await expect(projectService.getWishlist("u1")).rejects.toThrow("boom");
     setTableResult("projects", { data: [] });
     expect(await projectService.getAllProjects()).toEqual({ projects: [], hasMore: false });
     expect(await projectService.getCategoryProjects("c1")).toEqual([]);

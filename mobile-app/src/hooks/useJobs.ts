@@ -110,7 +110,7 @@ export function usePickAndUploadResume() {
     assertResumeSize(file.size);
     setIsUploading(true);
     try {
-      const uploaded = await jobService.uploadResume(userId as string, file.uri, file.name);
+      const uploaded = await jobService.uploadResume(userId as string, file.uri, file.name, file.mimeType);
       queryClient.invalidateQueries({ queryKey: jobQueryKeys.resumes });
       return uploaded;
     } finally {

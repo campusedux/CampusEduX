@@ -1,5 +1,7 @@
 import { compactRows } from "@/lib/safeRows";
 import { supabase } from "@/lib/supabase";
+import { assertResumeSize } from "@/lib/resumeFile";
+import { RESUME_MIME_TYPES, readFileBody, resolveContentType } from "@/lib/uploadMime";
 import { rankByAcademicRelevance, hasAcademicSignal, type AcademicProfile } from "@/lib/personalization";
 import type {
   Job,
@@ -420,13 +422,17 @@ export const jobService = {
     );
   },
 
-  async uploadResume(userId: string, fileUri: string, fileName: string): Promise<{ id: string; fileUrl: string }> {
+  async uploadResume(userId: string, fileUri: string, fileName: string, mimeType?: string | null): Promise<{ id: string; fileUrl: string }> {
     const path = `${userId}/${Date.now()}_${fileName}`;
-    const response = await fetch(fileUri);
-    const blob = await response.blob();
+    // The `resumes` bucket only accepts pdf/doc/docx up to 5 MB (0117/089): resolve the type from the
+    // picker mime or the extension (never octet-stream) and send an ArrayBuffer so it is really used.
+    const { body, hintType, size } = await readFileBody(fileUri);
+    assertResumeSize(size);
+    const contentType = resolveContentType({ name: fileName, uri: fileUri, mimeType, hintType }, RESUME_MIME_TYPES);
+    if (!contentType) throw new Error("Please choose a PDF, DOC or DOCX file.");
 
-    const { error: uploadError } = await supabase.storage.from("resumes").upload(path, blob, {
-      contentType: blob.type || "application/pdf",
+    const { error: uploadError } = await supabase.storage.from("resumes").upload(path, body, {
+      contentType,
       upsert: true,
     });
     if (uploadError) throw new Error(uploadError.message);

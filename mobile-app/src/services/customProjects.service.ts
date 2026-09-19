@@ -1,5 +1,12 @@
 import { supabase } from "@/lib/supabase";
 import {
+  CUSTOM_IMAGE_MIME_TYPES,
+  CUSTOM_UPLOAD_MIME_TYPES,
+  extensionForImageMime,
+  readFileBody,
+  resolveContentType,
+} from "@/lib/uploadMime";
+import {
   type CustomFeature,
   type CustomPlatformPricing,
   type CustomProjectBuilderConfig,
@@ -341,13 +348,16 @@ export const customProjectsService = {
 
   // --- uploads (private bucket, path <uid>/uploads/<file>) ------------
 
-  async uploadProjectImage(userId: string, fileUri: string): Promise<string> {
-    const ext = (fileUri.split(".").pop() || "jpg").split("?")[0].toLowerCase();
-    const path = `${userId}/uploads/image_${Date.now()}.${ext}`;
-    const blob = await (await fetch(fileUri)).blob();
+  async uploadProjectImage(userId: string, fileUri: string, mimeType?: string | null): Promise<string> {
+    // Bucket allows png/jpeg/webp only (0117/089); the picker re-encodes to JPEG at quality < 1.
+    const { body, hintType } = await readFileBody(fileUri);
+    const contentType =
+      resolveContentType({ mimeType, uri: fileUri, hintType }, CUSTOM_IMAGE_MIME_TYPES) ?? (mimeType ? null : "image/jpeg");
+    if (!contentType) throw new Error("Project image must be a PNG, JPEG or WebP.");
+    const path = `${userId}/uploads/image_${Date.now()}.${extensionForImageMime(contentType)}`;
     const { error } = await supabase.storage
       .from(UPLOADS_BUCKET)
-      .upload(path, blob, { contentType: blob.type || `image/${ext}`, upsert: true });
+      .upload(path, body, { contentType, upsert: true });
     if (error) throw new Error(error.message);
     return path;
   },
@@ -360,15 +370,18 @@ export const customProjectsService = {
   ): Promise<{ path: string; name: string; sizeMb: number }> {
     const safeName = fileName.replace(/[^A-Za-z0-9._-]/g, "_");
     const path = `${userId}/uploads/ref_${Date.now()}_${safeName}`;
-    const blob = await (await fetch(fileUri)).blob();
+    const { body, hintType, size } = await readFileBody(fileUri);
+    // Never octet-stream (not in the bucket allow-list): picker mime -> extension.
+    const contentType = resolveContentType({ name: fileName, uri: fileUri, mimeType, hintType }, CUSTOM_UPLOAD_MIME_TYPES);
+    if (!contentType) throw new Error("That file type isn't accepted. Use PDF, DOC/DOCX, ZIP or PNG/JPEG/WebP.");
     const { error } = await supabase.storage
       .from(UPLOADS_BUCKET)
-      .upload(path, blob, { contentType: mimeType || blob.type || "application/octet-stream", upsert: true });
+      .upload(path, body, { contentType, upsert: true });
     if (error) throw new Error(error.message);
     return {
       path,
       name: fileName,
-      sizeMb: Math.round((blob.size / (1024 * 1024)) * 100) / 100,
+      sizeMb: Math.round((size / (1024 * 1024)) * 100) / 100,
     };
   },
 

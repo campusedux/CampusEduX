@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { mimeFromName } from "@/lib/uploadMime";
 import * as Print from "expo-print";
 import { BRAND } from "@/constants/brand";
 import type {
@@ -455,7 +456,7 @@ export const resumeService = {
 
     const form = new FormData();
     // React Native's fetch understands this { uri, name, type } shape for file parts.
-    form.append("file", { uri: file.uri, name: file.name, type: file.mimeType ?? "application/octet-stream" } as unknown as Blob);
+    form.append("file", { uri: file.uri, name: file.name, type: mimeFromName(file.name) ?? file.mimeType ?? "application/octet-stream" } as unknown as Blob);
 
     const res = await fetch(`${BRAND.website.replace(/\/$/, "")}/api/resume/parse`, {
       method: "POST",

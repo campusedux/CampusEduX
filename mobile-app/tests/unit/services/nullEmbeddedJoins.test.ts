@@ -4,7 +4,7 @@ import { compactRows } from "@/lib/safeRows";
 import { jobService, mapJobRow } from "@/services/job.service";
 import { projectService } from "@/services/project.service";
 import { myProjectsService } from "@/services/myProjects.service";
-import { supabase, resetSupabaseMock, setTableResult } from "../../mocks/supabase.mock";
+import { supabase, resetSupabaseMock, setTableResult, setRpcResult } from "../../mocks/supabase.mock";
 import { jobRow } from "../../mocks/jobs.mock";
 import { projectRows } from "../../mocks/projects.mock";
 
@@ -53,10 +53,18 @@ describe("MOB-09 null embedded joins", () => {
     }
   });
 
-  it("getWishlist skips a null embedded project", async () => {
-    setTableResult("wishlists", { data: [{ project: null }, { project: projectRows[0] }] });
+  it("getWishlist (my_wishlist RPC) turns an unavailable/null project into a detail-free tombstone", async () => {
+    setRpcResult("my_wishlist", {
+      data: [
+        { project_id: "gone", available: false, title: null },
+        { project_id: projectRows[0].id, available: true, ...projectRows[0] },
+      ],
+    });
     const list = await projectService.getWishlist("u-1");
-    expect(list).toHaveLength(1);
+    expect(list).toHaveLength(2);
+    expect(list[0]).toMatchObject({ id: "gone", available: false, title: "No longer available", price: 0, thumbnailUrl: null });
+    expect(list[1]).toMatchObject({ id: projectRows[0].id, available: true, title: projectRows[0].title });
+    expect(supabase.rpc).toHaveBeenCalledWith("my_wishlist");
   });
 
   it("getPurchasedProjects skips purchases whose project is null", async () => {

@@ -237,17 +237,37 @@ export const projectService = {
     return !!data;
   },
 
-  async getWishlist(userId: string): Promise<Project[]> {
+  async getWishlist(_userId: string): Promise<Project[]> {
     return orSample(
       "getWishlist",
       async () => {
-        const { data, error } = await supabase
-          .from("wishlists")
-          .select("project:projects(*, category:categories(name))")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false });
+        // my_wishlist() (migration 0120/092): RLS no longer lets a wishlist join read unpublished
+        // projects, so the RPC returns card data for available ones and a detail-free tombstone
+        // (available=false) for the rest. Scoped to auth.uid() server-side.
+        const { data, error } = await supabase.rpc("my_wishlist");
         if (error) throw new Error(error.message);
-        return compactRows(data as any[], "project").map((row: any) => mapProjectRow(row.project));
+        return (Array.isArray(data) ? data : [])
+          .filter((row: any) => row && typeof row.project_id === "string")
+          .map((row: any): Project =>
+            row.available === false || !row.title
+              ? {
+                  id: row.project_id,
+                  title: "No longer available",
+                  categoryId: "",
+                  categoryName: "",
+                  techStack: [],
+                  price: 0,
+                  rating: 0,
+                  reviewCount: 0,
+                  thumbnailUrl: null,
+                  isPremium: false,
+                  isBestSeller: false,
+                  salesCount: 0,
+                  createdAt: row.wishlisted_at ?? "",
+                  available: false,
+                }
+              : { ...mapProjectRow({ ...row, id: row.project_id }), available: true }
+          );
       },
       // per-user read: no sample, ever
     );

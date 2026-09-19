@@ -8,22 +8,17 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { customProjectsService } from "@/services/customProjects.service";
 import { useAuthStore } from "@/store/authStore";
+import { CUSTOM_UPLOAD_MAX_MB, CUSTOM_UPLOAD_MIME_TYPES } from "@/lib/uploadMime";
 import { useBuilderStore } from "./builderStore";
 import { WizardScreen, SectionCard } from "./components/wizard";
 import type { CustomProjectsStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<CustomProjectsStackParamList, "BuilderUploads">;
 
-const MAX_FILE_MB = 15;
+const MAX_FILE_MB = CUSTOM_UPLOAD_MAX_MB;
 const MAX_FILES = 20; // create-custom-project-order keeps at most 20 reference files
-const DOC_TYPES = [
-  "image/*",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/zip",
-  "application/x-zip-compressed",
-];
+// Exactly what the bucket accepts (image/* would also let through gif/heic, which it rejects).
+const DOC_TYPES: string[] = [...CUSTOM_UPLOAD_MIME_TYPES];
 
 interface Uploading {
   key: string;
@@ -66,7 +61,7 @@ export function BuilderUploadsScreen() {
     const asset = result.assets[0];
     setImageBusy(true);
     try {
-      const path = await customProjectsService.uploadProjectImage(userId, asset.uri);
+      const path = await customProjectsService.uploadProjectImage(userId, asset.uri, asset.mimeType);
       patch({ projectImagePath: path });
       setPreview(path, asset.uri);
     } catch (e) {

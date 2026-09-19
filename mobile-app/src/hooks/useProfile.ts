@@ -49,7 +49,7 @@ export function usePickAndUploadAvatar() {
 
     setIsUploading(true);
     try {
-      return await profileService.uploadAvatar(userId as string, result.assets[0].uri);
+      return await profileService.uploadAvatar(userId as string, result.assets[0].uri, result.assets[0].mimeType);
     } finally {
       setIsUploading(false);
     }

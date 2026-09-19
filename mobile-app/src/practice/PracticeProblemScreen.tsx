@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
 import { MarkdownText } from "@/components/learning/MarkdownText";
-import { usePracticeProblem } from "@/hooks/usePractice";
+import { practiceQueryKeys, usePracticeProblem } from "@/hooks/usePractice";
 import { PracticeApiError, practiceService } from "@/services/practice.service";
 import { useAuthStore } from "@/store/authStore";
 import { useAuth } from "@/hooks/useAuth";
@@ -118,6 +118,8 @@ export function PracticeProblemScreen() {
         const res = await practiceService.submit({ slug: params.slug, language: activeLang, source: code });
         setSubmitResult(res);
         if (userId) queryClient.invalidateQueries({ queryKey: ["practice", "submissions", userId] });
+        // a recorded attempt unlocks the solution code (server-side gate) - refetch the problem
+        queryClient.invalidateQueries({ queryKey: practiceQueryKeys.problem(params.slug) });
       }
     } catch (e) {
       setError(e instanceof PracticeApiError || e instanceof Error ? e.message : "Something went wrong.");
@@ -288,7 +290,8 @@ function ProblemBody({
 }) {
   const p = data.problem;
   const solution = data.solution_code?.[activeLang];
-  const hasSolution = !!(data.editorial || data.solution_approach || solution);
+  const solutionLocked = data.solution_locked === true;
+  const hasSolution = !!(data.editorial || data.solution_approach || solution || solutionLocked);
   return (
     <View>
       {p.description ? (
@@ -353,6 +356,12 @@ function ProblemBody({
               {solution ? (
                 <View className="mt-3">
                   <CodeEditor value={solution} editable={false} minHeight={120} />
+                </View>
+              ) : null}
+              {solutionLocked ? (
+                <View className="flex-row items-center bg-gray-50 rounded-2xl p-4 mt-3" testID="solution-locked">
+                  <Ionicons name="lock-closed-outline" size={16} color="#6B7280" />
+                  <Text className="text-gray-600 text-sm ml-2 flex-1">Submit an attempt to unlock the solution.</Text>
                 </View>
               ) : null}
             </View>

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { AVATAR_MAX_BYTES, AVATAR_MIME_TYPES, extensionForImageMime, readFileBody, resolveContentType } from "@/lib/uploadMime";
 import type { ProfileEditableFields, PurchaseHistoryItem } from "@/types";
 
 export const profileService = {
@@ -20,13 +21,20 @@ export const profileService = {
     if (error) throw new Error(`Couldn't save your profile: ${error.message}`);
   },
 
-  async uploadAvatar(userId: string, fileUri: string): Promise<string> {
-    const path = `${userId}/avatar_${Date.now()}.jpg`;
-    const response = await fetch(fileUri);
-    const blob = await response.blob();
+  /**
+   * Uploads the avatar. The `avatars` bucket only accepts jpeg/png/webp up to 2 MB (0117/089), so the
+   * content type is resolved explicitly (picker mime -> extension -> jpeg, the picker's default
+   * output at quality < 1) and sent with an ArrayBuffer body.
+   */
+  async uploadAvatar(userId: string, fileUri: string, mimeType?: string | null): Promise<string> {
+    const { body, hintType, size } = await readFileBody(fileUri);
+    if (size > AVATAR_MAX_BYTES) throw new Error("That photo is too large. Please choose one under 2MB.");
+    const contentType = resolveContentType({ mimeType, uri: fileUri, hintType }, AVATAR_MIME_TYPES) ?? (mimeType ? null : "image/jpeg");
+    if (!contentType) throw new Error("Please choose a JPEG, PNG or WebP photo.");
+    const path = `${userId}/avatar_${Date.now()}.${extensionForImageMime(contentType)}`;
 
-    const { error: uploadError } = await supabase.storage.from("avatars").upload(path, blob, {
-      contentType: "image/jpeg",
+    const { error: uploadError } = await supabase.storage.from("avatars").upload(path, body, {
+      contentType,
       upsert: true,
     });
     if (uploadError) throw new Error(uploadError.message);
