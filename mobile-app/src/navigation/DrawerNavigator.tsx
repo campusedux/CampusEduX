@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import { MainNavigator } from "./MainNavigator";
@@ -22,7 +23,7 @@ const Drawer = createDrawerNavigator<DrawerParamList>();
 export function DrawerNavigator() {
   const { colors, isDark } = useSchemeColors();
   return (
-    <Drawer.Navigator
+    <Drawer.Navigator screenLayout={boundaryScreenLayout}
       // Dark/AMOLED: the panel behind the menu takes the surface colour (Light: the library default, unchanged).
       screenOptions={{ headerShown: false, drawerStyle: isDark ? { width: "82%", backgroundColor: colors.surface } : { width: "82%" } }}
       drawerContent={(props) => <DrawerContent {...props} />}

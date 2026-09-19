@@ -5,6 +5,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, Input, Button, AuthHeader } from "@/components/ui";
 import { authService } from "@/services/auth.service";
+import { describeAuthError } from "@/auth/authErrors";
 import { useAuthStore } from "@/store/authStore";
 import { goBackSafely } from "@/navigation/safeNavigation";
 import type { AuthStackParamList } from "@/types";
@@ -38,7 +39,9 @@ export function ForgotPasswordScreen() {
         identifier: identifier.trim(),
       });
     } catch (err: any) {
-      notify("Something went wrong", err.message ?? "Please try again.");
+      const friendly = describeAuthError(err, "Please try again.");
+      // shouldCreateUser:false makes an unregistered address fail with "Signups not allowed…".
+      notify("Couldn't send code", friendly.kind === "user_not_found" ? "We couldn't find an account with those details." : friendly.message);
     } finally {
       setSubmitting(false);
     }

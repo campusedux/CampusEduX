@@ -1,3 +1,4 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
@@ -32,7 +33,7 @@ export const useCustomFeatures = () =>
 export const useCustomProjectDraft = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: customProjectKeys.draft,
+    queryKey: userScopedKey(customProjectKeys.draft, userId),
     queryFn: () => customProjectsService.getDraft(userId as string),
     enabled: !!userId,
   });
@@ -60,7 +61,7 @@ export const useDeleteCustomDraft = () => {
 export const useMyCustomProjects = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: customProjectKeys.myRequests,
+    queryKey: userScopedKey(customProjectKeys.myRequests, userId),
     queryFn: () => customProjectsService.getMyRequests(userId as string),
     enabled: !!userId,
   });
@@ -69,7 +70,7 @@ export const useMyCustomProjects = () => {
 export const useCustomProjectDetail = (requestId: string) => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: customProjectKeys.detail(requestId),
+    queryKey: userScopedKey(customProjectKeys.detail(requestId), userId),
     queryFn: () => customProjectsService.getRequestDetail(requestId, userId as string),
     enabled: !!requestId && !!userId,
   });

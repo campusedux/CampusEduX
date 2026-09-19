@@ -47,6 +47,25 @@ describe("useWalletSummary", () => {
     expect(walletQueryKeys.transactions).toEqual(["wallet", "transactions"]);
   });
 
+  it("scopes the cache entry to the signed-in user (MOB-07)", async () => {
+    mockGetWalletSummary.mockResolvedValue({ balance: 1 });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function Probe() {
+      useWalletSummary();
+      return null;
+    }
+    await act(async () => {
+      TestRenderer.create(
+        <QueryClientProvider client={client}>
+          <Probe />
+        </QueryClientProvider>
+      );
+    });
+    for (let i = 0; i < 5; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(client.getQueryData([...walletQueryKeys.summary, "u-1"])).toEqual({ balance: 1 });
+    expect(client.getQueryData(walletQueryKeys.summary)).toBeUndefined();
+  });
+
   it("calls walletService.getWalletSummary with the signed-in user id and returns its data", async () => {
     const summary = {
       balance: 750,

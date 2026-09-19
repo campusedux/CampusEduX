@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { AllProjectsScreen } from "@/project/AllProjectsScreen";
@@ -28,7 +29,7 @@ const Stack = createNativeStackNavigator<ProjectStackParamList>();
  */
 export function ProjectNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AllProjects" component={AllProjectsScreen} />
       <Stack.Screen name="CategoryProjects" component={CategoryProjectsScreen} />
       <Stack.Screen name="SearchProjects" component={SearchProjectsScreen} />

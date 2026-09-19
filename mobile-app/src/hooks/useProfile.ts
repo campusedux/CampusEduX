@@ -1,3 +1,4 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
@@ -60,7 +61,7 @@ export function usePickAndUploadAvatar() {
 export const usePurchaseHistory = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: profileQueryKeys.purchaseHistory,
+    queryKey: userScopedKey(profileQueryKeys.purchaseHistory, userId),
     queryFn: () => profileService.getPurchaseHistory(userId as string),
     enabled: !!userId,
   });

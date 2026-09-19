@@ -1,4 +1,6 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useState, useCallback } from "react";
+import { Linking, Platform } from "react-native";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -89,7 +91,7 @@ export const useAddReview = (projectId: string) => {
 export const useWishlist = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: projectQueryKeys.wishlist,
+    queryKey: userScopedKey(projectQueryKeys.wishlist, userId),
     queryFn: () => projectService.getWishlist(userId as string),
     enabled: !!userId,
   });
@@ -113,7 +115,7 @@ export const useToggleWishlist = (projectId: string) => {
 export const usePurchasedProjects = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: projectQueryKeys.purchased,
+    queryKey: userScopedKey(projectQueryKeys.purchased, userId),
     queryFn: () => projectService.getPurchasedProjects(userId as string),
     enabled: !!userId,
   });
@@ -122,7 +124,7 @@ export const usePurchasedProjects = () => {
 export const useDownloadHistory = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: projectQueryKeys.downloads,
+    queryKey: userScopedKey(projectQueryKeys.downloads, userId),
     queryFn: () => projectService.getDownloadHistory(userId as string),
     enabled: !!userId,
   });
@@ -149,8 +151,17 @@ export function useDownloadFile() {
 
   const downloadFile = useCallback(
     async (params: { projectId: string; fileName: string; label: string; url: string; sizeMB: number }) => {
+      if (!params.url) {
+        throw new Error("This file isn't available right now. Please try again later or contact support.");
+      }
       setDownloadingKey(params.fileName);
       try {
+        if (Platform.OS === "web") {
+          // FileSystem/Sharing are native-only: hand the signed URL to the browser.
+          await Linking.openURL(params.url);
+          await recordDownload.mutateAsync({ projectId: params.projectId, fileLabel: params.label, fileSizeMB: params.sizeMB });
+          return params.url;
+        }
         const destination = `${FileSystem.documentDirectory}${params.fileName}`;
         const { uri } = await FileSystem.downloadAsync(params.url, destination);
         await recordDownload.mutateAsync({ projectId: params.projectId, fileLabel: params.label, fileSizeMB: params.sizeMB });

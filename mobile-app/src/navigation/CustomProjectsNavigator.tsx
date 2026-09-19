@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { BuilderStartScreen } from "@/customProjects/BuilderStartScreen";
@@ -25,7 +26,7 @@ const Stack = createNativeStackNavigator<CustomProjectsStackParamList>();
  */
 export function CustomProjectsNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="BuilderStart" component={BuilderStartScreen} />
       <Stack.Screen name="BuilderType" component={BuilderTypeScreen} />
       <Stack.Screen name="BuilderLevel" component={BuilderLevelScreen} />

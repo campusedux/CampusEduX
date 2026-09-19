@@ -76,7 +76,6 @@ export type JobStackParamList = {
   CompanyList: undefined;
   CompanyDetails: { companyId: string };
   JobDetails: { jobId: string };
-  ApplyJob: { jobId: string };
   ResumeUpload: { jobId: string };
   SavedJobs: undefined;
   AppliedJobs: undefined;

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, Pressable, ActivityIndicator } from "react-native";
+import { MAX_RESUME_LABEL } from "@/lib/resumeFile";
 import { notify } from "@/lib/notify";
 import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,8 +21,12 @@ export function ResumeUploadScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handlePick = async () => {
-    const uploaded = await pickAndUpload();
-    if (uploaded) setSelectedResumeId(uploaded.id);
+    try {
+      const uploaded = await pickAndUpload();
+      if (uploaded) setSelectedResumeId(uploaded.id);
+    } catch (error: any) {
+      notify("Couldn't upload resume", error.message ?? "Please try again.");
+    }
   };
 
   const handleContinue = async () => {
@@ -64,12 +69,11 @@ export function ResumeUploadScreen() {
         ) : (
           <>
             <Ionicons name="cloud-upload-outline" size={36} color="#4F39F6" />
-            <Text className="text-gray-500 text-sm mt-3">Drag & drop your resume here</Text>
-            <Text className="text-gray-400 text-xs mt-1">or</Text>
+            <Text className="text-gray-500 text-sm mt-3">Upload your resume</Text>
             <View className="bg-primary rounded-lg px-4 py-2 mt-3">
               <Text className="text-white font-medium text-sm">Browse File</Text>
             </View>
-            <Text className="text-gray-400 text-xs mt-3">Supported formats: PDF, DOC, DOCX · Max file size: 5MB</Text>
+            <Text className="text-gray-400 text-xs mt-3">Supported formats: PDF, DOC, DOCX · Max file size: {MAX_RESUME_LABEL}</Text>
           </>
         )}
       </Pressable>

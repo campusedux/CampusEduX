@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { HomeScreen } from "@/home/HomeScreen";
@@ -31,7 +32,7 @@ const Stack = createNativeStackNavigator<HomeStackParamList>();
  */
 export function HomeNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="HomeDashboard" component={HomeScreen} />
       <Stack.Screen name="SearchResult" component={SearchResultScreen} />
       <Stack.Screen name="Notifications" component={NotificationScreen} />

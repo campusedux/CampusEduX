@@ -138,7 +138,7 @@ export function JobListingCard({ job, isSaved, width, onPress, onToggleSave, onA
 /**
  * Wires JobListingCard to saved-job toggling and navigation. Apply follows the
  * same rule as JobDetailsScreen: external `apply_url` opens in the browser,
- * otherwise the in-app ApplyJob flow.
+ * otherwise the in-app ResumeUpload (apply) flow.
  */
 export function JobListingItem({ job, isSaved, width }: { job: Job; isSaved: boolean; width?: number | string }) {
   const navigation = useNavigation<any>();
@@ -150,7 +150,7 @@ export function JobListingItem({ job, isSaved, width }: { job: Job; isSaved: boo
       width={width}
       onPress={(j) => navigation.navigate("JobDetails", { jobId: j.id })}
       onToggleSave={() => toggleSaved.mutate(isSaved)}
-      onApply={(j) => (j.applyUrl ? openApplyUrl(j.applyUrl) : navigation.navigate("ApplyJob", { jobId: j.id }))}
+      onApply={(j) => (j.applyUrl ? openApplyUrl(j.applyUrl) : navigation.navigate("ResumeUpload", { jobId: j.id }))}
     />
   );
 }

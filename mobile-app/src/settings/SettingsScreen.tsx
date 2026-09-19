@@ -1,3 +1,4 @@
+import { performLogoutCleanup } from "@/lib/logoutCleanup";
 import React from "react";
 import { View, Text, Image, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -25,7 +26,6 @@ const LANGUAGE_NAMES: Record<string, string> = {
 export function SettingsScreen() {
   const navigation = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
-  const reset = useAuthStore((s) => s.reset);
   const preferences = useSettingsStore((s) => s.preferences);
 
   const handleLogout = () => {
@@ -39,7 +39,7 @@ export function SettingsScreen() {
           notify("Logout failed", error?.message ?? "Please try again.");
           return;
         }
-        reset(); // RootNavigator returns to the auth stack automatically
+        await performLogoutCleanup(); // wipes per-user state; RootNavigator returns to the auth stack
       },
       "Logout"
     );

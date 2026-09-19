@@ -1,3 +1,4 @@
+import { compactRows } from "@/lib/safeRows";
 import { supabase } from "@/lib/supabase";
 import { rankByAcademicRelevance, hasAcademicSignal, type AcademicProfile } from "@/lib/personalization";
 import type {
@@ -66,13 +67,16 @@ function matchesJobFilters(j: Job, f: Partial<JobFilters>): boolean {
   return true;
 }
 
-function mapJobRow(row: any): Job {
-  const postedDate = new Date(row.posted_at ?? row.created_at);
-  const daysAgo = Math.max(0, Math.floor((Date.now() - postedDate.getTime()) / 86_400_000));
+export function mapJobRow(input: any): Job {
+  const row = input ?? {};
+  const postedDate = new Date(row.posted_at ?? row.created_at ?? Date.now());
+  const daysAgo = Number.isNaN(postedDate.getTime())
+    ? 0
+    : Math.max(0, Math.floor((Date.now() - postedDate.getTime()) / 86_400_000));
   return {
-    id: row.id,
-    title: row.title,
-    companyId: row.company_id,
+    id: row.id ?? "",
+    title: row.title ?? "",
+    companyId: row.company_id ?? "",
     companyName: row.company?.name ?? row.company_name ?? "",
     companyLogoUrl: row.company?.logo_url ?? row.company_logo_url ?? null,
     location: row.location,
@@ -389,7 +393,7 @@ export const jobService = {
           .eq("user_id", userId)
           .order("created_at", { ascending: false });
         if (error) throw new Error(error.message);
-        return (data ?? []).map((row: any) => mapJobRow(row.job));
+        return compactRows(data as any[], "job").map((row: any) => mapJobRow(row.job));
       },
       sampleSavedJobs()
     );
@@ -473,7 +477,7 @@ export const jobService = {
           .eq("user_id", userId)
           .order("created_at", { ascending: false });
         if (error) throw new Error(error.message);
-        return (data ?? []).map((row: any) => ({
+        return compactRows(data as any[], "job").map((row: any) => ({
           id: row.id,
           job: mapJobRow(row.job),
           appliedAt: row.created_at,
@@ -497,6 +501,7 @@ export const jobService = {
       supabase.from("application_stages").select("*").eq("application_id", applicationId).order("sort_order", { ascending: true }),
     ]);
     if (appError || !appRow) throw new Error("Application not found.");
+    if (!appRow.job) throw new Error("This job is no longer available.");
     if (stageError) throw new Error(stageError.message);
 
       return {

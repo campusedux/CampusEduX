@@ -162,9 +162,7 @@ export function JobDetailsScreen() {
         ) : (
           <View className="mb-6">
             <Text className="font-bold text-gray-900 mb-2">About {job.companyName}</Text>
-            <Text className="text-gray-500 text-sm leading-5 mb-4">
-              {company?.about || `${job.companyName}'s mission is to organize its industry's information and make it universally accessible.`}
-            </Text>
+            {!!company?.about && <Text className="text-gray-500 text-sm leading-5 mb-4">{company.about}</Text>}
             {company && (
               <Button
                 label="View Company Profile"
@@ -185,7 +183,7 @@ export function JobDetailsScreen() {
           <Button
             label={job.hasApplied ? "Already Applied" : "Apply Now"}
             disabled={job.hasApplied}
-            onPress={() => (navigation as any).navigate("ApplyJob", { jobId: job.id })}
+            onPress={() => (navigation as any).navigate("ResumeUpload", { jobId: job.id })}
           />
         )}
       </View>

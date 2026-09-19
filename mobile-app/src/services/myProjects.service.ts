@@ -43,6 +43,7 @@ export const myProjectsService = {
     const purchase = res.data;
 
     const projectRow = purchase.project as any;
+    if (!projectRow) throw new Error("This project is no longer available.");
     const { data: latestVersionRow } = await supabase
       .from("project_versions")
       .select("version")

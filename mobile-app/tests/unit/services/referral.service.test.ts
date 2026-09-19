@@ -1,7 +1,8 @@
 jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModule());
 
 import { referralService } from "@/services/referral.service";
-import { resetSupabaseMock, setTableResult } from "../../mocks/supabase.mock";
+import { resetSupabaseMock, setTableResult, setRpcResult } from "../../mocks/supabase.mock";
+import { supabase } from "@/lib/supabase";
 import { referralRows } from "../../mocks/users.mock";
 import { SAMPLE_REFERRAL_OVERVIEW } from "@/data/sampleReferralContent";
 
@@ -73,21 +74,27 @@ describe("referralService.getEarningsSummary", () => {
 });
 
 describe("referralService.getLeaderboard", () => {
-  it("ranks referrers by total earned", async () => {
-    setTableResult("referrals", {
+  it("maps the aggregated referral_leaderboard RPC rows (no other users' ids/emails)", async () => {
+    setRpcResult("referral_leaderboard", {
       data: [
-        { referrer_id: "a", reward_amount: 100, created_at: "2025-06-01", referrer: { full_name: "A", email: "a@e.com", avatar_url: null } },
-        { referrer_id: "a", reward_amount: 100, created_at: "2025-06-02", referrer: { full_name: "A", email: "a@e.com", avatar_url: null } },
-        { referrer_id: "b", reward_amount: 100, created_at: "2025-06-03", referrer: { full_name: "B", email: "b@e.com", avatar_url: null } },
+        { rank: 1, user_id: null, display_name: "A", total_referrals: 2, total_earned: 200, is_current_user: false },
+        { rank: 2, user_id: "b", display_name: "B", total_referrals: 1, total_earned: 100, is_current_user: true },
       ],
     });
 
     const board = await referralService.getLeaderboard("all_time", "b");
 
-    expect(board[0].userId).toBe("a");
+    expect(supabase.rpc).toHaveBeenCalledWith("referral_leaderboard", { p_period: "all_time" });
     expect(board[0].rank).toBe(1);
+    expect(board[0].userName).toBe("A");
+    expect(board[0].userEmail).toBe("");
     expect(board[0].totalEarned).toBe(200);
     expect(board[1].userId).toBe("b");
     expect(board[1].isCurrentUser).toBe(true);
+  });
+
+  it("returns an honest empty list when nobody has referred yet", async () => {
+    setRpcResult("referral_leaderboard", { data: [] });
+    expect(await referralService.getLeaderboard("this_month", "u")).toEqual([]);
   });
 });

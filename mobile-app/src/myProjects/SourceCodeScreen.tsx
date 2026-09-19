@@ -44,7 +44,7 @@ export function SourceCodeScreen() {
           <Button
             label="Download ZIP"
             loading={downloadingKey === sourceZip?.fileName}
-            disabled={!sourceZip}
+            disabled={!sourceZip || !sourceZip.url}
             onPress={() =>
               sourceZip &&
               downloadFile({ projectId: params.projectId, fileName: sourceZip.fileName, label: sourceZip.label, url: sourceZip.url, sizeMB: sourceZip.sizeMB }).catch(

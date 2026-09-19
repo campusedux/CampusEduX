@@ -1,6 +1,6 @@
 import React, { useState } from "react";
+import { notify } from "@/lib/notify";
 import {
-  Alert,
   Linking,
   Platform,
   Pressable,
@@ -267,7 +267,7 @@ export function CustomProjectBanner() {
     try {
       await Linking.openURL(whatsappUrl());
     } catch {
-      Alert.alert("Unable to open WhatsApp", "Please make sure WhatsApp is installed, or try again later.");
+      notify("Unable to open WhatsApp", "Please make sure WhatsApp is installed, or try again later.");
     }
   };
 
