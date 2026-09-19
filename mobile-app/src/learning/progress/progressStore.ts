@@ -1,138 +1,37 @@
 import { useMemo } from "react";
-import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
-import { useShallow } from "zustand/react/shallow";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { ReaderFontSize } from "@/theme/typography";
-import { addActiveDay, computeStreak, localDateKey, topicKey } from "./progressLogic";
+import { useShallow } from "zustand/react/shallow";
+import { useAuthStore } from "@/store/authStore";
+import { computeStreak, localDateKey, topicKey } from "./progressLogic";
+import { countCompleted, createProgressStore, type LearningProgress } from "./progressStoreCore";
+
+export type { LastOpened, LearningProgress, UserProgress } from "./progressStoreCore";
 
 /**
- * ─────────────────────────────────────────────────────────────────────────────
- *  Learning progress — the ONE seam between the Learning UI and where progress
- *  lives. Screens import only the hooks + `LearningProgress` type from here.
- *  Today it is device-local (AsyncStorage via zustand-persist). To move it to a
- *  Supabase table later, re-implement `LearningProgress` (and hydrate the same
- *  state shape) — no screen changes. All rules (streak, %) live in
- *  ./progressLogic so they move with it.
- *
- *  Caveat (local impl): progress is per DEVICE, not per account.
- * ─────────────────────────────────────────────────────────────────────────────
+ * App instance of the progress store, scoped to the signed-in Supabase user.
+ * Screens use ONLY the hooks below (never the store), and every hook is keyed
+ * by the current user id — so an account switch or logout re-renders them with
+ * the new user's data (or nothing when signed out).
  */
+export const useProgressStore = createProgressStore({
+  getUserId: () => useAuthStore.getState().user?.id,
+  storage: AsyncStorage,
+});
 
-export interface LastOpened {
-  gridSlug: string;
-  gridName: string;
-  topicSlug: string;
-  topicTitle: string;
-  sectionName?: string;
-  /** ISO timestamp. */
-  at: string;
+/** Current signed-in user id (undefined when signed out). */
+export const useProgressUserId = (): string | undefined => useAuthStore((s) => s.user?.id);
+
+const EMPTY: Record<string, string> = {};
+
+export function useCompletedCount(gridSlug: string): number {
+  const uid = useProgressUserId();
+  return useProgressStore((s) => (uid ? countCompleted(s.users[uid]?.completed, gridSlug) : 0));
 }
-
-export interface LearningProgress {
-  // reads
-  isCompleted(gridSlug: string, topicSlug: string): boolean;
-  /** Completed topics recorded for a course (may exceed the published count if topics were unpublished — clamp when showing %). */
-  getCompletedCount(gridSlug: string): number;
-  getLastOpened(): LastOpened | null;
-  getStreak(now?: Date): number;
-  getScroll(gridSlug: string, topicSlug: string): number;
-  getReaderFontSize(): ReaderFontSize;
-  // writes
-  markOpened(entry: Omit<LastOpened, "at">): void;
-  /** Marks a topic complete AND counts today as an active (streak) day. */
-  markComplete(gridSlug: string, topicSlug: string, now?: Date): void;
-  unmarkComplete(gridSlug: string, topicSlug: string): void;
-  /** Call once a learner has stayed on a topic ≥ 60 s — counts today as active. */
-  recordReadingActivity(now?: Date): void;
-  setScroll(gridSlug: string, topicSlug: string, offset: number): void;
-  setReaderFontSize(size: ReaderFontSize): void;
-}
-
-interface ProgressState {
-  /** `${grid}/${topic}` → ISO completion time. */
-  completed: Record<string, string>;
-  lastOpened: LastOpened | null;
-  /** Sorted unique local `YYYY-MM-DD` days with qualifying activity. */
-  activeDays: string[];
-  scroll: Record<string, number>;
-  readerFontSize: ReaderFontSize;
-}
-
-type Store = ProgressState & LearningProgress;
-
-const MAX_SCROLL_ENTRIES = 200;
-
-export const useProgressStore = create<Store>()(
-  persist(
-    (set, get) => ({
-      completed: {},
-      lastOpened: null,
-      activeDays: [],
-      scroll: {},
-      readerFontSize: "medium",
-
-      isCompleted: (g, t) => topicKey(g, t) in get().completed,
-      getCompletedCount: (g) => {
-        const prefix = `${g}/`;
-        return Object.keys(get().completed).filter((k) => k.startsWith(prefix)).length;
-      },
-      getLastOpened: () => get().lastOpened,
-      getStreak: (now = new Date()) => computeStreak(get().activeDays, now),
-      getScroll: (g, t) => get().scroll[topicKey(g, t)] ?? 0,
-      getReaderFontSize: () => get().readerFontSize,
-
-      markOpened: (entry) => set({ lastOpened: { ...entry, at: new Date().toISOString() } }),
-      markComplete: (g, t, now = new Date()) =>
-        set((s) => ({
-          completed: { ...s.completed, [topicKey(g, t)]: now.toISOString() },
-          activeDays: addActiveDay(s.activeDays, localDateKey(now)),
-        })),
-      unmarkComplete: (g, t) =>
-        set((s) => {
-          const { [topicKey(g, t)]: _removed, ...rest } = s.completed;
-          return { completed: rest };
-        }),
-      recordReadingActivity: (now = new Date()) =>
-        set((s) => {
-          const next = addActiveDay(s.activeDays, localDateKey(now));
-          return next === s.activeDays ? s : { activeDays: next };
-        }),
-      setScroll: (g, t, offset) =>
-        set((s) => {
-          const entries = Object.entries({ ...s.scroll, [topicKey(g, t)]: Math.round(offset) });
-          return { scroll: Object.fromEntries(entries.slice(-MAX_SCROLL_ENTRIES)) };
-        }),
-      setReaderFontSize: (size) => set({ readerFontSize: size }),
-    }),
-    {
-      name: "campusedux-learning-progress",
-      version: 1,
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({
-        completed: s.completed,
-        lastOpened: s.lastOpened,
-        activeDays: s.activeDays,
-        scroll: s.scroll,
-        readerFontSize: s.readerFontSize,
-      }),
-    },
-  ),
-);
-
-// ── Hooks: the only API screens use ─────────────────────────────────────────
-
-export const useCompletedCount = (gridSlug: string) =>
-  useProgressStore((s) => {
-    const prefix = `${gridSlug}/`;
-    let n = 0;
-    for (const k in s.completed) if (k.startsWith(prefix)) n += 1;
-    return n;
-  });
 
 /** Completed-topic counts for every course, keyed by grid slug (for list filters). */
 export function useCompletedByGrid(): Record<string, number> {
-  const completed = useProgressStore((s) => s.completed);
+  const uid = useProgressUserId();
+  const completed = useProgressStore((s) => (uid ? s.users[uid]?.completed : undefined)) ?? EMPTY;
   return useMemo(() => {
     const out: Record<string, number> = {};
     for (const k in completed) {
@@ -143,20 +42,41 @@ export function useCompletedByGrid(): Record<string, number> {
   }, [completed]);
 }
 
-export const useIsTopicCompleted = (gridSlug: string, topicSlug: string) =>
-  useProgressStore((s) => topicKey(gridSlug, topicSlug) in s.completed);
-
-export const useLastOpened = () => useProgressStore((s) => s.lastOpened);
-
-/** Current streak. Re-derived when activity changes or the local day rolls over on the next render. */
-export function useStreak(): number {
-  const activeDays = useProgressStore((s) => s.activeDays);
-  const today = localDateKey();
-  // `today` in the deps: a new local day recomputes (and possibly resets) the streak.
-  return useMemo(() => computeStreak(activeDays), [activeDays, today]); // eslint-disable-line react-hooks/exhaustive-deps
+/** Slugs of the topics the user has completed in one course. */
+export function useCompletedSlugs(gridSlug: string): Set<string> {
+  const uid = useProgressUserId();
+  const completed = useProgressStore((s) => (uid ? s.users[uid]?.completed : undefined)) ?? EMPTY;
+  return useMemo(() => {
+    const prefix = `${gridSlug}/`;
+    const out = new Set<string>();
+    for (const k in completed) if (k.startsWith(prefix)) out.add(k.slice(prefix.length));
+    return out;
+  }, [completed, gridSlug]);
 }
 
-export const useProgressActions = () =>
+export const useIsTopicCompleted = (gridSlug: string, topicSlug: string): boolean => {
+  const uid = useProgressUserId();
+  return useProgressStore((s) => (uid ? topicKey(gridSlug, topicSlug) in (s.users[uid]?.completed ?? EMPTY) : false));
+};
+
+export const useLastOpened = () => {
+  const uid = useProgressUserId();
+  return useProgressStore((s) => (uid ? (s.users[uid]?.lastOpened ?? null) : null));
+};
+
+/** Current streak. Re-derived when activity changes, the user changes, or the local day rolls over on the next render. */
+export function useStreak(): number {
+  const uid = useProgressUserId();
+  const activeDays = useProgressStore((s) => (uid ? s.users[uid]?.activeDays : undefined));
+  const today = localDateKey();
+  // `today` in the deps: a new local day recomputes (and possibly resets) the streak.
+  return useMemo(() => computeStreak(activeDays ?? []), [activeDays, today]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+export const useProgressActions = (): Pick<
+  LearningProgress,
+  "markOpened" | "markComplete" | "unmarkComplete" | "recordReadingActivity" | "setScroll" | "setReaderFontSize"
+> =>
   useProgressStore(
     useShallow((s) => ({
       markOpened: s.markOpened,

@@ -9,24 +9,29 @@ import { useSettingsStore } from "@/store/settingsStore";
  */
 export function FadeInUp({
   index = 0,
+  enabled = true,
   children,
   style,
 }: {
   index?: number;
+  /** Read at mount only: `false` renders in place with no animation (used for rows that merely scroll into view). */
+  enabled?: boolean;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  const reduce = useSettingsStore((s) => s.preferences.reduceAnimations);
+  const reduceSetting = useSettingsStore((s) => s.preferences.reduceAnimations);
+  const reduce = reduceSetting || !enabled;
   const v = useRef(new Animated.Value(reduce ? 1 : 0)).current;
+  const mountedEnabled = useRef(!reduce).current;
   useEffect(() => {
-    if (reduce) return;
+    if (!mountedEnabled) return;
     Animated.timing(v, {
       toValue: 1,
       duration: MOTION.enter,
       delay: Math.min(index, MOTION.maxStaggerIndex) * MOTION.stagger,
       useNativeDriver: true,
     }).start();
-  }, [v, index, reduce]);
+  }, [v, index, mountedEnabled]);
   return (
     <Animated.View
       style={[

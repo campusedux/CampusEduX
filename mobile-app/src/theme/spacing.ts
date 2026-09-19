@@ -36,6 +36,8 @@ export const LAYOUT = {
   tocWidth: 240,
   /** Outer page max width for grids/lists on huge monitors. */
   pageMaxWidth: 1180,
+  /** Course-detail column (hero + chapters + topic rows). */
+  listMaxWidth: 960,
   gutter: { phone: 16, wide: 24 },
 } as const;
 
