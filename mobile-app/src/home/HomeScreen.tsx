@@ -17,7 +17,7 @@ import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import { useTrendingProjects, useLatestJobs, useNotifications } from "@/hooks/useHomeData";
 import { useLearningGrids } from "@/hooks/useLearning";
 import { useAuthStore } from "@/store/authStore";
-import { CARD_SHADOW, CARD_SHADOW_LG } from "@/constants/theme";
+import { CARD_SHADOW } from "@/constants/theme";
 import type { HomeStackParamList, LearningGridCard } from "@/types";
 
 type Nav = NativeStackNavigationProp<HomeStackParamList, "HomeDashboard">;
@@ -70,6 +70,13 @@ const CATEGORIES: HomeCategory[] = [
     color: "#4F39F6",
     bg: "#EEF0FF",
     go: (n) => n.getParent()?.navigate("CustomProjects", { screen: "BuilderStart" }),
+  },
+  {
+    label: "Practice",
+    icon: "code-slash",
+    color: "#0D9488",
+    bg: "#CCFBF1",
+    go: (n) => n.navigate("PracticeHub"),
   },
 ];
 
@@ -131,7 +138,6 @@ export function HomeScreen() {
     (navigation.getParent() as any)?.navigate("Projects", { screen: "ProjectDetails", params: { projectId } });
   const openJobDetail = (jobId: string) =>
     (navigation.getParent() as any)?.navigate("Jobs", { screen: "JobDetails", params: { jobId } });
-  const openPremium = () => (navigation.getParent() as any)?.navigate("Premium", { screen: "PremiumPlans" });
   const openGrid = (gridSlug: string, gridName: string) =>
     (navigation.getParent() as any)?.navigate("Prep", { screen: "LearningGrid", params: { gridSlug, gridName } });
   const openLearn = () => (navigation.getParent() as any)?.navigate("Prep", { screen: "LearningGrids" });
@@ -177,23 +183,6 @@ export function HomeScreen() {
         onStartProject={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
         onLearnMore={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
       />
-
-      {!user?.isPremium && (
-        <PressableScale
-          onPress={openPremium}
-          className="rounded-2xl p-5 mb-6 flex-row items-center"
-          style={{ backgroundColor: "#4F39F6", ...CARD_SHADOW_LG }}
-        >
-          <View className="flex-1 pr-3">
-            <Text className="text-white font-bold text-base mb-1">Upgrade to Premium</Text>
-            <Text className="text-white/80 text-sm mb-3">Unlock premium projects & expert resources</Text>
-            <View className="self-start bg-yellow-400 rounded-lg px-4 py-2">
-              <Text className="text-yellow-900 font-semibold text-sm">Upgrade Now</Text>
-            </View>
-          </View>
-          <Ionicons name="ribbon" size={44} color="#FBBF24" />
-        </PressableScale>
-      )}
 
       <SectionHeader title="Categories" onViewAll={() => (navigation as any).navigate("AllCategories")} />
       <View className="flex-row flex-wrap justify-between mb-4">
