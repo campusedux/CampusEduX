@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutAnimation, SectionList, View } from "react-native";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -98,6 +98,39 @@ export function LearningGridScreen() {
     [chapters, openMap],
   );
 
+  // Best-effort: on FIRST open only, bring the in-progress topic into view. The list has variable row
+  // heights, so scrollToLocation can miss; retry once after a short wait, then silently give up.
+  const listRef = useRef<SectionList<LearningTopicRef, ChapterSection>>(null);
+  const autoScrollDone = useRef(false);
+  const autoScrollRetried = useRef(false);
+  const autoScrollTarget = useMemo(() => {
+    if (!currentSlug) return null;
+    const sectionIndex = sections.findIndex((s) => s.open && s.data.some((t) => t.slug === currentSlug));
+    if (sectionIndex < 0) return null;
+    const itemIndex = sections[sectionIndex].data.findIndex((t) => t.slug === currentSlug);
+    // Already on screen when it's one of the first rows of the first chapter.
+    return sectionIndex === 0 && itemIndex < 3 ? null : { sectionIndex, itemIndex };
+  }, [currentSlug, sections]);
+  const scrollToCurrent = useCallback(() => {
+    if (!autoScrollTarget) return;
+    try {
+      listRef.current?.scrollToLocation({ ...autoScrollTarget, viewPosition: 0.25, animated: true });
+    } catch {
+      /* best effort */
+    }
+  }, [autoScrollTarget]);
+  useEffect(() => {
+    if (autoScrollDone.current || !autoScrollTarget) return;
+    autoScrollDone.current = true; // first open only — never on later focus / re-render
+    const id = setTimeout(scrollToCurrent, 400);
+    return () => clearTimeout(id);
+  }, [autoScrollTarget, scrollToCurrent]);
+  const onScrollToIndexFailed = useCallback(() => {
+    if (autoScrollRetried.current) return; // second failure → do nothing
+    autoScrollRetried.current = true;
+    setTimeout(scrollToCurrent, 350);
+  }, [scrollToCurrent]);
+
   const openTopic = useCallback(
     (topic: LearningTopicRef) => navigation.navigate("LearningTopic", { gridSlug: params.gridSlug, topicSlug: topic.slug, topicTitle: topic.title }),
     [navigation, params.gridSlug],
@@ -172,6 +205,8 @@ export function LearningGridScreen() {
   return (
     <LearningScreen>
       <SectionList<LearningTopicRef, ChapterSection>
+        ref={listRef}
+        onScrollToIndexFailed={onScrollToIndexFailed}
         sections={sections}
         keyExtractor={(t) => t.id}
         stickySectionHeadersEnabled={false}

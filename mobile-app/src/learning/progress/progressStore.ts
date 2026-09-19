@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useShallow } from "zustand/react/shallow";
 import { useAuthStore } from "@/store/authStore";
+import type { ReaderFontSize } from "@/theme/typography";
 import { computeStreak, localDateKey, topicKey } from "./progressLogic";
 import { countCompleted, createProgressStore, type LearningProgress } from "./progressStoreCore";
 
@@ -87,3 +88,29 @@ export const useProgressActions = (): Pick<
       setReaderFontSize: s.setReaderFontSize,
     })),
   );
+
+/**
+ * One-off, non-reactive reads (e.g. "what scroll offset was saved?" at screen
+ * mount). Goes through the same `LearningProgress` contract and current-user
+ * scoping as the hooks.
+ */
+export const progressSnapshot = (): LearningProgress => useProgressStore.getState();
+
+/**
+ * Reader "Aa" size for the current user (persisted per user). Signed out, nothing
+ * is recorded, so the choice lives in memory for the session only.
+ */
+export function useReaderFontSize(): [ReaderFontSize, (size: ReaderFontSize) => void] {
+  const uid = useProgressUserId();
+  const stored = useProgressStore((s) => (uid ? (s.users[uid]?.readerFontSize ?? "medium") : null));
+  const [local, setLocal] = useState<ReaderFontSize>("medium");
+  const { setReaderFontSize } = useProgressActions();
+  const set = useCallback(
+    (size: ReaderFontSize) => {
+      setLocal(size);
+      setReaderFontSize(size);
+    },
+    [setReaderFontSize],
+  );
+  return [stored ?? local, set];
+}

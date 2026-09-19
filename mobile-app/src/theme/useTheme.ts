@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { Platform, useColorScheme, useWindowDimensions, type TextStyle, type ViewStyle } from "react-native";
 import { useSettingsStore } from "@/store/settingsStore";
 import { getColors, type ThemeColors, type ThemeScheme } from "./colors";
@@ -6,6 +6,9 @@ import { accentTokens, resolveCourseAccent, type AccentTokens } from "./courseAc
 import { gridColumns, isWide, LAYOUT } from "./spacing";
 import { buildTypography, type ReaderFontSize, type TypeVariant } from "./typography";
 import { useLearningFonts } from "./fonts";
+
+/** Provided by the Topic Reader so every descendant's `useTheme()` picks up the "Aa" size without prop drilling. */
+export const ReaderSizeContext = createContext<ReaderFontSize>("medium");
 
 export interface Theme {
   scheme: ThemeScheme;
@@ -36,7 +39,8 @@ export function useTheme(options: { reader?: ReaderFontSize } = {}): Theme {
   const amoled = useSettingsStore((s) => s.preferences.useAmoledDark);
   const { width } = useWindowDimensions();
   const fontsLoaded = useLearningFonts();
-  const reader = options.reader ?? "medium";
+  const contextReader = useContext(ReaderSizeContext);
+  const reader = options.reader ?? contextReader;
 
   const scheme: ThemeScheme = pref === "system" ? (system === "dark" ? "dark" : "light") : pref === "dark" ? "dark" : "light";
 
