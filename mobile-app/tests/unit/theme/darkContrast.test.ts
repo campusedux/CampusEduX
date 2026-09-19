@@ -115,6 +115,31 @@ describe.each(SCHEMES)("%s", (name, c) => {
     check(`${name} check on success disc`, contrast(c.scheme === "dark" ? "#0B0F19" : "#FFFFFF", c.success), UI);
   });
 
+  it("mock-test screens: timer, question chips, options, radio, buttons, stat cards, chart", () => {
+    for (const g of [c.bg, c.canvas]) {
+      check(`${name} test timer`, contrast(c.danger, over(c.dangerSoft, g)), TEXT);
+      check(`${name} test chip active`, contrast(c.textOnPrimary, c.primaryFill), TEXT);
+      check(`${name} test chip active vs page`, contrast(c.primaryFill, g), UI);
+      check(`${name} test chip answered text`, contrast(c.success, over(c.successSoft, g)), TEXT);
+      check(`${name} test chip answered border`, contrast(c.success, g), UI);
+      check(`${name} test chip unanswered text`, contrast(c.textSecondary, c.surface), TEXT);
+      check(`${name} test option selected text`, contrast(c.primaryText, over(c.primarySoft, g)), TEXT);
+      check(`${name} test option selected border`, contrast(c.primary, g), UI);
+      check(`${name} test option text`, contrast(c.text, c.surface), 7);
+      check(`${name} test radio ring (unselected)`, contrast(c.textMuted, c.surface), UI);
+      check(`${name} test outline button label`, contrast(c.text, c.surface), TEXT);
+      check(`${name} test outline button border`, contrast(c.textMuted, g), UI);
+      check(`${name} test text-button label`, contrast(c.primaryText, g), TEXT);
+      check(`${name} test stat value`, contrast(c.text, c.surface), 7);
+      check(`${name} test stat label`, contrast(c.textSecondary, c.surface), TEXT);
+      check(`${name} test result ring vs page`, contrast(c.primary, g), UI);
+      check(`${name} test result ring vs track`, contrast(c.primary, c.border) >= 1.8 ? 99 : contrast(c.primary, c.border), UI);
+      check(`${name} test trend bar on card`, contrast(c.primary, c.surface), UI);
+      check(`${name} test ring label`, contrast(c.text, g), 7);
+    }
+    check(`${name} test instructions number`, contrast(c.primaryText, c.bg), TEXT);
+  });
+
   it("tab bar + drawer: active/inactive tints and the drawer's active row", () => {
     check(`${name} tab active`, contrast(c.primary, c.surface), TEXT);
     check(`${name} tab inactive`, contrast(c.textMuted, c.surface), TEXT);

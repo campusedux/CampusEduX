@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, Pressable, ScrollView } from "react-native";
 import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
+import { Screen } from "@/components/ui";
+import { ErrorBlock } from "@/components/learning/LearningStates";
+import { TestButton, TestLoading } from "@/components/learning/test/TestKit";
+import { useTheme } from "@/theme";
 import { notify, confirmAction } from "@/lib/notify";
 import { useTestDetail, useTestQuestions, useSubmitTestAttempt } from "@/hooks/usePlacement";
 import type { PlacementStackParamList, TestAttemptAnswer } from "@/types";
@@ -21,6 +24,7 @@ export function LiveTestScreen() {
   const { data: test } = useTestDetail(params.testId);
   const { data: questions, isLoading, isError, refetch } = useTestQuestions(params.testId);
   const submitAttempt = useSubmitTestAttempt(params.testId);
+  const { colors, type } = useTheme();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -67,8 +71,8 @@ export function LiveTestScreen() {
     return () => clearTimeout(timer);
   }, [secondsLeft, handleSubmit]);
 
-  if (isLoading || !questions) return <Screen className="items-center justify-center"><LoadingState label="Loading questions..." /></Screen>;
-  if (isError || questions.length === 0) return <Screen className="items-center justify-center px-6"><ErrorState message="Couldn't load test questions." onRetry={refetch} /></Screen>;
+  if (isLoading || !questions) return <Screen themed className="items-center justify-center"><TestLoading label="Loading questions..." /></Screen>;
+  if (isError || questions.length === 0) return <Screen themed className="items-center justify-center px-6"><ErrorBlock what="test questions" onRetry={refetch} /></Screen>;
 
   const question = questions[currentIndex];
   const selected = answers[question.id];
@@ -84,12 +88,12 @@ export function LiveTestScreen() {
   };
 
   return (
-    <Screen className="px-6">
+    <Screen themed className="px-6">
       <View className="flex-row items-center justify-between mt-2 mb-3">
-        <Text className="text-lg font-bold text-gray-900" numberOfLines={1}>{test?.title}</Text>
-        <View className="flex-row items-center bg-red-50 rounded-full px-3 py-1">
-          <Ionicons name="time-outline" size={14} color="#DC2626" />
-          <Text className="text-danger text-xs font-semibold ml-1">{formatSeconds(secondsLeft ?? 0)}</Text>
+        <Text style={[type.title, { color: colors.text, flex: 1, marginRight: 8 }]} numberOfLines={1}>{test?.title}</Text>
+        <View className="flex-row items-center rounded-full px-3 py-1" style={{ backgroundColor: colors.dangerSoft }}>
+          <Ionicons name="time-outline" size={14} color={colors.danger} />
+          <Text style={[type.caption, { color: colors.danger, marginLeft: 4 }]}>{formatSeconds(secondsLeft ?? 0)}</Text>
         </View>
       </View>
 
@@ -103,12 +107,12 @@ export function LiveTestScreen() {
               onPress={() => setCurrentIndex(index)}
               className="w-9 h-9 rounded-full items-center justify-center mr-2"
               style={{
-                backgroundColor: isActive ? "#4F39F6" : isAnswered ? "#DCFCE7" : "#F3F4F6",
+                backgroundColor: isActive ? colors.primaryFill : isAnswered ? colors.successSoft : colors.surface,
                 borderWidth: isActive ? 0 : 1,
-                borderColor: "#E5E7EB",
+                borderColor: isAnswered ? colors.success : colors.border,
               }}
             >
-              <Text className={isActive ? "text-white font-bold" : isAnswered ? "text-green-700 font-semibold" : "text-gray-500"}>
+              <Text style={[type.label, { color: isActive ? colors.textOnPrimary : isAnswered ? colors.success : colors.textSecondary }]}>
                 {index + 1}
               </Text>
             </Pressable>
@@ -116,10 +120,10 @@ export function LiveTestScreen() {
         })}
       </ScrollView>
 
-      <Text className="text-gray-400 text-xs mb-1">
+      <Text style={[type.caption, { color: colors.textSecondary, marginBottom: 4 }]}>
         Q.{currentIndex + 1} · {question.marks} Mark{question.marks !== 1 ? "s" : ""}
       </Text>
-      <Text className="text-gray-900 text-base font-medium mb-5">{question.questionText}</Text>
+      <Text style={[type.title, { color: colors.text, marginBottom: 20 }]}>{question.questionText}</Text>
 
       {question.options.map((option, index) => {
         const isSelected = selected === index;
@@ -128,26 +132,26 @@ export function LiveTestScreen() {
             key={index}
             onPress={() => setAnswers((prev) => ({ ...prev, [question.id]: index }))}
             className="flex-row items-center border rounded-xl px-4 py-3.5 mb-3"
-            style={{ borderColor: isSelected ? "#4F39F6" : "#E5E7EB", backgroundColor: isSelected ? "#EEF0FF" : "#fff" }}
+            style={{ borderColor: isSelected ? colors.primary : colors.border, backgroundColor: isSelected ? colors.primarySoft : colors.surface }}
           >
             <View
               className="w-6 h-6 rounded-full items-center justify-center mr-3"
-              style={{ borderWidth: 1.5, borderColor: isSelected ? "#4F39F6" : "#D1D5DB", backgroundColor: isSelected ? "#4F39F6" : "transparent" }}
+              style={{ borderWidth: 1.5, borderColor: isSelected ? colors.primaryFill : colors.textMuted, backgroundColor: isSelected ? colors.primaryFill : "transparent" }}
             >
-              {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+              {isSelected && <Ionicons name="checkmark" size={14} color={colors.textOnPrimary} />}
             </View>
-            <Text className={isSelected ? "text-primary font-medium flex-1" : "text-gray-700 flex-1"}>{option}</Text>
+            <Text style={[type.small, { flex: 1, fontSize: 15, lineHeight: 22, color: isSelected ? colors.primaryText : colors.text }]}>{option}</Text>
           </Pressable>
         );
       })}
 
       <View className="flex-1" />
       <View className="flex-row items-center justify-between py-4" style={{ gap: 10 }}>
-        <Button label="Previous" variant="outline" className="flex-1" disabled={currentIndex === 0} onPress={() => setCurrentIndex((i) => i - 1)} />
+        <TestButton label="Previous" variant="outline" style={{ flex: 1 }} disabled={currentIndex === 0} onPress={() => setCurrentIndex((i) => i - 1)} />
         {currentIndex === questions.length - 1 ? (
-          <Button label="Submit" className="flex-1" loading={submitAttempt.isPending} onPress={confirmSubmit} />
+          <TestButton label="Submit" style={{ flex: 1 }} loading={submitAttempt.isPending} onPress={confirmSubmit} />
         ) : (
-          <Button label="Next" className="flex-1" onPress={() => setCurrentIndex((i) => i + 1)} />
+          <TestButton label="Next" style={{ flex: 1 }} onPress={() => setCurrentIndex((i) => i + 1)} />
         )}
       </View>
     </Screen>
