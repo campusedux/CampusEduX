@@ -9,6 +9,8 @@ import type {
   JobApplication,
   ApplicationStage,
   JobAlertPreferences,
+  JobCategoryCount,
+  JobDashboardStats,
 } from "@/types";
 import {
   SAMPLE_JOBS,
@@ -43,6 +45,20 @@ async function orSample<T>(label: string, run: () => Promise<T[]>, sample: T[]):
   }
 }
 
+/**
+ * Active = published (`status = 'open'`) and not past its deadline. RLS only
+ * checks audience targeting, so drafts / closed jobs must be filtered here.
+ */
+function activeOnly(builder: any) {
+  return builder.eq("status", "open").or(`application_deadline.is.null,application_deadline.gt.${new Date().toISOString()}`);
+}
+
+/** Case variants so an exact `skills` array match still hits "react" / "React" / "REACT". */
+function skillVariants(term: string): string[] {
+  const title = term.replace(/\b\w/g, (c) => c.toUpperCase());
+  return Array.from(new Set([term, term.toLowerCase(), term.toUpperCase(), title]));
+}
+
 function matchesJobFilters(j: Job, f: Partial<JobFilters>): boolean {
   if (f.jobType && f.jobType !== "All" && j.jobType !== f.jobType) return false;
   if (f.location && !j.location.toLowerCase().includes(f.location.toLowerCase())) return false;
@@ -64,6 +80,10 @@ function mapJobRow(row: any): Job {
     postedAt: daysAgo === 0 ? "Today" : `${daysAgo}d ago`,
     jobType: row.job_type ?? "Full Time",
     isNew: daysAgo <= 3,
+    category: row.category ?? null,
+    workMode: row.work_mode ?? null,
+    experienceLevel: row.experience_level ?? null,
+    applyUrl: row.apply_url ?? null,
   };
 }
 
@@ -103,7 +123,16 @@ function stageStatusOrder(status: ApplicationStage["status"]) {
 
 function applyFilters(builder: any, filters: Partial<JobFilters>) {
   let q = builder;
-  if (filters.query?.trim()) q = q.ilike("title", `%${filters.query.trim()}%`);
+  // Title, company and skills. Characters that are syntax in a PostgREST
+  // filter string are stripped rather than escaped.
+  const term = filters.query?.replace(/[%*,()"\\{}]/g, " ").trim();
+  if (term) {
+    const skills = skillVariants(term).map((v) => `"${v}"`).join(",");
+    q = q.or(`title.ilike.%${term}%,company_name.ilike.%${term}%,skills.ov.{${skills}}`);
+  }
+  if (filters.category) q = q.eq("category", filters.category);
+  if (filters.workMode) q = q.eq("work_mode", filters.workMode);
+  if (filters.experienceLevel) q = q.eq("experience_level", filters.experienceLevel);
   if (filters.jobType && filters.jobType !== "All") q = q.eq("job_type", filters.jobType);
   if (filters.location) q = q.ilike("location", `%${filters.location}%`);
   // `experience` is freeform text (e.g. "2-4 years"), not a structured range —
@@ -131,7 +160,7 @@ export const jobService = {
     const from = page * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
     try {
-      const { data, error } = await applyFilters(supabase.from("jobs").select(JOB_SELECT), filters).range(from, to);
+      const { data, error } = await applyFilters(activeOnly(supabase.from("jobs").select(JOB_SELECT)), filters).range(from, to);
       if (error) throw new Error(error.message);
       // RLS (migration 0036) has already restricted this page to the student's
       // GLOBAL + Course + Branch jobs — server-side, before pagination (spec §10,
@@ -170,9 +199,7 @@ export const jobService = {
     const fetchLimit = academic && hasAcademicSignal(academic) ? Math.max(limit * 3, 30) : limit;
     let data: any[] | null = null;
     try {
-      const res = await supabase
-        .from("jobs")
-        .select(JOB_SELECT)
+      const res = await activeOnly(supabase.from("jobs").select(JOB_SELECT))
         .order("posted_at", { ascending: false })
         .limit(fetchLimit);
       if (res.error) throw new Error(res.error.message);
@@ -189,6 +216,40 @@ export const jobService = {
     // An empty result is a real answer (no jobs match this student's course/
     // branch/year yet) — show it honestly, never unrelated sample jobs.
     return ordered.slice(0, limit).map(mapJobRow);
+  },
+
+  /** Real per-category counts of active jobs (RPC `job_category_counts`, migration 0114). */
+  async getCategoryCounts(): Promise<JobCategoryCount[]> {
+    const { data, error } = await supabase.rpc("job_category_counts");
+    if (!error) {
+      return ((data ?? []) as { category: string; job_count: number | string }[]).map((r) => ({
+        category: r.category,
+        jobCount: Number(r.job_count),
+      }));
+    }
+    // RPC not deployed yet: aggregate the same active rows client-side.
+    const res = await activeOnly(supabase.from("jobs").select("category"));
+    if (res.error) throw new Error(res.error.message);
+    const tally = new Map<string, number>();
+    for (const row of (res.data ?? []) as { category: string | null }[]) {
+      const key = row.category ?? "Other";
+      tally.set(key, (tally.get(key) ?? 0) + 1);
+    }
+    return Array.from(tally, ([category, jobCount]) => ({ category, jobCount })).sort((a, b) => b.jobCount - a.jobCount);
+  },
+
+  /** Hero stats (RPC `job_dashboard_stats`, migration 0114). */
+  async getDashboardStats(): Promise<JobDashboardStats> {
+    const { data, error } = await supabase.rpc("job_dashboard_stats");
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!error && row) {
+      return { activeJobs: Number(row.active_jobs), companyCount: Number(row.company_count), fresherJobs: Number(row.fresher_jobs) };
+    }
+    const res = await activeOnly(supabase.from("jobs").select("company_id, company_name"));
+    if (res.error) throw new Error(res.error.message);
+    const rows = (res.data ?? []) as { company_id: string | null; company_name: string }[];
+    const companies = new Set(rows.map((r) => r.company_id ?? r.company_name).filter(Boolean));
+    return { activeJobs: rows.length, companyCount: companies.size, fresherJobs: 0 };
   },
 
   async getCompanies(query = ""): Promise<Company[]> {
@@ -272,6 +333,16 @@ export const jobService = {
       requirements: row.requirements ?? [],
       skills: row.skills ?? [],
       experience: row.experience ?? "",
+      summary: row.summary ?? "",
+      responsibilities: row.responsibilities ?? [],
+      qualification: row.qualification ?? "",
+      shift: row.shift ?? "",
+      benefits: row.benefits ?? [],
+      category: row.category ?? "",
+      requisitionId: row.requisition_id ?? "",
+      applyUrl: row.apply_url ?? null,
+      applicationDeadline: row.application_deadline ?? null,
+      candidateNote: row.candidate_note ?? "",
       companyRating: row.company?.rating ?? 0,
       companyReviewCount: row.company?.review_count ?? 0,
       isSaved,

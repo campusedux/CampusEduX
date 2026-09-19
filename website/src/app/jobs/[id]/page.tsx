@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { Building2, MapPin, Clock, Wallet } from "lucide-react";
+import { Building2, MapPin, Clock, Wallet, ExternalLink } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import JsonLd from "@/components/JsonLd";
 import { TagPill, Breadcrumb } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd, jobPostingIdentifier, hiringOrganizationJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { getCachedJobDetail, getCachedRecentJobIds } from "@/lib/cache";
+import { jobAvailability } from "@/lib/jobsActive";
 import JobApplyPanel from "./JobApplyPanel";
 
 export const revalidate = 300;
@@ -39,6 +40,9 @@ const getJob = cache((id: string) => getCachedJobDetail(id));
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const job = await getJob(params.id);
   if (!job) return { title: "Job not found", robots: { index: false, follow: false } };
+  if (jobAvailability(job) !== "open") {
+    return { title: "Job no longer available", robots: { index: false, follow: true } };
+  }
   const company = job.company_name || job.company?.name || "a CampusEduX employer";
   return {
     title: `${job.title} at ${company}`,
@@ -57,9 +61,43 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 export default async function JobDetailPage({ params }: { params: { id: string } }) {
   const job = await getJob(params.id);
   if (!job) notFound();
+  const availability = jobAvailability(job);
+  if (availability === "draft") notFound();
+  if (availability === "closed") {
+    const closedCompany = job.company_name || job.company?.name || "this employer";
+    return (
+      <div className="container-prose py-16 text-center">
+        <Breadcrumb className="mb-8 text-left" items={[{ label: "Jobs", href: "/jobs" }, { label: job.title }]} />
+        <h1 className="text-2xl font-bold text-ink sm:text-3xl">This job is no longer accepting applications</h1>
+        <p className="mt-3 text-ink-muted">
+          {job.title} at {closedCompany} has closed or expired. Browse other openings that are still live.
+        </p>
+        <div className="mt-6">
+          <Link
+            href="/jobs"
+            className="inline-flex h-11 items-center rounded-xl bg-primary px-5 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Browse open jobs
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const company = job.company_name || job.company?.name || "CampusEduX employer";
   const logo = job.company_logo_url || job.company?.logo_url || null;
+
+  const deadline: string | null = job.application_deadline ?? null;
+  const applyUrl: string | null = job.apply_url ?? null;
+  const facts: [string, string | null][] = [
+    ["Category", job.category],
+    ["Experience", job.experience],
+    ["Qualification", job.qualification],
+    ["Shift", job.shift],
+    ["Requisition ID", job.requisition_id],
+    ["Benefits", job.benefits?.length ? job.benefits.join(", ") : null],
+    ["Apply by", deadline ? new Date(deadline).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : null],
+  ];
 
   const jobJsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
@@ -72,6 +110,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
     hiringOrganization: hiringOrganizationJsonLd({ name: company, logoUrl: logo, website: job.company?.website ?? null }),
     jobLocation: { "@type": "Place", address: job.location || "India" },
   };
+  if (deadline) jobJsonLd.validThrough = deadline;
   if (job.salary_min_lpa && job.salary_max_lpa) {
     jobJsonLd.baseSalary = {
       "@type": "MonetaryAmount",
@@ -79,6 +118,17 @@ export default async function JobDetailPage({ params }: { params: { id: string }
       value: { "@type": "QuantitativeValue", minValue: job.salary_min_lpa, maxValue: job.salary_max_lpa, unitText: "YEAR" },
     };
   }
+
+  const applyButton = applyUrl ? (
+    <a
+      href={applyUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-white hover:opacity-90"
+    >
+      Apply on company site <ExternalLink className="h-4 w-4" aria-hidden />
+    </a>
+  ) : null;
 
   return (
     <div className="container-prose py-8 sm:py-10">
@@ -131,14 +181,41 @@ export default async function JobDetailPage({ params }: { params: { id: string }
         </span>
       </div>
 
+      {job.summary && <p className="mt-6 text-ink">{job.summary}</p>}
+      {applyButton && <div className="mt-6">{applyButton}</div>}
+
+      {facts.some(([, v]) => v) && (
+        <dl className="mt-6 grid gap-x-6 gap-y-3 rounded-2xl border border-line bg-white p-5 shadow-card sm:grid-cols-2">
+          {facts.map(([k, v]) =>
+            v ? (
+              <div key={k}>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{k}</dt>
+                <dd className="mt-0.5 text-sm text-ink">{v}</dd>
+              </div>
+            ) : null,
+          )}
+        </dl>
+      )}
+
       <section className="mt-8">
-        <h2 className="text-lg font-bold text-ink">Description</h2>
+        <h2 className="text-lg font-bold text-ink">{job.responsibilities?.length ? "About the role" : "Description"}</h2>
         <p className="mt-2 whitespace-pre-line text-ink-muted">{job.description || "No description provided."}</p>
       </section>
 
+      {job.responsibilities?.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-bold text-ink">What you&apos;ll work on</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-ink-muted">
+            {job.responsibilities.map((r: string) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {job.requirements?.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-lg font-bold text-ink">Requirements</h2>
+          <h2 className="text-lg font-bold text-ink">{job.responsibilities?.length ? "What they\u2019re looking for" : "Requirements"}</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-ink-muted">
             {job.requirements.map((r: string) => (
               <li key={r}>{r}</li>
@@ -165,10 +242,19 @@ export default async function JobDetailPage({ params }: { params: { id: string }
         </section>
       )}
 
-      <JobApplyPanel jobId={job.id} />
-      <p className="mt-4 text-xs text-ink-faint">
-        You can also apply and track status from the CampusEduX app — it&apos;s the same account either way.
-      </p>
+      {job.candidate_note && (
+        <p className="mt-8 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
+          <strong className="text-ink">Note for candidates:</strong> {job.candidate_note}
+        </p>
+      )}
+
+      {applyButton && <div className="mt-8">{applyButton}</div>}
+      <JobApplyPanel jobId={job.id} externalApply={!!applyUrl} />
+      {!applyUrl && (
+        <p className="mt-4 text-xs text-ink-faint">
+          You can also apply and track status from the CampusEduX app — it&apos;s the same account either way.
+        </p>
+      )}
     </div>
   );
 }

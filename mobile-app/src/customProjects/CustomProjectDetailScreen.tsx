@@ -7,7 +7,7 @@ import { Screen, LoadingState, ErrorState } from "@/components/ui";
 import { notify } from "@/lib/notify";
 import { customProjectsService } from "@/services/customProjects.service";
 import { useCustomProjectDetail, useSendCustomMessage } from "@/hooks/useCustomProjects";
-import { rupees } from "./components/wizard";
+import { rupees } from "./components/format";
 import {
   CUSTOM_PLATFORM_LABELS,
   CUSTOM_PROJECT_PROGRESS,
@@ -173,10 +173,10 @@ export function CustomProjectDetailScreen() {
         <Section title="Pricing">
           <View className="rounded-2xl border border-gray-100 p-4">
             <KV k="Base price" v={rupees(data.basePrice)} />
-            <KV k="Features" v={rupees(data.featureTotal)} />
+            <KV k="Add-ons" v={rupees(data.featureTotal)} />
             <KV k="Platform charges" v={rupees(data.platformCharge)} />
             <View className="flex-row justify-between border-t border-gray-100 pt-2 mt-1">
-              <Text className="font-bold text-gray-900">Estimated Project Price</Text>
+              <Text className="font-bold text-gray-900">Estimated project price</Text>
               <Text className="font-bold text-gray-900">{rupees(data.estimatedTotal)}</Text>
             </View>
             <View className="flex-row justify-between mt-1">
@@ -186,15 +186,32 @@ export function CustomProjectDetailScreen() {
           </View>
         </Section>
 
-        {data.features.length > 0 ? (
-          <Section title="Selected features">
+        {data.features.some((f) => f.isIncluded) ? (
+          <Section title="Included features">
             <View className="rounded-2xl border border-gray-100 p-4">
-              {data.features.map((f) => (
-                <View key={f.featureId} className="flex-row justify-between py-1.5">
-                  <Text className="text-gray-600 flex-1 pr-3">{f.featureName}</Text>
-                  <Text className="text-gray-900">{f.featurePrice > 0 ? rupees(f.featurePrice) : "Free"}</Text>
-                </View>
-              ))}
+              {data.features
+                .filter((f) => f.isIncluded)
+                .map((f) => (
+                  <View key={f.featureId} className="flex-row justify-between py-1.5">
+                    <Text className="text-gray-600 flex-1 pr-3">{f.featureName}</Text>
+                    <Text className="text-green-700 font-medium">Included</Text>
+                  </View>
+                ))}
+            </View>
+          </Section>
+        ) : null}
+
+        {data.features.some((f) => !f.isIncluded) ? (
+          <Section title="Add-on features">
+            <View className="rounded-2xl border border-gray-100 p-4">
+              {data.features
+                .filter((f) => !f.isIncluded)
+                .map((f) => (
+                  <View key={f.featureId} className="flex-row justify-between py-1.5">
+                    <Text className="text-gray-600 flex-1 pr-3">{f.featureName}</Text>
+                    <Text className="text-gray-900">{f.featurePrice > 0 ? rupees(f.featurePrice) : "Free"}</Text>
+                  </View>
+                ))}
             </View>
           </Section>
         ) : null}

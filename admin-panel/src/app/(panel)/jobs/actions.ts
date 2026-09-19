@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import { resolveTargetingFromForm } from '@/lib/academic-targeting';
+import { WORK_MODES, EXPERIENCE_LEVELS, JOB_CATEGORIES } from '@/lib/jobs/constants';
 import type { UploadedFile } from '@/components/ui/UploadDropzone';
 
 type Result = { ok: boolean; error?: string };
@@ -19,6 +20,30 @@ const list = (fd: FormData, k: string) =>
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean);
+// Deadline is a calendar date; the job closes at the end of that day in IST.
+const deadlineOrNull = (fd: FormData, k: string) => {
+  const v = str(fd, k);
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v}T23:59:59+05:30` : null;
+};
+const oneOf = <T extends string>(fd: FormData, k: string, allowed: readonly T[]): T | null => {
+  const v = str(fd, k);
+  return (allowed as readonly string[]).includes(v) ? (v as T) : null;
+};
+const extraFields = (fd: FormData) => ({
+  work_mode: oneOf(fd, 'work_mode', WORK_MODES),
+  experience_level: oneOf(fd, 'experience_level', EXPERIENCE_LEVELS),
+  apply_url: str(fd, 'apply_url') || null,
+  application_deadline: deadlineOrNull(fd, 'application_deadline'),
+  requisition_id: str(fd, 'requisition_id') || null,
+  // blank → NULL → the DB trigger derives it from title/skills
+  category: oneOf(fd, 'category', JOB_CATEGORIES),
+  qualification: str(fd, 'qualification') || null,
+  shift: str(fd, 'shift') || null,
+  benefits: str(fd, 'benefits').split(',').map((s) => s.trim()).filter(Boolean),
+  summary: str(fd, 'summary') || null,
+  responsibilities: list(fd, 'responsibilities'),
+  candidate_note: str(fd, 'candidate_note') || null,
+});
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
 
 async function companyName(supabase: ReturnType<typeof createClient>, companyId: string | null) {
@@ -33,6 +58,8 @@ export async function createJob(_prev: Result, fd: FormData): Promise<Result> {
   const supabase = createClient();
   const title = str(fd, 'title');
   if (!title) return { ok: false, error: 'Title is required.' };
+  if (!oneOf(fd, 'work_mode', WORK_MODES)) return { ok: false, error: 'Work mode is required.' };
+  if (!oneOf(fd, 'experience_level', EXPERIENCE_LEVELS)) return { ok: false, error: 'Experience level is required.' };
 
   const companyId = str(fd, 'company_id') || null;
   const c = (await companyName(supabase, companyId)) as { name: string; logo_url: string | null };
@@ -54,6 +81,7 @@ export async function createJob(_prev: Result, fd: FormData): Promise<Result> {
     skills: str(fd, 'skills').split(',').map((s) => s.trim()).filter(Boolean),
     experience: str(fd, 'experience'),
     status: str(fd, 'status') || 'open',
+    ...extraFields(fd),
     ...(await resolveTargetingFromForm(fd)),
   });
   if (error) return { ok: false, error: error.message };
@@ -85,6 +113,7 @@ export async function updateJob(id: string, _prev: Result, fd: FormData): Promis
       skills: str(fd, 'skills').split(',').map((s) => s.trim()).filter(Boolean),
       experience: str(fd, 'experience'),
       status: str(fd, 'status') || 'open',
+      ...extraFields(fd),
       ...(await resolveTargetingFromForm(fd)),
     })
     .eq('id', id);

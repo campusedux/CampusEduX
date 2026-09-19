@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import { onlyActiveJobs } from "@/lib/jobsActive";
 import { isTemplatedGenerativeAiBody, isThinCodingProblemRow } from "@/lib/contentQuality";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.campusedux.com";
@@ -33,7 +34,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       { data: interviewTopics },
     ] = await Promise.all([
       supabase.from("projects").select("id,updated_at").limit(1000),
-      supabase.from("jobs").select("id,updated_at").limit(1000),
+      onlyActiveJobs(supabase.from("jobs").select("id,updated_at")).limit(1000),
       supabase.from("categories").select("id,updated_at").limit(200),
       supabase.from("companies").select("id,updated_at").limit(500),
       supabase.rpc("learning_sitemap", { p_platform: "website" }),

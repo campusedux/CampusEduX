@@ -1,3 +1,6 @@
+export type WorkMode = "Remote" | "Hybrid" | "On-site";
+export type ExperienceLevel = "Fresher" | "Experienced";
+
 export interface Job {
   id: string;
   title: string;
@@ -9,6 +12,23 @@ export interface Job {
   postedAt: string;
   jobType: "Full Time" | "Part Time" | "Internship" | "Contract";
   isNew: boolean;
+  /** Normalised category (migration 0114); undefined/null until backfilled. */
+  category?: string | null;
+  /** null = not set by the admin — the UI never guesses. */
+  workMode?: WorkMode | null;
+  experienceLevel?: ExperienceLevel | null;
+  applyUrl?: string | null;
+}
+
+export interface JobCategoryCount {
+  category: string;
+  jobCount: number;
+}
+
+export interface JobDashboardStats {
+  activeJobs: number;
+  companyCount: number;
+  fresherJobs: number;
 }
 
 export interface JobDetail extends Job {
@@ -16,6 +36,17 @@ export interface JobDetail extends Job {
   requirements: string[];
   skills: string[];
   experience: string;
+  summary: string;
+  responsibilities: string[];
+  qualification: string;
+  shift: string;
+  benefits: string[];
+  category: string;
+  requisitionId: string;
+  applyUrl: string | null;
+  /** ISO timestamp; null = no deadline. */
+  applicationDeadline: string | null;
+  candidateNote: string;
   companyRating: number;
   companyReviewCount: number;
   isSaved: boolean;
@@ -79,6 +110,10 @@ export interface JobFilters {
    * the user can still see on the previous screen.
    */
   query?: string;
+  /** Exact match on jobs.category (one of the fixed set or "Other"). */
+  category?: string | null;
+  workMode?: WorkMode | null;
+  experienceLevel?: ExperienceLevel | null;
 }
 
 export const DEFAULT_JOB_FILTERS: JobFilters = {

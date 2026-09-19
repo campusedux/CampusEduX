@@ -35,6 +35,8 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
   if (!data) notFound();
 
   const { request: r, features, files, history, delivery, messages, uploadUrls } = data;
+  const included = features.filter((f) => f.is_included);
+  const addOns = features.filter((f) => !f.is_included);
   const canEdit = admin.perms.custom_projects.edit;
   const pct = PROGRESS_BY_STATUS[r.status as CustomProjectStatus] ?? 0;
   const reqs: { text: string }[] = Array.isArray(r.custom_requirements) ? r.custom_requirements : [];
@@ -77,15 +79,39 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
 
           <Card>
             <CardHeader
-              title="Selected features"
-              description={`${features.length} feature${features.length === 1 ? '' : 's'} · frozen at request time`}
+              title="Included features"
+              description={`${included.length} feature${included.length === 1 ? '' : 's'} · free with the ${r.project_level} ${r.project_type} project · frozen at request time`}
             />
-            {features.length === 0 ? (
-              <p className="text-sm text-ink-muted">No optional features selected.</p>
+            {included.length === 0 ? (
+              <p className="text-sm text-ink-muted">No included features recorded for this request.</p>
             ) : (
               <table className="w-full text-sm">
                 <tbody>
-                  {features.map((f) => (
+                  {included.map((f) => (
+                    <tr key={f.feature_id} className="border-b border-border last:border-0">
+                      <td className="py-2 text-ink">{f.feature_name}</td>
+                      <td className="py-2 text-ink-muted">{f.category}</td>
+                      <td className="py-2 text-right text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                        Included
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Paid add-ons"
+              description={`${addOns.length} add-on${addOns.length === 1 ? '' : 's'} · frozen at request time`}
+            />
+            {addOns.length === 0 ? (
+              <p className="text-sm text-ink-muted">No paid add-ons selected.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <tbody>
+                  {addOns.map((f) => (
                     <tr key={f.feature_id} className="border-b border-border last:border-0">
                       <td className="py-2 text-ink">{f.feature_name}</td>
                       <td className="py-2 text-ink-muted">{f.category}</td>
@@ -237,7 +263,7 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
           <Card>
             <CardHeader title="Pricing snapshot" />
             <Row label="Base price" value={formatINR(Number(r.base_price))} />
-            <Row label="Features" value={formatINR(Number(r.feature_total))} />
+            <Row label="Add-ons" value={formatINR(Number(r.feature_total))} />
             <Row label="Platform charges" value={formatINR(Number(r.platform_charge))} />
             <Row label="Estimated total" value={formatINR(Number(r.estimated_total))} />
             <Row label="Token paid" value={formatINR(Number(r.token_amount))} />

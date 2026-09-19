@@ -66,10 +66,7 @@ export function AllProjectsScreen() {
         />
       </View>
 
-      <CustomProjectBanner
-        onStartProject={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
-        onLearnMore={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
-      />
+      <CustomProjectBanner />
 
       {!isLoading && !isError && projects.length > 0 && (
         <View className="flex-row items-center justify-between mb-3">

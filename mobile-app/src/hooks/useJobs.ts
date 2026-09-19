@@ -15,6 +15,8 @@ export const jobQueryKeys = {
   detail: (jobId: string) => ["jobs", "detail", jobId] as const,
   recruiter: (jobId: string) => ["jobs", "recruiter", jobId] as const,
   saved: ["jobs", "saved"] as const,
+  categoryCounts: ["jobs", "category-counts"] as const,
+  dashboardStats: ["jobs", "dashboard-stats"] as const,
   resumes: ["resumes"] as const,
   applied: ["applications"] as const,
   applicationDetail: (id: string) => ["applications", "detail", id] as const,
@@ -40,6 +42,12 @@ export const useRecommendedJobs = () => {
     enabled: !!userId,
   });
 };
+
+export const useJobCategoryCounts = () =>
+  useQuery({ queryKey: jobQueryKeys.categoryCounts, queryFn: jobService.getCategoryCounts, staleTime: 60_000 });
+
+export const useJobDashboardStats = () =>
+  useQuery({ queryKey: jobQueryKeys.dashboardStats, queryFn: jobService.getDashboardStats, staleTime: 60_000 });
 
 export const useCompanies = (query = "") =>
   useQuery({ queryKey: jobQueryKeys.companies(query), queryFn: () => jobService.getCompanies(query) });

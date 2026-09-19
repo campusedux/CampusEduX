@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getOptionalUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import { onlyActiveJobs } from "@/lib/jobsActive";
 import {
   RESUME_STORAGE_BUCKET,
   RESUME_SIGNED_URL_TTL,
@@ -21,10 +22,12 @@ type ActionError = { error: string };
 
 const jobIdSchema = z.string().trim().min(1).max(200);
 
-async function jobExists(jobId: string): Promise<boolean> {
+/** `activeOnly`: applying needs an open, unexpired job; saving/unsaving only needs a non-draft one. */
+async function jobExists(jobId: string, activeOnly = false): Promise<boolean> {
   const supabase = getPublicSupabase();
   if (!supabase) return false;
-  const { data } = await supabase.from("jobs").select("id").eq("id", jobId).maybeSingle();
+  const base = supabase.from("jobs").select("id");
+  const { data } = await (activeOnly ? onlyActiveJobs(base) : base.neq("status", "draft")).eq("id", jobId).maybeSingle();
   return !!data;
 }
 
@@ -100,7 +103,7 @@ export async function applyToJobAction(input: ApplyToJobInput): Promise<{ applic
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again to apply." };
 
-  if (!(await jobExists(jobId))) return { error: "That job is no longer listed." };
+  if (!(await jobExists(jobId, true))) return { error: "That job is no longer accepting applications." };
 
   const supabase = createAuthedServerSupabase();
 

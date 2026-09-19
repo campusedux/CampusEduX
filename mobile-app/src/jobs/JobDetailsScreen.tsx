@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState, RatingStars } from "@/components/ui";
 import { notify } from "@/lib/notify";
+import { openApplyUrl } from "@/lib/openApplyUrl";
 import { useJobDetail, useToggleSavedJob, useCompanyDetail } from "@/hooks/useJobs";
 import type { JobStackParamList } from "@/types";
 
@@ -30,6 +31,8 @@ export function JobDetailsScreen() {
 
   if (isLoading) return <Screen className="items-center justify-center"><LoadingState label="Loading job..." /></Screen>;
   if (isError || !job) return <Screen className="items-center justify-center px-6"><ErrorState message="Couldn't load this job." onRetry={refetch} /></Screen>;
+
+  const isClosed = !!job.applicationDeadline && new Date(job.applicationDeadline).getTime() < Date.now();
 
   return (
     <Screen>
@@ -62,7 +65,16 @@ export function JobDetailsScreen() {
           <InfoTag icon="briefcase-outline" label={job.jobType} />
           <InfoTag icon="cash-outline" label={job.salaryRange} />
           {job.experience ? <InfoTag icon="time-outline" label={job.experience} /> : null}
+          {job.shift ? <InfoTag icon="moon-outline" label={job.shift} /> : null}
         </View>
+
+        {isClosed ? (
+          <Text className="text-red-600 text-sm font-semibold mb-4">Applications closed</Text>
+        ) : job.applicationDeadline ? (
+          <Text className="text-gray-500 text-xs mb-4">
+            Apply by {new Date(job.applicationDeadline).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
+          </Text>
+        ) : null}
 
         <View className="flex-row border-b border-gray-100 mb-4">
           <TabButton label="Job Details" active={tab === "description"} onPress={() => setTab("description")} />
@@ -71,12 +83,45 @@ export function JobDetailsScreen() {
 
         {tab === "description" ? (
           <>
-            <Text className="font-bold text-gray-900 mb-2">Job Description</Text>
+            {job.summary ? <Text className="text-gray-900 text-sm leading-5 mb-4">{job.summary}</Text> : null}
+
+            {[
+              ["Category", job.category],
+              ["Qualification", job.qualification],
+              ["Requisition ID", job.requisitionId],
+              ["Benefits", job.benefits.join(", ")],
+            ].map(([k, v]) =>
+              v ? (
+                <Text key={k} className="text-gray-500 text-sm mb-1">
+                  <Text className="font-semibold text-gray-900">{k}: </Text>
+                  {v}
+                </Text>
+              ) : null
+            )}
+
+            <Text className="font-bold text-gray-900 mt-4 mb-2">
+              {job.responsibilities.length > 0 ? "About the role" : "Job Description"}
+            </Text>
             <Text className="text-gray-500 text-sm leading-5 mb-5">{job.description || "No description provided."}</Text>
+
+            {job.responsibilities.length > 0 && (
+              <>
+                <Text className="font-bold text-gray-900 mb-2">What you&apos;ll work on</Text>
+                {job.responsibilities.map((item) => (
+                  <View key={item} className="flex-row items-start mb-1.5">
+                    <Text className="text-gray-600 text-sm">•</Text>
+                    <Text className="text-gray-600 text-sm ml-2 flex-1">{item}</Text>
+                  </View>
+                ))}
+                <View className="mb-5" />
+              </>
+            )}
 
             {job.requirements.length > 0 && (
               <>
-                <Text className="font-bold text-gray-900 mb-2">Requirements</Text>
+                <Text className="font-bold text-gray-900 mb-2">
+                  {job.responsibilities.length > 0 ? "What they're looking for" : "Requirements"}
+                </Text>
                 {job.requirements.map((req) => (
                   <View key={req} className="flex-row items-start mb-1.5">
                     <Ionicons name="checkmark" size={14} color="#16A34A" style={{ marginTop: 3 }} />
@@ -98,6 +143,13 @@ export function JobDetailsScreen() {
                 </View>
               </>
             )}
+
+            {job.candidateNote ? (
+              <Text className="text-gray-600 text-xs bg-gray-50 rounded-lg p-3 mb-4">
+                <Text className="font-semibold text-gray-900">Note for candidates: </Text>
+                {job.candidateNote}
+              </Text>
+            ) : null}
 
             <Pressable
               onPress={() => (navigation as any).navigate("RecruiterDetails", { jobId: job.id })}
@@ -125,11 +177,17 @@ export function JobDetailsScreen() {
       </ScrollView>
 
       <View className="px-6 py-4 border-t border-gray-100">
-        <Button
-          label={job.hasApplied ? "Already Applied" : "Apply Now"}
-          disabled={job.hasApplied}
-          onPress={() => (navigation as any).navigate("ApplyJob", { jobId: job.id })}
-        />
+        {isClosed ? (
+          <Button label="Applications Closed" disabled onPress={() => {}} />
+        ) : job.applyUrl ? (
+          <Button label="Apply Now" onPress={() => openApplyUrl(job.applyUrl!)} />
+        ) : (
+          <Button
+            label={job.hasApplied ? "Already Applied" : "Apply Now"}
+            disabled={job.hasApplied}
+            onPress={() => (navigation as any).navigate("ApplyJob", { jobId: job.id })}
+          />
+        )}
       </View>
     </Screen>
   );

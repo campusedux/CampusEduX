@@ -54,6 +54,7 @@ export default async function EditFeaturePage({ params }: { params: { id: string
           icon: (feature.icon as string | null) ?? null,
           image_url: (feature.image_url as string | null) ?? null,
           dependencies: (feature.dependencies as string[] | null) ?? [],
+          included_in_levels: (feature.included_in_levels as string[] | null) ?? [],
           sort_order: feature.sort_order,
           is_active: feature.is_active,
         }}

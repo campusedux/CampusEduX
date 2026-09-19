@@ -154,7 +154,17 @@ export type CustomProjectsStackParamList = {
   BuilderUploads: undefined;
   BuilderEstimate: undefined;
   BuilderPayment: undefined;
-  SubmitSuccess: { requestId: string; requestCode: string; tokenAmount: number; title: string };
+  SubmitSuccess: {
+    requestId: string;
+    requestCode: string;
+    tokenAmount: number;
+    title: string;
+    /** Estimated project price at submit time — for the receipt / balance line. */
+    estimatedTotal: number;
+    /** ISO timestamp of the successful payment. */
+    paidAt: string;
+  };
+  LegalDocument: { docId: LegalDocId };
   SubmitFailed: { message?: string } | undefined;
   MyCustomProjects: undefined;
   CustomProjectDetail: { requestId: string };

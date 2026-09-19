@@ -13,6 +13,7 @@ import { SubmitSuccessScreen } from "@/customProjects/SubmitSuccessScreen";
 import { SubmitFailedScreen } from "@/customProjects/SubmitFailedScreen";
 import { MyCustomProjectsScreen } from "@/customProjects/MyCustomProjectsScreen";
 import { CustomProjectDetailScreen } from "@/customProjects/CustomProjectDetailScreen";
+import { LegalDocumentScreen } from "@/legal";
 import type { CustomProjectsStackParamList } from "@/types";
 
 const Stack = createNativeStackNavigator<CustomProjectsStackParamList>();
@@ -38,6 +39,7 @@ export function CustomProjectsNavigator() {
       <Stack.Screen name="SubmitFailed" component={SubmitFailedScreen} options={{ presentation: "modal" }} />
       <Stack.Screen name="MyCustomProjects" component={MyCustomProjectsScreen} />
       <Stack.Screen name="CustomProjectDetail" component={CustomProjectDetailScreen} />
+      <Stack.Screen name="LegalDocument" component={LegalDocumentScreen} />
     </Stack.Navigator>
   );
 }

@@ -107,8 +107,9 @@ function FooterLinkList({ links }: { links: readonly FooterLink[] }) {
 export default function Footer() {
   const year = new Date().getFullYear();
   const entity = process.env.NEXT_PUBLIC_LEGAL_ENTITY_NAME?.trim() || BRAND.name;
-  const supportEmail = "campusedux@ganil.com";
+  const supportEmail = "campusedux@gamil.com";
 
+  
   return (
     <footer className="border-t border-line bg-surface">
       <div className="container-page py-10 sm:py-12">

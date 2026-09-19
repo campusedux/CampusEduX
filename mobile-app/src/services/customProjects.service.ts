@@ -1,6 +1,5 @@
 import { supabase } from "@/lib/supabase";
 import {
-  CUSTOM_PROJECT_TOKENS,
   type CustomFeature,
   type CustomPlatformPricing,
   type CustomProjectBuilderConfig,
@@ -12,6 +11,7 @@ import {
   type CustomProjectRequest,
   type CustomProjectRequestDetail,
   type CustomProjectType,
+  tokenForType,
   type CustomRequirement,
 } from "@/types";
 
@@ -54,6 +54,7 @@ function mapFeatureRow(row: any): CustomFeature {
     level: row.level ?? "standard",
     dependencies: Array.isArray(row.dependencies) ? row.dependencies : [],
     conflicts: Array.isArray(row.conflicts) ? row.conflicts : [],
+    includedInLevels: Array.isArray(row.included_in_levels) ? row.included_in_levels : [],
     icon: row.icon ?? null,
     imageUrl: row.image_url ?? null,
   };
@@ -211,13 +212,62 @@ export function getFeaturesFor(
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+/** Whether `feature` comes free with this type + level (never charged, never toggleable). */
+export function isFeatureIncluded(
+  feature: Pick<CustomFeature, "includedInLevels">,
+  projectType: CustomProjectType | null,
+  projectLevel: CustomProjectLevel | null
+): boolean {
+  if (!projectType || !projectLevel) return false;
+  return (feature.includedInLevels ?? []).includes(`${projectType}:${projectLevel}`);
+}
+
+/** Features offered for this tier split into free-included and paid add-ons. */
+export function splitFeaturesFor(
+  projectType: CustomProjectType | null,
+  projectLevel: CustomProjectLevel | null,
+  features: CustomFeature[]
+): { included: CustomFeature[]; addOnCatalog: CustomFeature[] } {
+  const offered = getFeaturesFor(projectType, projectLevel, features);
+  return {
+    included: offered.filter((f) => isFeatureIncluded(f, projectType, projectLevel)),
+    addOnCatalog: offered.filter((f) => !isFeatureIncluded(f, projectType, projectLevel)),
+  };
+}
+
 /**
- * Base Price + Selected Feature Prices + Platform Charges = Estimated Project
- * Price (spec §10). Computed entirely on the client so a feature tap never hits
- * the database. The token is a fixed per-type constant — never a % of the
- * estimate, never from the features (spec §11).
+ * Add-ons the customer would unlock by switching from Standard to Advanced —
+ * offered for this type at Advanced but not at Standard. Empty on Advanced.
  */
-export function estimatePrice(
+export function getAdvancedOnlyFeatures(
+  projectType: CustomProjectType | null,
+  projectLevel: CustomProjectLevel | null,
+  features: CustomFeature[]
+): CustomFeature[] {
+  if (!projectType || projectLevel !== "standard") return [];
+  return features
+    .filter(
+      (f) =>
+        f.projectTypes.includes(projectType) &&
+        f.projectLevels.includes("advanced") &&
+        !f.projectLevels.includes("standard")
+    )
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * THE single source of truth for every price the builder shows (spec §10):
+ * Base Price + paid add-ons + platform charges = estimated project price.
+ * Included features are free and are never charged even if their id is in
+ * `featureIds` (old drafts). Computed on the client so a tap never hits the
+ * database; create-custom-project-order recomputes the same figure server-side
+ * (parity asserted in tests/unit/services/customProjectsServerParity.test.ts).
+ * The token is a fixed per-type constant and is deducted from the total.
+ */
+export function calculateEstimate(
   config: Pick<
     CustomProjectBuilderConfig,
     "projectType" | "projectLevel" | "platform" | "featureIds"
@@ -232,25 +282,27 @@ export function estimatePrice(
     (p) => p.projectType === projectType && p.projectLevel === projectLevel
   );
   const basePrice = priceRow?.basePrice ?? 0;
+  const platformCharges = platformPricing.find((p) => p.platform === platform)?.charge ?? 0;
 
-  const platformRow = platformPricing.find((p) => p.platform === platform);
-  const platformCharge = platformRow?.charge ?? 0;
-
-  const available = getFeaturesFor(projectType, projectLevel, features);
-  const selectedFeatures = available
+  const { included, addOnCatalog } = splitFeaturesFor(projectType, projectLevel, features);
+  const includedFeatures = included.map((f) => ({ ...f, price: 0 }));
+  const addOns = addOnCatalog
     .filter((f) => featureIds.includes(f.id))
     .map((f) => ({ ...f, price: priceForFeature(f, projectType, false) }));
-  const featureTotal = selectedFeatures.reduce((s, f) => s + f.price, 0);
+  const addOnsTotal = round2(addOns.reduce((s, f) => s + f.price, 0));
 
-  const tokenAmount = projectType ? CUSTOM_PROJECT_TOKENS[projectType] : 0;
+  const total = round2(basePrice + addOnsTotal + platformCharges);
+  const token = tokenForType(projectType);
 
   return {
     basePrice,
-    platformCharge,
-    featureTotal,
-    estimatedTotal: basePrice + featureTotal + platformCharge,
-    tokenAmount,
-    selectedFeatures,
+    includedFeatures,
+    addOns,
+    addOnsTotal,
+    platformCharges,
+    total,
+    token,
+    balanceAfterToken: Math.max(0, round2(total - token)),
   };
 }
 
@@ -433,7 +485,7 @@ export const customProjectsService = {
       supabase.from("custom_project_requests").select("*").eq("id", requestId).maybeSingle(),
       supabase
         .from("custom_project_request_features")
-        .select("feature_id, feature_name, feature_price, category")
+        .select("feature_id, feature_name, feature_price, category, is_included")
         .eq("request_id", requestId),
       supabase
         .from("custom_project_request_files")
@@ -498,6 +550,7 @@ export const customProjectsService = {
         featureId: f.feature_id,
         featureName: f.feature_name ?? "",
         featurePrice: Number(f.feature_price) || 0,
+        isIncluded: f.is_included === true,
         category: f.category ?? "",
       })),
       referenceFiles: (fileRes.data ?? []).map((f: any) => ({

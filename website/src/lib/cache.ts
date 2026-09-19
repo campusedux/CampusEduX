@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import { onlyActiveJobs } from "@/lib/jobsActive";
 
 /**
  * Cross-request cache layer for **public catalog** reads.
@@ -115,7 +116,7 @@ export const getCachedHomeData = unstable_cache(
         .select(PROJECT_LIST_FIELDS)
         .order("sales_count", { ascending: false })
         .limit(8),
-      supabase.from("jobs").select(JOB_LIST_FIELDS).order("posted_at", { ascending: false }).limit(6),
+      onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS)).order("posted_at", { ascending: false }).limit(6),
       supabase
         .from("testimonials")
         .select("id,author_name,author_role,quote,rating")
@@ -208,9 +209,7 @@ export const getCachedJobsPage = unstable_cache(
     const supabase = getPublicSupabase();
     if (!supabase) return { jobs: [], count: 0 };
 
-    let query = supabase
-      .from("jobs")
-      .select(JOB_LIST_FIELDS, { count: "exact" })
+    let query = onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS, { count: "exact" }))
       .order(a.sortColumn, { ascending: a.sortAscending, nullsFirst: false })
       .range(a.from, a.from + a.size - 1);
 
@@ -308,11 +307,14 @@ export const getCachedJobDetail = unstable_cache(
   async (id: string) => {
     const supabase = getPublicSupabase();
     if (!supabase) return null;
+    // Drafts are never public (→ null → 404). Closed / expired rows ARE returned so
+    // the page can show "no longer accepting applications" instead of a 404.
     const { data } = await supabase
       .from("jobs")
       .select("*, company:companies(id, name, logo_url, about, website)")
       .eq("id", id)
-      .single();
+      .neq("status", "draft")
+      .maybeSingle();
     return data ?? null;
   },
   ["catalog:job-detail"],
@@ -324,9 +326,7 @@ export const getCachedRecentJobIds = unstable_cache(
   async (limit = 40): Promise<string[]> => {
     const supabase = getPublicSupabase();
     if (!supabase) return [];
-    const { data } = await supabase
-      .from("jobs")
-      .select("id")
+    const { data } = await onlyActiveJobs(supabase.from("jobs").select("id"))
       .order("posted_at", { ascending: false })
       .limit(limit);
     return (data ?? []).map((j) => j.id);
@@ -342,9 +342,11 @@ export const getCachedCompanyDetail = unstable_cache(
     if (!supabase) return null;
     const [{ data: company }, { data: jobs }] = await Promise.all([
       supabase.from("companies").select("id,name,logo_url,about,employee_count,rating").eq("id", id).single(),
-      supabase
-        .from("jobs")
-        .select("id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at")
+      onlyActiveJobs(
+        supabase
+          .from("jobs")
+          .select("id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at"),
+      )
         .eq("company_id", id)
         .order("posted_at", { ascending: false })
         .limit(50),

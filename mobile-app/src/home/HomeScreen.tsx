@@ -151,10 +151,7 @@ export function HomeScreen() {
         />
       </Pressable>
 
-      <CustomProjectBanner
-        onStartProject={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
-        onLearnMore={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
-      />
+      <CustomProjectBanner />
 
       <SectionHeader title="Categories" onViewAll={() => (navigation as any).navigate("AllCategories")} />
       <View className="flex-row flex-wrap justify-between mb-2">

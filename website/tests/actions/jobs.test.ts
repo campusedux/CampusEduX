@@ -32,7 +32,7 @@ describe("applyToJobAction", () => {
     setUser(USER);
     setTableResult("jobs", { data: null });
     const r = await applyToJobAction({ jobId: "ghost", newResume: { storagePath: "user-1/x.pdf", fileName: "x.pdf" } });
-    expect(r).toEqual({ error: expect.stringMatching(/no longer listed/i) });
+    expect(r).toEqual({ error: expect.stringMatching(/no longer accepting applications/i) });
   });
 
   it("rejects an uploaded file that is not in the caller's own storage folder", async () => {

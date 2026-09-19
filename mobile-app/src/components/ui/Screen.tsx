@@ -18,6 +18,8 @@ const WEB_CONTENT: object = Platform.select({
 
 interface ScreenProps extends ViewProps {
   scroll?: boolean;
+  /** Pull-to-refresh control; only applies with `scroll`. Passed through to the ScrollView. */
+  refreshControl?: React.ReactElement;
   edges?: ("top" | "bottom" | "left" | "right")[];
   /** Page ground: white (default, unchanged) or the soft lavender canvas for card-based screens. */
   background?: "white" | "canvas";

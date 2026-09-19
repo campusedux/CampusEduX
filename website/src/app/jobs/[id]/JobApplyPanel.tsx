@@ -29,7 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const ACCEPT_ATTR = [...RESUME_EXTENSIONS, ...RESUME_MIME_TYPES].join(",");
 
-export default function JobApplyPanel({ jobId }: { jobId: string }) {
+export default function JobApplyPanel({ jobId, externalApply = false }: { jobId: string; externalApply?: boolean }) {
   const [phase, setPhase] = useState<"loading" | "anon" | "ready">("loading");
   const userIdRef = useRef<string | null>(null);
 
@@ -165,9 +165,9 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
   if (phase === "anon") {
     return (
       <div className="mt-10 border-t border-line pt-6">
-        <p className="text-sm text-ink-muted">Sign in to apply for this role or save it for later.</p>
+        <p className="text-sm text-ink-muted">{externalApply ? "Sign in to save this role for later." : "Sign in to apply for this role or save it for later."}</p>
         <div className="mt-3">
-          <Button href={`/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`}>Sign in to apply</Button>
+          <Button href={`/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`}>{externalApply ? "Sign in" : "Sign in to apply"}</Button>
         </div>
       </div>
     );
@@ -193,7 +193,7 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
       {saveError && <p className="mt-2 text-sm text-danger">{saveError}</p>}
 
       <div className="mt-6">
-        {applied ? (
+        {externalApply ? null : applied ? (
           <div className="rounded-2xl border border-line bg-white p-4 shadow-card">
             <div className="font-bold text-ink">Application submitted</div>
             <p className="mt-1 text-sm text-ink-muted">

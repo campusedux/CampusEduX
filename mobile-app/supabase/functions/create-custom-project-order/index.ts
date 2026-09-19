@@ -38,7 +38,7 @@ import { json, preflight } from "../_shared/cors.ts";
 import { adminClient, getUser } from "../_shared/client.ts";
 import { enforceRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 import { createRazorpayOrder, razorpayConfigured, razorpayKeyId } from "../_shared/razorpay.ts";
-import { priceForFeature } from "../_shared/academicPricing.ts";
+import { priceFeatures, type FeatureRow } from "../_shared/customProjectPricing.ts";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -159,34 +159,29 @@ Deno.serve(async (req) => {
       console.warn("create-custom-project-order: could not read draft for AI-recommended feature ids:", e);
     }
 
-    // 3b. selected features — only those actually valid for this tier ----
-    let validFeatures: { id: string; name: string; price: number; category: string }[] = [];
-    if (featureIds.length > 0) {
-      const { data: featureRows, error: featureError } = await db
-        .from("custom_project_features")
-        .select("id, name, price, category, project_types, project_levels")
-        .in("id", featureIds)
-        .eq("is_active", true);
-      if (featureError) throw featureError;
-      validFeatures = (featureRows ?? [])
-        .filter(
-          (f: { project_types: string[]; project_levels: string[] }) =>
-            Array.isArray(f.project_types) &&
-            f.project_types.includes(projectType) &&
-            Array.isArray(f.project_levels) &&
-            f.project_levels.includes(projectLevel),
-        )
-        .map((f: { id: string; name: string; price: unknown; category: string }) => ({
-          id: f.id,
-          name: f.name,
-          // Academic Extra Features price from the same override the website
-          // estimate uses (see _shared/academicPricing.ts); Personal/Business
-          // and any AI-recommended-as-necessary feature keep the catalog price.
-          price: priceForFeature({ id: f.id, price: Number(f.price) || 0 }, projectType, aiRecommendedFeatureIds.includes(f.id)),
-          category: f.category ?? "",
-        }));
-    }
-    const featureTotal = round2(validFeatures.reduce((s, f) => s + f.price, 0));
+    // 3b. features — the ones selected PLUS every feature included for this
+    // type:level. Included features are never charged (see
+    // _shared/customProjectPricing.ts); they are snapshotted at price 0 so the
+    // admin panel shows the full list of what the customer gets.
+    const tierKey = `${projectType}:${projectLevel}`;
+    const featureSelect = "id, name, price, category, project_types, project_levels, included_in_levels";
+    const [selectedRes, includedRes] = await Promise.all([
+      featureIds.length > 0
+        ? db.from("custom_project_features").select(featureSelect).in("id", featureIds).eq("is_active", true)
+        : Promise.resolve({ data: [] as FeatureRow[], error: null }),
+      db.from("custom_project_features").select(featureSelect).contains("included_in_levels", [tierKey]).eq("is_active", true),
+    ]);
+    if (selectedRes.error) throw selectedRes.error;
+    if (includedRes.error) throw includedRes.error;
+    const rowsById = new Map<string, FeatureRow>();
+    for (const f of [...(selectedRes.data ?? []), ...(includedRes.data ?? [])] as FeatureRow[]) rowsById.set(f.id, f);
+    const { features: snapshotFeatures, featureTotal } = priceFeatures(
+      [...rowsById.values()],
+      featureIds,
+      projectType,
+      projectLevel,
+      aiRecommendedFeatureIds,
+    );
 
     // 4. trusted token amount (§14) -----------------------------------
     const tokenAmount = TOKEN_BY_TYPE[projectType];
@@ -228,14 +223,15 @@ Deno.serve(async (req) => {
       .single();
     if (insertError) throw insertError;
 
-    if (validFeatures.length > 0) {
+    if (snapshotFeatures.length > 0) {
       const { error: featError } = await db.from("custom_project_request_features").insert(
-        validFeatures.map((f) => ({
+        snapshotFeatures.map((f) => ({
           request_id: request.id,
           feature_id: f.id,
           feature_name: f.name,
           feature_price: f.price,
           category: f.category,
+          is_included: f.isIncluded,
         })),
       );
       if (featError) throw featError;
