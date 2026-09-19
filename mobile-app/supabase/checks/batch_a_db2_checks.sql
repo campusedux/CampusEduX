@@ -15,6 +15,14 @@ fn as (
     to_regprocedure('public._practice_problem_run_cases_impl(text)') as ppi,
     to_regprocedure('public.admin_dsa_problem_secrets(text[])')     as adm,
     to_regprocedure('public._check_app_secret(text,text)')          as chk,
+    to_regprocedure('public.regrant_dsa_problems_client_columns()') as regrant,
+    to_regprocedure('public.record_coding_submission(text,text,text,text,text,text,integer,integer,integer,integer)') as rec,
+    to_regprocedure('public._can_view_solution(text)')              as cvs,
+    to_regprocedure('public.coding_problem_detail(text,text)')      as cpd,
+    to_regprocedure('public.practice_problem_detail(text,text)')    as ppd,
+    to_regprocedure('public.prep_notes_public_list(text,integer,integer)') as pnl,
+    to_regprocedure('public.prep_note_get(uuid)')                   as png,
+    to_regprocedure('public.my_wishlist()')                         as mwl,
     to_regprocedure('public.referral_leaderboard(text)')            as lb,
     to_regprocedure('public.rl_hit(text,integer,integer)')          as rl,
     to_regprocedure('public.ai_budget_take(text,integer)')          as ai,
@@ -59,11 +67,29 @@ checks(item, chk, ok, detail) as (
          has_column_privilege('anon', 'public.dsa_problems', 'id', 'select')
          and has_column_privilege('anon', 'public.dsa_problems', 'slug', 'select')
          and has_column_privilege('authenticated', 'public.dsa_problems', 'examples', 'select'), null
-  union all select 'DB-05', 'dsa_problems has no column readable by anon that is missing a grant (new columns)',
-         not exists (select 1 from pg_attribute a where a.attrelid='public.dsa_problems'::regclass and a.attnum>0
-                        and not a.attisdropped and a.attname not in ('test_cases','solution_code')
-                        and not has_column_privilege('anon','public.dsa_problems',a.attname,'select')),
-         'if FAIL: a column was added after 0120; re-run the grant block of 0120'
+  union all select 'DB-05', 'dsa_problems: every non-secret column selectable by anon AND authenticated (grant coverage)',
+         not exists (select 1 from pg_attribute a cross join (values ('anon'),('authenticated')) r(role_name)
+                      where a.attrelid='public.dsa_problems'::regclass and a.attnum>0 and not a.attisdropped
+                        and a.attname not in ('test_cases','solution_code')
+                        and not has_column_privilege(r.role_name,'public.dsa_problems',a.attname,'select')),
+         'if FAIL: a column was added after 0120; run  select public.regrant_dsa_problems_client_columns();'
+  union all select 'DB-05', 'regrant_dsa_problems_client_columns() exists and is not executable by anon/authenticated',
+         (select regrant from fn) is not null
+         and not has_function_privilege('anon', (select regrant from fn), 'execute')
+         and not has_function_privilege('authenticated', (select regrant from fn), 'execute'), null
+  union all select 'DB-05b', 'problem_detail RPCs gate solution_code on submission (_can_view_solution) and expose solution_locked',
+         (select cpd from fn) is not null and (select ppd from fn) is not null and (select cvs from fn) is not null
+         and pg_get_functiondef((select cpd from fn)) like '%_can_view_solution%' and pg_get_functiondef((select cpd from fn)) like '%solution_locked%'
+         and pg_get_functiondef((select ppd from fn)) like '%_can_view_solution%' and pg_get_functiondef((select ppd from fn)) like '%solution_locked%'
+         and not has_function_privilege('anon', (select cvs from fn), 'execute')
+         and not has_function_privilege('authenticated', (select cvs from fn), 'execute'), null
+  union all select 'DB-05b', 'coding_submissions: no client INSERT policy/privilege; record_coding_submission is authenticated-only',
+         not exists (select 1 from pg_policies where schemaname='public' and tablename='coding_submissions' and cmd in ('INSERT','ALL') and 'authenticated' = any (roles::text[])
+                       and policyname not like '%admin%')
+         and not has_table_privilege('authenticated', 'public.coding_submissions', 'insert')
+         and (select rec from fn) is not null
+         and has_function_privilege('authenticated', (select rec from fn), 'execute')
+         and not has_function_privilege('anon', (select rec from fn), 'execute'), null
   union all select 'DB-05', 'admin_dsa_problem_secrets exists; anon cannot execute; authenticated can',
          (select adm from fn) is not null
          and not has_function_privilege('anon', (select adm from fn), 'execute')
@@ -80,6 +106,11 @@ checks(item, chk, ok, detail) as (
          exists (select 1 from pg_policies where schemaname='public' and tablename='prep_notes'
                    and policyname='prep_notes_select_published' and qual like '%is_premium%'
                    and qual like '%current_user_is_premium%'), null
+  union all select 'DB-11', 'prep_notes locked-list RPCs exist (anon + authenticated may call)',
+         (select pnl from fn) is not null and (select png from fn) is not null
+         and has_function_privilege('anon', (select pnl from fn), 'execute')
+         and has_function_privilege('anon', (select png from fn), 'execute')
+         and pg_get_functiondef((select pnl from fn)) like '%locked%', null
   -- ---------------- DB-13
   union all select 'DB-13', 'jobs: no select policy is USING (true); old policies gone',
          not exists (select 1 from pg_policies where schemaname='public' and tablename='jobs' and cmd='SELECT' and qual='true')
@@ -90,12 +121,17 @@ checks(item, chk, ok, detail) as (
   union all select 'DB-13', 'projects: no select policy is USING (true); old policies gone',
          not exists (select 1 from pg_policies where schemaname='public' and tablename='projects' and cmd='SELECT' and qual='true')
          and not exists (select 1 from pg_policies where schemaname='public' and tablename='projects' and policyname in ('projects_select_public','projects_select_anon')), null
-  union all select 'DB-13', 'projects: visible-* policies check published; authenticated keeps purchased/wishlisted',
+  union all select 'DB-13', 'projects: visible-* policies check published; authenticated keeps purchased but NOT wishlisted (no draft leak)',
          exists (select 1 from pg_policies where schemaname='public' and tablename='projects' and policyname='projects_select_visible_anon' and qual like '%published%')
          and exists (select 1 from pg_policies where schemaname='public' and tablename='projects' and policyname='projects_select_visible_authenticated'
-                       and qual like '%purchases%' and qual like '%wishlists%'), null
-  union all select 'DB-13', 'admin_all policies still present on jobs and projects',
-         (select count(*) from pg_policies where schemaname='public' and tablename in ('jobs','projects') and policyname in ('jobs_admin_all','projects_admin_all')) = 2, null
+                       and qual like '%purchases%' and qual not like '%wishlists%'), null
+  union all select 'DB-13', 'my_wishlist() exists; authenticated only',
+         (select mwl from fn) is not null
+         and has_function_privilege('authenticated', (select mwl from fn), 'execute')
+         and not has_function_privilege('anon', (select mwl from fn), 'execute'), null
+  union all select 'DB-13', 'admin can still see every jobs/projects row (admin_all, or 0119 split admin_select)',
+         (select count(*) from pg_policies where schemaname='public' and tablename in ('jobs','projects')
+            and policyname in ('jobs_admin_all','projects_admin_all','jobs_admin_select','projects_admin_select')) >= 2, null
   -- ---------------- DB-17
   union all select 'DB-17', 'resume_shares insert/update policies require owning the resume',
          (select count(*) from pg_policies where schemaname='public' and tablename='resume_shares'

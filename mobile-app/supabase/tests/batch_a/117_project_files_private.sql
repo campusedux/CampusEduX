@@ -14,7 +14,13 @@ begin
   -- bucket flags
   if (select public from storage.buckets where id='project-files') then raise exception 'project-files is public'; end if;
   select file_size_limit into n from storage.buckets where id='resumes';
-  if n is distinct from 10*1024*1024 then raise exception 'resumes size limit %', n; end if;
+  if n is distinct from 5*1024*1024 then raise exception 'resumes size limit %', n; end if;
+  select file_size_limit into n from storage.buckets where id='avatars';
+  if n is distinct from 2*1024*1024 then raise exception 'avatars size limit %', n; end if;
+  if (select allowed_mime_types from storage.buckets where id='avatars') is distinct from array['image/jpeg','image/png','image/webp'] then raise exception 'avatars mimes'; end if;
+  if (select allowed_mime_types from storage.buckets where id='resumes') is distinct from array['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'] then raise exception 'resumes mimes'; end if;
+  if 'application/octet-stream' = any (select unnest(allowed_mime_types) from storage.buckets where id in ('avatars','resumes','custom-project-uploads')) then raise exception 'octet-stream allowed'; end if;
+  if not ((select allowed_mime_types from storage.buckets where id='custom-project-uploads') @> array['application/zip']) then raise exception 'cp mimes'; end if;
   select file_size_limit into n from storage.buckets where id='custom-project-uploads';
   if n is distinct from 15*1024*1024 then raise exception 'cp-uploads size limit %', n; end if;
 

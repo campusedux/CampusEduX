@@ -12,7 +12,7 @@
 -- Limits / hour: per identity 4 (30 when no identity is derivable); per header-IP
 -- 40 (the website server's own egress IP is the header IP for proxied calls, so this
 -- is deliberately generous); global 300.
--- Rollback: re-run 0001_contact_submissions.sql (restores the old function body).
+-- Rollback: re-run 0001_contact_submissions.sql (restores the old function body). The contact_submissions_update_admin policy rollback: recreate it with using/with check (is_admin(auth.uid())).
 -- ============================================================================
 
 create extension if not exists pgcrypto;
@@ -125,5 +125,20 @@ $$;
 
 revoke all on function public.submit_contact_message(text, text, text, text) from public;
 grant execute on function public.submit_contact_message(text, text, text, text) to anon, authenticated;
+
+-- DB-07 (admin permission enforcement): contact status updates need cms:edit, not just
+-- "any active admin". Applied only when has_permission() exists (mobile 0119 / admin 091),
+-- so this file stays independently re-runnable; re-run it after 0119 if applied earlier.
+do $$
+begin
+  if to_regclass('public.contact_submissions') is not null
+     and to_regprocedure('public.has_permission(uuid,text,text)') is not null then
+    drop policy if exists "contact_submissions_update_admin" on public.contact_submissions;
+    create policy "contact_submissions_update_admin" on public.contact_submissions
+      for update
+      using ((select public.has_permission(auth.uid(), 'cms', 'edit')))
+      with check ((select public.has_permission(auth.uid(), 'cms', 'edit')));
+  end if;
+end $$;
 
 notify pgrst, 'reload schema';

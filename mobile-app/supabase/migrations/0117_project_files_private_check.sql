@@ -6,7 +6,7 @@
 -- DB-22  `project-files` must be PRIVATE with purchaser-only read, independent of
 --        whether 0100/072 was applied. Also storage hygiene (DB-22 follow-ups).
 -- ============================================================================
--- Audit ids: DB-22 (+ storage hardening notes for avatars / resumes / custom-project-uploads).
+-- Audit ids: DB-22 (+ storage hardening for avatars / resumes / custom-project-uploads: limits + MIME allow-lists).
 --
 -- Chain analysis: A:003 created the bucket PUBLIC; only M:0100 / A:072 flips it private and
 -- adds `project_files_purchaser_read`. In the local chain (0100 present) the final state is
@@ -19,12 +19,20 @@
 --      re-asserted here if missing.
 --   4. project_files / project_versions table SELECT policies re-asserted purchaser-or-admin only
 --      (same as 0100; they were `using (true)` before it).
---   5. file_size_limit for `resumes` (10 MB = website RESUME_MAX_BYTES; mobile enforces 5 MB) and
---      `custom-project-uploads` (15 MB = CP_MAX_FILE_MB in web + mobile) - only when currently
---      unset, so an owner-chosen value is never overwritten. allowed_mime_types are NOT set:
---      the web uploader falls back to application/octet-stream and mobile passes whatever the
---      picker reports, so an allow-list could reject real uploads (owner decision).
---      `avatars` limits NOT set (mobile uploads the raw picked image; no enforced size) - owner decision.
+--   5. Bucket limits + MIME allow-lists (owner decision, set UNCONDITIONALLY so all environments end up
+--      identical; a re-run just re-asserts the same values). Each bucket has ONE update statement in
+--      the exact shape below - the app test suites (website tests/lib/uploadLimits.test.ts, mobile
+--      tests/unit/lib/uploadLimits.test.ts) read these numbers/arrays by regexp and fail if the
+--      client constants diverge, so keep the shape when editing:
+--        avatars                 2 MB   image/jpeg, image/png, image/webp
+--        resumes                 5 MB   application/pdf, application/msword, application/vnd...wordprocessingml.document
+--        custom-project-uploads 15 MB   png/jpeg/webp, pdf, doc, docx, zip (+ x-zip-compressed, Windows browsers)
+--      Storage validates the type of the uploaded BODY (multipart part type for Blob/File, the
+--      Content-Type header for ArrayBuffer), NOT the `contentType` upload option when a Blob/File is
+--      passed. Hence `application/octet-stream` is deliberately NOT allowed anywhere: the clients now
+--      derive the type from the file extension (website src/lib/uploads.ts, mobile src/lib/uploadMime.ts)
+--      and send an ArrayBuffer / re-typed Blob, so a real upload never carries octet-stream.
+--      Existing objects are untouched (limits apply to new uploads only).
 --   6. avatars: the blanket `avatars_public_read` SELECT policy (which allowed LISTING every
 --      user's avatar folder through the Storage API) is replaced by an owner-only SELECT policy.
 --      Public-bucket object URLs (/storage/v1/object/public/avatars/...) do not consult RLS, so
@@ -91,11 +99,16 @@ begin
       )
     );
 
-  -- 5. size limits (only when unset)
-  update storage.buckets set file_size_limit = 10 * 1024 * 1024
-   where id = 'resumes' and file_size_limit is null;
-  update storage.buckets set file_size_limit = 15 * 1024 * 1024
-   where id = 'custom-project-uploads' and file_size_limit is null;
+  -- 5. size limits + MIME allow-lists (see header; keep one statement per bucket, this exact shape)
+  update storage.buckets set file_size_limit = 2 * 1024 * 1024,
+    allowed_mime_types = array['image/jpeg','image/png','image/webp']
+   where id = 'avatars';
+  update storage.buckets set file_size_limit = 5 * 1024 * 1024,
+    allowed_mime_types = array['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+   where id = 'resumes';
+  update storage.buckets set file_size_limit = 15 * 1024 * 1024,
+    allowed_mime_types = array['image/png','image/jpeg','image/webp','application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/zip','application/x-zip-compressed']
+   where id = 'custom-project-uploads';
 
   -- 6. avatars: no listing for everybody; owner-only SELECT (public URLs unaffected)
   drop policy if exists "avatars_public_read" on storage.objects;
@@ -132,6 +145,6 @@ end $$;
 -- ROLLBACK (manual; only if a legitimate flow breaks - NOT recommended to re-publicise project-files):
 --   drop policy if exists "avatars_owner_read" on storage.objects;
 --   create policy "avatars_public_read" on storage.objects for select using (bucket_id = 'avatars');
---   update storage.buckets set file_size_limit = null where id in ('resumes','custom-project-uploads');
+--   update storage.buckets set file_size_limit = null, allowed_mime_types = null where id in ('avatars','resumes','custom-project-uploads');
 --   -- project-files stays private (do not revert; that re-opens paid source code).
 -- ----------------------------------------------------------------------------

@@ -70,5 +70,35 @@ begin
   perform test_as(admin_id);
   if (select count(*) from prep_notes) <> 3 then raise exception 'FAIL admin notes'; end if;
   perform test_reset();
+  -- 7a: locked listing via RPC: everybody sees premium notes as locked entries, never their content
+  update prep_notes set content = 'FREE-BODY', file_url = 'http://f/free' where title='pub-free';
+  update prep_notes set content = 'PREMIUM-BODY', file_url = 'http://f/prem' where title='pub-prem';
+  perform test_as(null,'anon');
+  if (select count(*) from prep_notes_public_list()) <> 2 then raise exception 'FAIL anon list %', (select count(*) from prep_notes_public_list()); end if;
+  if not exists (select 1 from prep_notes_public_list() where title='pub-prem' and locked and is_premium) then raise exception 'FAIL anon prem not locked'; end if;
+  if exists (select 1 from prep_notes_public_list() where title='pub-free' and locked) then raise exception 'FAIL free locked'; end if;
+  if exists (select 1 from prep_notes_public_list() where title='draft') then raise exception 'FAIL draft listed'; end if;
+  r := prep_note_get((select id from prep_notes_public_list() where title='pub-prem'));
+  if r->>'locked' <> 'true' or r->'content' <> 'null'::jsonb or r->'file_url' <> 'null'::jsonb or r::text like '%PREMIUM-BODY%' then raise exception 'FAIL anon get prem %', r; end if;
+  if prep_note_get((select id from prep_notes_public_list() where title='pub-free'))->>'content' <> 'FREE-BODY' then raise exception 'FAIL anon free content'; end if;
+  perform test_reset();
+  perform test_as(free_u);
+  if (select count(*) from prep_notes_public_list('General Placement', 10, 0)) <> 2 then raise exception 'FAIL free list'; end if;
+  r := prep_note_get((select id from prep_notes_public_list() where title='pub-prem'));
+  if (r->>'locked')::boolean is not true or r::text like '%PREMIUM-BODY%' then raise exception 'FAIL free get prem %', r; end if;
+  perform test_reset();
+  perform test_as(prem_u);
+  if exists (select 1 from prep_notes_public_list() where locked) then raise exception 'FAIL prem still locked'; end if;
+  r := prep_note_get((select id from prep_notes_public_list() where title='pub-prem'));
+  if r->>'content' <> 'PREMIUM-BODY' or (r->>'locked')::boolean then raise exception 'FAIL prem get %', r; end if;
+  perform test_reset();
+  perform test_as(admin_id);
+  if exists (select 1 from prep_notes_public_list() where locked) then raise exception 'FAIL admin locked'; end if;
+  if prep_note_get((select id from prep_notes where title='draft')) is not null then raise exception 'FAIL draft via get'; end if;
+  perform test_reset();
+  -- table itself still never returns a premium row's content to a free user
+  perform test_as(free_u);
+  if exists (select 1 from prep_notes where content = 'PREMIUM-BODY') then raise exception 'FAIL table leaks premium content'; end if;
+  perform test_reset();
   raise notice 'DB-10/11 OK';
 end $$;

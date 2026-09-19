@@ -90,6 +90,18 @@ select * from (
   union all select 20, 'DB-27 invoker functions without search_path', '0', (select invoker_no_sp::text from adm), case when (select invoker_no_sp from adm)=0 then 'PASS' else 'FAIL' end
   union all select 21, 'DB-28 admin RPCs executable by anon', '0', (select anon_admin_rpcs::text from adm), case when (select anon_admin_rpcs from adm)=0 then 'PASS' else 'FAIL' end
   union all select 22, 'DB-28 trigger functions executable by anon', '0', (select anon_trigger_fns::text from adm), case when (select anon_trigger_fns from adm)=0 then 'PASS' else 'FAIL' end
+  union all select 23, 'DB-22 avatars bucket: 2 MB + jpeg/png/webp only', '2097152 + 3 types',
+         (select coalesce(file_size_limit::text,'-') || ' / ' || coalesce(array_to_string(allowed_mime_types,'|'),'-') from storage.buckets where id='avatars'),
+         case when (select file_size_limit = 2*1024*1024 and allowed_mime_types @> array['image/jpeg','image/png','image/webp'] and cardinality(allowed_mime_types) = 3 from storage.buckets where id='avatars') then 'PASS' else 'FAIL' end
+  union all select 24, 'DB-22 resumes bucket: 5 MB + pdf/doc/docx only', '5242880 + 3 types',
+         (select coalesce(file_size_limit::text,'-') || ' / ' || coalesce(array_to_string(allowed_mime_types,'|'),'-') from storage.buckets where id='resumes'),
+         case when (select file_size_limit = 5*1024*1024 and allowed_mime_types @> array['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'] and cardinality(allowed_mime_types) = 3 from storage.buckets where id='resumes') then 'PASS' else 'FAIL' end
+  union all select 25, 'DB-22 custom-project-uploads bucket: 15 MB + images/pdf/doc/docx/zip', '15728640',
+         (select coalesce(file_size_limit::text,'-') || ' / ' || coalesce(array_to_string(allowed_mime_types,'|'),'-') from storage.buckets where id='custom-project-uploads'),
+         case when (select file_size_limit = 15*1024*1024 and allowed_mime_types @> array['image/png','image/jpeg','image/webp','application/pdf','application/zip'] from storage.buckets where id='custom-project-uploads') then 'PASS' else 'FAIL' end
+  union all select 26, 'DB-22 no upload bucket allows application/octet-stream', 'false',
+         (select coalesce(bool_or('application/octet-stream' = any (allowed_mime_types)), false)::text from storage.buckets where id in ('avatars','resumes','custom-project-uploads')),
+         case when not (select coalesce(bool_or('application/octet-stream' = any (allowed_mime_types)), false) from storage.buckets where id in ('avatars','resumes','custom-project-uploads')) then 'PASS' else 'FAIL' end
   -- INFO rows: current state
   union all select 30, 'INFO bucket flags (id=public/size_limit/mime)', '',
          (select string_agg(id || '=' || coalesce(public::text,'null') || '/' || coalesce(file_size_limit::text,'-') || '/' || coalesce(array_to_string(allowed_mime_types, '|'),'-'), '; ' order by id) from storage.buckets), 'INFO'
