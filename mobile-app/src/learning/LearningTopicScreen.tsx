@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { View, Text, Pressable, ScrollView, Linking } from "react-native";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -13,6 +13,8 @@ import {
   useTopicPractice,
 } from "@/hooks/useLearning";
 import { useAuthStore } from "@/store/authStore";
+import { useProgressActions } from "@/learning/progress/progressStore";
+import { useReadingActivity } from "@/hooks/useReadingActivity";
 import type { PlacementStackParamList, TopicMockTestCard, TopicCodingProblemCard } from "@/types";
 
 type Nav = NativeStackNavigationProp<PlacementStackParamList, "LearningTopic">;
@@ -27,6 +29,23 @@ export function LearningTopicScreen() {
   const { data: bookmarks } = useLearningBookmarks();
   const toggleBookmark = useToggleLearningBookmark();
   const { data: practice } = useTopicPractice(params.gridSlug, params.topicSlug);
+
+  // Feeds the Learning Home "Continue Learning" card + the daily-streak rule
+  // (≥ 60 s on a readable topic). Locked (premium-gated) topics aren't recorded.
+  const { markOpened } = useProgressActions();
+  const readable = !!data && !data.locked;
+  useEffect(() => {
+    if (!data || data.locked) return;
+    markOpened({
+      gridSlug: params.gridSlug,
+      gridName: data.grid.name,
+      topicSlug: params.topicSlug,
+      topicTitle: data.topic.title,
+      sectionName: data.section.name,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.topic.id, data?.locked, params.gridSlug, params.topicSlug]);
+  useReadingActivity(data?.topic.id, readable);
 
   const openUrl = (url: string) => Linking.openURL(url).catch(() => notify("Couldn't open link"));
 

@@ -6,6 +6,7 @@ import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState } from "@/components/ui";
 import { useReferralSummary } from "@/hooks/useHomeData";
+import { referralAmountText } from "@/lib/referralAmount";
 
 /**
  * Same referral data as Home's "Invite & Earn" screen (Module 2) — a
@@ -88,13 +89,13 @@ export function ReferralScreen() {
             <View className="w-6 h-6 rounded-full bg-primary items-center justify-center mr-3 mt-0.5">
               <Text className="text-white text-xs font-bold">1</Text>
             </View>
-            <Text className="text-gray-600 text-sm flex-1">Friend signs up using your link — you get ₹{data.referrerBonus}</Text>
+            <Text className="text-gray-600 text-sm flex-1">Friend signs up using your link{data.rewardOnSignup && referralAmountText(data) ? ` — you get ${referralAmountText(data)}` : ""}</Text>
           </View>
           <View className="mb-6 flex-row items-start">
             <View className="w-6 h-6 rounded-full bg-primary items-center justify-center mr-3 mt-0.5">
               <Text className="text-white text-xs font-bold">2</Text>
             </View>
-            <Text className="text-gray-600 text-sm flex-1">Friend makes a purchase — you get up to {data.refereeDiscountPercent}% of the amount</Text>
+            <Text className="text-gray-600 text-sm flex-1">Friend makes their first purchase{data.rewardOnFirstPurchase && referralAmountText(data) ? ` — you get ${referralAmountText(data)}` : ""}</Text>
           </View>
 
           <Pressable

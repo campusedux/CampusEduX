@@ -30,7 +30,7 @@ describe("referralService.getOverview", () => {
     const overview = await referralService.getOverview("u-1");
 
     expect(overview.code).toBe("FRESH42");
-    expect(overview.shareLink).toBe("https://campusedux.app/ref/FRESH42");
+    expect(overview.shareLink).toBe("https://www.campusedux.com/register?ref=FRESH42");
     expect(overview.totalReferrals).toBe(0);
     expect(overview.totalEarned).toBe(0);
     expect(overview.successfulReferrals).toBe(0);

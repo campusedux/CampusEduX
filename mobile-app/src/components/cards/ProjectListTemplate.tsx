@@ -1,8 +1,9 @@
 import React from "react";
-import { View, Text, Pressable, FlatList } from "react-native";
+import { View, Text, FlatList } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, LoadingState, ErrorState, EmptyState } from "@/components/ui";
+import { Screen, ScreenHeader, Card, SkeletonList, ErrorState, EmptyState } from "@/components/ui";
+import type { AccentName } from "@/constants/theme";
 import { ProjectCard } from "./ProjectCard";
 import type { Project } from "@/types";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -11,8 +12,8 @@ interface ListBanner {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  /** Background color; defaults to the brand purple. */
-  color?: string;
+  /** Gradient accent of the hero banner; defaults to indigo (brand). */
+  accent?: AccentName;
 }
 
 interface ProjectListTemplateProps {
@@ -35,48 +36,47 @@ interface ProjectListTemplateProps {
 export function ProjectListTemplate({ title, query, emptyLabel, banner, ranked, itemTag }: ProjectListTemplateProps) {
   const navigation = useNavigation();
   const { data, isLoading, isError, refetch } = query;
+  const accent = banner?.accent ?? "indigo";
+  const count = data?.length ?? 0;
 
   return (
     <Screen className="px-6">
-      <View className="flex-row items-center justify-between mt-2 mb-4">
-        <View className="flex-row items-center">
-          <Pressable onPress={() => navigation.goBack()} className="mr-3">
-            <Ionicons name="arrow-back" size={22} color="#111827" />
-          </Pressable>
-          <Text className="text-lg font-bold text-gray-900">{title}</Text>
-        </View>
-        <Pressable>
-          <Text className="text-primary text-sm font-medium">View All</Text>
-        </Pressable>
-      </View>
+      <ScreenHeader
+        title={title}
+        subtitle={count > 0 ? `${count} project${count === 1 ? "" : "s"}` : undefined}
+        onBack={() => navigation.goBack()}
+      />
 
       {isLoading ? (
-        <LoadingState label={`Loading ${title.toLowerCase()}...`} />
+        <SkeletonList count={4} hero={!!banner} />
       ) : isError ? (
         <ErrorState message={`Couldn't load ${title.toLowerCase()}.`} onRetry={refetch} />
       ) : !data || data.length === 0 ? (
-        <EmptyState title={emptyLabel} />
+        <EmptyState icon={banner?.icon ?? "cube-outline"} accent={accent} title={emptyLabel} />
       ) : (
         <FlatList
           data={data}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
           ListHeaderComponent={
             banner ? (
-              <View
-                className="flex-row items-center rounded-2xl p-4 mb-4"
-                style={{ backgroundColor: banner.color ?? "#4F39F6" }}
-              >
-                <View className="flex-1 pr-3">
-                  <Text className="text-white font-bold text-base mb-1">{banner.title}</Text>
-                  <Text className="text-white/80 text-xs">{banner.subtitle}</Text>
-                </View>
-                <View
-                  className="w-12 h-12 rounded-full items-center justify-center"
-                  style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
-                >
-                  <Ionicons name={banner.icon} size={24} color="#FFFFFF" />
-                </View>
+              <View style={{ marginBottom: 16 }}>
+                <Card variant="gradient" accent={accent} padding={18}>
+                  <View className="flex-row items-center">
+                    <View className="flex-1 pr-3">
+                      <Text className="text-white font-bold text-lg mb-1" numberOfLines={2}>
+                        {banner.title}
+                      </Text>
+                      <Text className="text-white/90 text-sm" numberOfLines={3}>
+                        {banner.subtitle}
+                      </Text>
+                    </View>
+                    <View className="w-14 h-14 rounded-2xl items-center justify-center" style={{ backgroundColor: "rgba(255,255,255,0.2)" }}>
+                      <Ionicons name={banner.icon} size={28} color="#FFFFFF" />
+                    </View>
+                  </View>
+                </Card>
               </View>
             ) : null
           }

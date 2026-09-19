@@ -19,13 +19,16 @@ describe("projectService.getProjectDetail", () => {
     expect(detail.isWishlisted).toBe(true);
   });
 
-  it("falls back to sample content when the project is missing", async () => {
+  it("throws when the project is missing — no sample detail, even in __DEV__", async () => {
     setTableResult("projects", { data: [] });
 
-    const detail = await projectService.getProjectDetail("does-not-exist");
+    await expect(projectService.getProjectDetail("does-not-exist")).rejects.toThrow("Project not found.");
+  });
 
-    expect(detail.id).toBe("does-not-exist");
-    expect(detail.description.length).toBeGreaterThan(0);
+  it("throws on a query error — no sample detail, even in __DEV__", async () => {
+    setTableResult("projects", { error: { message: "boom" } });
+
+    await expect(projectService.getProjectDetail("tr-1")).rejects.toThrow();
   });
 });
 

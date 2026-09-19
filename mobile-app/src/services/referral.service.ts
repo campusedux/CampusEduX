@@ -17,8 +17,9 @@ import {
 } from "@/data/sampleReferralContent";
 
 /**
- * Used only when reward_settings can't be read (table not migrated / offline).
- * Mirrors the column defaults in admin 007_commerce_admin.sql.
+ * __DEV__-only stand-in when reward_settings can't be read (table not migrated
+ * / offline). Production never uses it: `getRewardRule` returns null and the
+ * screens hide every amount. Mirrors the column defaults in admin 007.
  */
 export const DEFAULT_REWARD_RULE: ReferralRewardRule = {
   bonusType: "flat",
@@ -28,11 +29,15 @@ export const DEFAULT_REWARD_RULE: ReferralRewardRule = {
   rewardOnFirstPurchase: true,
 };
 
-function mapRewardRule(row: any): ReferralRewardRule {
+/** null when the row has no usable bonus_value — never a substituted default amount. */
+function mapRewardRule(row: any): ReferralRewardRule | null {
+  const bonusValue = row?.bonus_value == null ? NaN : Number(row.bonus_value);
+  if (!Number.isFinite(bonusValue)) return null;
+  const maxPayout = Number(row?.max_payout ?? 0);
   return {
     bonusType: row?.bonus_type === "percent" ? "percent" : "flat",
-    bonusValue: Number(row?.bonus_value ?? DEFAULT_REWARD_RULE.bonusValue),
-    maxPayout: Number(row?.max_payout ?? DEFAULT_REWARD_RULE.maxPayout),
+    bonusValue,
+    maxPayout: Number.isFinite(maxPayout) ? maxPayout : 0,
     rewardOnSignup: !!row?.reward_on_signup,
     rewardOnFirstPurchase: row?.reward_on_first_purchase ?? true,
   };
@@ -58,7 +63,8 @@ export function describeRewardRule(rule: ReferralRewardRule): string {
 }
 
 /** Best-effort ₹ still owed once the given pending referrals convert. */
-function estimatePendingRewards(pendingCount: number, rule: ReferralRewardRule): number {
+function estimatePendingRewards(pendingCount: number, rule: ReferralRewardRule | null): number | null {
+  if (!rule) return null; // rule unknown → no estimate
   if (pendingCount <= 0 || !rule.rewardOnFirstPurchase) return 0;
   // Percentage rewards depend on a future order value we can't know yet.
   return rule.bonusType === "flat" ? pendingCount * rule.bonusValue : 0;
@@ -84,8 +90,13 @@ function periodStartDate(period: LeaderboardPeriod): string | null {
 }
 
 export const referralService = {
-  /** The admin-configured referral reward rule (falls back to defaults). */
-  async getRewardRule(): Promise<ReferralRewardRule> {
+  /**
+   * The admin-configured referral reward rule, or null when reward_settings
+   * can't be read (error, no row, unusable value). In production null means
+   * "unknown": callers hide every ₹ amount and estimate. DEFAULT_REWARD_RULE is
+   * a __DEV__-only stand-in.
+   */
+  async getRewardRule(): Promise<ReferralRewardRule | null> {
     try {
       const { data, error } = await supabase
         .from("reward_settings")
@@ -93,10 +104,16 @@ export const referralService = {
         .eq("id", 1)
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return data ? mapRewardRule(data) : DEFAULT_REWARD_RULE;
+      const rule = data ? mapRewardRule(data) : null;
+      if (rule) return rule;
+      throw new Error("reward_settings has no usable row");
     } catch (error) {
-      console.info(`[referral.service] getRewardRule: using defaults (${(error as Error).message})`);
-      return DEFAULT_REWARD_RULE;
+      if (__DEV__) {
+        console.info(`[referral.service] getRewardRule: using default rule in dev (${(error as Error).message})`);
+        return DEFAULT_REWARD_RULE;
+      }
+      console.info(`[referral.service] getRewardRule: rule unavailable, hiding amounts (${(error as Error).message})`);
+      return null;
     }
   },
 
@@ -129,7 +146,7 @@ export const referralService = {
       const code = codeRow?.code ?? "";
       return {
         code,
-        shareLink: code ? `${BRAND.referralBaseUrl}/${code}` : "",
+        shareLink: code ? `${BRAND.referralBaseUrl}${code}` : "",
         totalReferrals: codeRow?.total_referrals ?? 0,
         totalEarned: codeRow?.total_earned ?? 0,
         successfulReferrals: counts.successful,
@@ -139,8 +156,11 @@ export const referralService = {
         rewardRule,
       };
     } catch (error) {
-      console.info(`[referral.service] getOverview: using sample content (${(error as Error).message})`);
-      return SAMPLE_REFERRAL_OVERVIEW;
+      if (__DEV__) {
+        console.info(`[referral.service] getOverview: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_REFERRAL_OVERVIEW;
+      }
+      throw error;
     }
   },
 
@@ -158,16 +178,19 @@ export const referralService = {
       // an empty history is real for a student who has not referred anyone yet.
       return (data ?? []).map(mapReferralRow);
     } catch (error) {
-      console.info(`[referral.service] getReferralHistory: using sample content (${(error as Error).message})`);
-      return filter === "all"
-        ? SAMPLE_REFERRAL_HISTORY
-        : SAMPLE_REFERRAL_HISTORY.filter((e) => e.status === filter);
+      if (__DEV__) {
+        console.info(`[referral.service] getReferralHistory: using sample content in dev (${(error as Error).message})`);
+        return filter === "all"
+          ? SAMPLE_REFERRAL_HISTORY
+          : SAMPLE_REFERRAL_HISTORY.filter((e) => e.status === filter);
+      }
+      throw error;
     }
   },
 
   async getEarningsSummary(userId: string): Promise<EarningsSummary> {
     let data: any[] | null = null;
-    let rewardRule: ReferralRewardRule = DEFAULT_REWARD_RULE;
+    let rewardRule: ReferralRewardRule | null = null;
     try {
       const [res, rule] = await Promise.all([
         supabase
@@ -182,8 +205,11 @@ export const referralService = {
       rewardRule = rule;
       // empty is real for a new student — the reductions below yield all-zeros.
     } catch (error) {
-      console.info(`[referral.service] getEarningsSummary: using sample content (${(error as Error).message})`);
-      return SAMPLE_EARNINGS_SUMMARY;
+      if (__DEV__) {
+        console.info(`[referral.service] getEarningsSummary: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_EARNINGS_SUMMARY;
+      }
+      throw error;
     }
 
     const entries = (data ?? []).map(mapReferralRow);
@@ -231,14 +257,20 @@ export const referralService = {
       const res = await query;
       if (res.error) throw new Error(res.error.message);
       data = res.data;
-      if (!data || data.length === 0) throw new Error("no rows");
     } catch (error) {
-      console.info(`[referral.service] getLeaderboard: using sample content (${(error as Error).message})`);
-      return sampleLeaderboard(period);
+      if (__DEV__) {
+        console.info(`[referral.service] getLeaderboard: using sample content in dev (${(error as Error).message})`);
+        return sampleLeaderboard(period);
+      }
+      throw error;
     }
+    // No successful referrals yet this period is a real, honest empty state —
+    // never substitute unrelated sample leaderboard entries for it.
+    const rows = data ?? [];
+    if (rows.length === 0) return [];
 
     const byReferrer = new Map<string, { name: string; email: string; avatarUrl: string | null; referrals: number; earned: number }>();
-    (data ?? []).forEach((row: any) => {
+    rows.forEach((row: any) => {
       const existing = byReferrer.get(row.referrer_id) ?? {
         name: row.referrer?.full_name || "CampusEduX Member",
         email: row.referrer?.email || "",

@@ -50,9 +50,10 @@ function mapFeatureRow(row: any): CustomFeature {
     projectLevels: Array.isArray(row.project_levels) ? row.project_levels : [],
     price: Number(row.price) || 0,
     sortOrder: Number(row.sort_order) || 0,
-    // Optional catalog fields (migration 0034) — safe when absent.
+    // Optional catalog fields (migration 0034/0090) — safe when absent.
     level: row.level ?? "standard",
     dependencies: Array.isArray(row.dependencies) ? row.dependencies : [],
+    conflicts: Array.isArray(row.conflicts) ? row.conflicts : [],
     icon: row.icon ?? null,
     imageUrl: row.image_url ?? null,
   };
@@ -90,6 +91,109 @@ function mapMessageRow(row: any): CustomProjectMessage {
 }
 
 // --- pure pricing helpers (no DB) — spec §10 / §36 --------------------
+
+/**
+ * Academic-only Extra Feature price override — mirrors
+ * website/src/lib/customProjects.ts's ACADEMIC_EXTRA_FEATURE_PRICES exactly
+ * (same ids, same values; also duplicated server-side in
+ * mobile-app/supabase/functions/_shared/academicPricing.ts, which is what
+ * create-custom-project-order actually charges from). Keep all three in
+ * sync — the website has a test asserting this
+ * (website/tests/lib/customProjects.test.ts).
+ */
+export const ACADEMIC_EXTRA_FEATURE_PRICES: Record<string, number> = {
+  // Non-advanced (₹40–100) ---------------------------------------------
+  "doc-viva": 40,
+  "media-pdf-upload": 45,
+  "doc-ppt": 45,
+  "auth-google": 50,
+  "pay-history": 50,
+  "notif-inapp": 55,
+  "media-multi-image": 55,
+  "search-filters": 55,
+  "doc-documentation": 55,
+  "doc-srs": 60,
+  "notif-email": 65,
+  "doc-project-report": 70,
+  "auth-otp": 75,
+  "admin-dashboard-basic": 80,
+  "notif-push": 80,
+  "analytics-dashboard": 85,
+  "deploy-web": 85,
+  "deploy-support": 95,
+  // Advanced (₹100–150) --------------------------------------------------
+  "search-advanced": 110,
+  "deploy-apk": 120,
+  "pay-razorpay": 125,
+  "int-rest-api": 130,
+  "doc-academic-package": 150,
+};
+
+/**
+ * The price to charge/display for `feature` given the active project type.
+ * Mirrors website/src/lib/customProjects.ts's priceForFeature exactly. The
+ * app has no "AI-recommended" concept yet (spec: AI understanding step is
+ * mobile-absent) — `isRecommended` is always false here, which matches what
+ * create-custom-project-order computes server-side when the app's draft
+ * (which never sets aiRecommendedFeatureIds) is read.
+ */
+export function priceForFeature(
+  feature: Pick<CustomFeature, "id" | "price">,
+  projectType: CustomProjectType | null,
+  isRecommended: boolean
+): number {
+  const catalogPrice = Number(feature.price) || 0;
+  if (projectType === "academic" && !isRecommended && catalogPrice > 0) {
+    const override = ACADEMIC_EXTRA_FEATURE_PRICES[feature.id];
+    if (override !== undefined) return override;
+  }
+  return catalogPrice;
+}
+
+/**
+ * Enabling `id` may require other features to be on first. Returns the
+ * feature-id list with any missing dependencies added, plus the rows that
+ * got auto-enabled (so the caller can show "X requires Y" once). Pure —
+ * mirrors website/src/lib/customProjects.ts's resolveDependencies exactly.
+ */
+export function resolveDependencies(
+  featureIds: string[],
+  id: string,
+  features: CustomFeature[]
+): { featureIds: string[]; added: CustomFeature[] } {
+  const byId = new Map(features.map((f) => [f.id, f]));
+  const target = byId.get(id);
+  const deps = target?.dependencies ?? [];
+  const added: CustomFeature[] = [];
+  let next = featureIds;
+  for (const depId of deps) {
+    if (next.includes(depId)) continue;
+    const depFeature = byId.get(depId);
+    if (!depFeature) continue;
+    next = [...next, depId];
+    added.push(depFeature);
+  }
+  return { featureIds: next, added };
+}
+
+/**
+ * If enabling `id` would conflict with an already-enabled feature, returns
+ * that conflicting row (conflicts are symmetric — checked both directions
+ * since catalog data may only declare the relationship on one side). Mirrors
+ * website/src/lib/customProjects.ts's findConflict exactly.
+ */
+export function findConflict(featureIds: string[], id: string, features: CustomFeature[]): CustomFeature | null {
+  const byId = new Map(features.map((f) => [f.id, f]));
+  const target = byId.get(id);
+  if (!target) return null;
+  for (const otherId of featureIds) {
+    if (otherId === id) continue;
+    const other = byId.get(otherId);
+    if (!other) continue;
+    if ((target.conflicts ?? []).includes(otherId) || (other.conflicts ?? []).includes(id)) return other;
+  }
+  return null;
+}
 
 /** Features actually offered for this project type + level, sorted for display. */
 export function getFeaturesFor(
@@ -133,7 +237,9 @@ export function estimatePrice(
   const platformCharge = platformRow?.charge ?? 0;
 
   const available = getFeaturesFor(projectType, projectLevel, features);
-  const selectedFeatures = available.filter((f) => featureIds.includes(f.id));
+  const selectedFeatures = available
+    .filter((f) => featureIds.includes(f.id))
+    .map((f) => ({ ...f, price: priceForFeature(f, projectType, false) }));
   const featureTotal = selectedFeatures.reduce((s, f) => s + f.price, 0);
 
   const tokenAmount = projectType ? CUSTOM_PROJECT_TOKENS[projectType] : 0;

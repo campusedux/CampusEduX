@@ -3,6 +3,7 @@ import { View, Text, Pressable, Linking } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "@/components/ui";
+import { BRAND } from "@/constants/brand";
 
 export function SupportScreen() {
   const navigation = useNavigation();
@@ -11,8 +12,8 @@ export function SupportScreen() {
     {
       icon: "mail-outline" as const,
       label: "Email Support",
-      subtitle: "support@campusedux.app",
-      onPress: () => Linking.openURL("mailto:support@campusedux.app"),
+      subtitle: BRAND.supportEmail,
+      onPress: () => Linking.openURL(`mailto:${BRAND.supportEmail}`),
     },
     {
       icon: "call-outline" as const,

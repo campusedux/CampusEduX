@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, Pressable, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { PressableScale } from "@/components/ui";
+import { PressableScale, Badge } from "@/components/ui";
 import { CARD_SHADOW } from "@/constants/theme";
 import type { Job } from "@/types";
 
@@ -17,6 +17,7 @@ interface JobCardProps {
  * job-type pill, location + posted time, and the stipend/salary line.
  */
 export function JobCard({ job, onPress, isSaved, onToggleSave }: JobCardProps) {
+  const [logoFailed, setLogoFailed] = useState(false);
   return (
     <PressableScale
       onPress={() => onPress(job)}
@@ -25,8 +26,8 @@ export function JobCard({ job, onPress, isSaved, onToggleSave }: JobCardProps) {
     >
       <View className="flex-row items-start">
         <View className="w-12 h-12 rounded-xl items-center justify-center mr-3 overflow-hidden" style={{ backgroundColor: "#EEF0FF" }}>
-          {job.companyLogoUrl ? (
-            <Image source={{ uri: job.companyLogoUrl }} className="w-full h-full" resizeMode="cover" />
+          {job.companyLogoUrl && !logoFailed ? (
+            <Image source={{ uri: job.companyLogoUrl }} className="w-full h-full" resizeMode="cover" onError={() => setLogoFailed(true)} />
           ) : (
             <Ionicons name="business-outline" size={22} color="#4F39F6" />
           )}
@@ -38,39 +39,37 @@ export function JobCard({ job, onPress, isSaved, onToggleSave }: JobCardProps) {
               {job.title}
             </Text>
             {onToggleSave && (
-              <Pressable onPress={() => onToggleSave(job)} hitSlop={8}>
-                <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={18} color={isSaved ? "#4F39F6" : "#9CA3AF"} />
+              <Pressable onPress={() => onToggleSave(job)} hitSlop={14} accessibilityRole="button" accessibilityLabel={isSaved ? "Remove saved job" : "Save job"}>
+                <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={18} color={isSaved ? "#4F39F6" : "#6B7280"} />
               </Pressable>
             )}
           </View>
-          <Text className="text-gray-500 text-sm mt-0.5" numberOfLines={1}>
-            {job.companyName}
-          </Text>
+          {job.companyName ? (
+            <Text className="text-gray-500 text-sm mt-0.5" numberOfLines={1}>
+              {job.companyName}
+            </Text>
+          ) : null}
         </View>
       </View>
 
       <View className="flex-row items-center flex-wrap mt-3" style={{ gap: 8 }}>
-        <View className="rounded-lg px-2.5 py-1" style={{ backgroundColor: "#EEF0FF" }}>
-          <Text className="text-primary text-[11px] font-semibold">{job.jobType}</Text>
-        </View>
-        <View className="flex-row items-center">
-          <Ionicons name="location-outline" size={13} color="#9CA3AF" />
-          <Text className="text-gray-400 text-xs ml-1" numberOfLines={1}>
-            {job.location}
-          </Text>
-        </View>
-        {job.isNew && (
-          <View className="rounded-lg px-2 py-1" style={{ backgroundColor: "#DCFCE7" }}>
-            <Text className="text-[11px] font-semibold" style={{ color: "#15803D" }}>
-              NEW
+        {job.jobType ? <Badge label={job.jobType} tone="primary" /> : null}
+        {job.location ? (
+          <View className="flex-row items-center">
+            <Ionicons name="location-outline" size={13} color="#9CA3AF" />
+            <Text className="text-gray-500 text-xs ml-1" numberOfLines={1}>
+              {job.location}
             </Text>
           </View>
+        ) : null}
+        {job.isNew && (
+          <Badge label="NEW" tone="success" />
         )}
       </View>
 
       <View className="flex-row items-center justify-between mt-2.5">
-        <Text className="text-primary font-semibold text-sm">{job.salaryRange}</Text>
-        <Text className="text-gray-400 text-xs">{job.postedAt}</Text>
+        {job.salaryRange ? <Text className="text-primary font-semibold text-sm">{job.salaryRange}</Text> : <View />}
+        {job.postedAt ? <Text className="text-gray-500 text-xs">{job.postedAt}</Text> : null}
       </View>
     </PressableScale>
   );

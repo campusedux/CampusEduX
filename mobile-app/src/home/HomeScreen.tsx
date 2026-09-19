@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, TextInput } from "react-native";
+import { View, Text, Pressable, TextInput, ScrollView } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,15 +10,17 @@ import {
   EmptyState,
   SectionHeader,
   DrawerMenuButton,
-  PressableScale,
 } from "@/components/ui";
 import { ProjectCard, JobCard } from "@/components/cards";
 import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import { useTrendingProjects, useLatestJobs, useNotifications } from "@/hooks/useHomeData";
 import { useLearningGrids } from "@/hooks/useLearning";
+import { HomeLearningCard, HomeLearningDots, HOME_LEARNING_CARD_WIDTH, HOME_LEARNING_CARD_GAP } from "./HomeLearningCard";
+import { HomeCategoryTile } from "./HomeCategoryTile";
+import { CodingPracticeCard, PracticeMiniCard } from "./HomePracticeSection";
+import { usePracticeCategories } from "@/hooks/usePractice";
 import { useAuthStore } from "@/store/authStore";
-import { CARD_SHADOW } from "@/constants/theme";
-import type { HomeStackParamList, LearningGridCard } from "@/types";
+import type { HomeStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<HomeStackParamList, "HomeDashboard">;
 
@@ -26,7 +28,9 @@ interface HomeCategory {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
-  bg: string;
+  /** Diagonal icon gradient, light → dark. */
+  colors: [string, string];
+  badge?: string;
   go: (nav: any) => void;
 }
 
@@ -39,81 +43,45 @@ const CATEGORIES: HomeCategory[] = [
   {
     label: "Projects",
     icon: "cube",
-    color: "#4F39F6",
-    bg: "#EEF0FF",
+    color: "#7C3AED",
+    colors: ["#A78BFA", "#6D28D9"],
     go: (n) => n.getParent()?.navigate("Projects", { screen: "AllProjects" }),
   },
   {
     label: "Jobs",
     icon: "briefcase",
     color: "#0EA5E9",
-    bg: "#E0F2FE",
+    colors: ["#38BDF8", "#0369A1"],
     go: (n) => n.getParent()?.navigate("Jobs", { screen: "JobsDashboard" }),
   },
   {
     label: "Learning",
     icon: "school",
     color: "#16A34A",
-    bg: "#DCFCE7",
+    colors: ["#4ADE80", "#15803D"],
     go: (n) => n.getParent()?.navigate("Prep", { screen: "LearningGrids" }),
   },
   {
     label: "Resume Builder",
     icon: "document-text",
     color: "#DB2777",
-    bg: "#FCE7F3",
+    colors: ["#F472B6", "#BE185D"],
     go: (n) => n.getParent()?.navigate("ResumeBuilder", { screen: "ResumeDashboard" }),
   },
   {
     label: "Custom Project",
     icon: "construct",
-    color: "#4F39F6",
-    bg: "#EEF0FF",
+    color: "#4F46E5",
+    colors: ["#818CF8", "#3730A3"],
     go: (n) => n.getParent()?.navigate("CustomProjects", { screen: "BuilderStart" }),
   },
   {
     label: "Practice",
     icon: "code-slash",
     color: "#0D9488",
-    bg: "#CCFBF1",
+    colors: ["#2DD4BF", "#0F766E"],
+    badge: "NEW",
     go: (n) => n.navigate("PracticeHub"),
-  },
-];
-
-interface PracticeCard {
-  title: string;
-  subtitle: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  bg: string;
-  go: (nav: any) => void;
-}
-
-/** Mirrors the website Home "Practice" cards (Coding Practice / Mock Tests / Interview Questions). */
-const PRACTICE: PracticeCard[] = [
-  {
-    title: "Coding Practice",
-    subtitle: "Solve problems in 5 languages",
-    icon: "code-slash",
-    color: "#4F39F6",
-    bg: "#EEF0FF",
-    go: (n) => n.navigate("PracticeProblems"),
-  },
-  {
-    title: "Mock Tests",
-    subtitle: "Timed tests on Learning topics",
-    icon: "clipboard",
-    color: "#0D9488",
-    bg: "#CCFBF1",
-    go: (n) => n.getParent()?.navigate("Prep", { screen: "LearningGrids" }),
-  },
-  {
-    title: "Interview Questions",
-    subtitle: "Questions & answers by topic",
-    icon: "chatbubble-ellipses",
-    color: "#DB2777",
-    bg: "#FCE7F3",
-    go: (n) => n.navigate("InterviewCategories"),
   },
 ];
 
@@ -126,6 +94,10 @@ export function HomeScreen() {
   const jobs = useLatestJobs();
   const notifications = useNotifications();
   const learning = useLearningGrids();
+  const practiceCategories = usePracticeCategories();
+  // Only a real total (sum of the RPC's per-category counts); null hides the count.
+  const practiceTotal = (practiceCategories.data ?? []).reduce((n, c) => n + (c.problem_count || 0), 0) || null;
+  const [learnIndex, setLearnIndex] = useState(0);
   const unreadCount = (notifications.data ?? []).filter((n) => !n.isRead).length;
 
   const submitSearch = () => {
@@ -185,38 +157,33 @@ export function HomeScreen() {
       />
 
       <SectionHeader title="Categories" onViewAll={() => (navigation as any).navigate("AllCategories")} />
-      <View className="flex-row flex-wrap justify-between mb-4">
-        {CATEGORIES.map((c) => (
-          <PressableScale
+      <View className="flex-row flex-wrap justify-between mb-2">
+        {CATEGORIES.map((c, i) => (
+          <HomeCategoryTile
             key={c.label}
+            label={c.label}
+            icon={c.icon}
+            color={c.color}
+            colors={c.colors}
+            badge={c.badge}
+            index={i}
             onPress={() => c.go(navigation)}
-            className="items-center bg-white rounded-2xl border border-gray-100 py-4 mb-3"
-            style={{ width: "31%", ...CARD_SHADOW }}
-          >
-            <View className="w-14 h-14 rounded-2xl items-center justify-center mb-2" style={{ backgroundColor: c.bg }}>
-              <Ionicons name={c.icon} size={26} color={c.color} />
-            </View>
-            <Text className="text-gray-700 text-[11px] font-medium text-center px-1" numberOfLines={2}>
-              {c.label}
-            </Text>
-          </PressableScale>
+          />
         ))}
       </View>
 
-      <View className="mt-1">
-        <SectionHeader title="Trending Projects" onViewAll={() => (navigation as any).navigate("TrendingProjects")} />
-        {trending.isLoading ? (
-          <LoadingState label="Loading trending projects..." />
-        ) : trending.isError ? (
-          <ErrorState message="Couldn't load trending projects." onRetry={() => trending.refetch()} />
-        ) : trending.data && trending.data.length > 0 ? (
-          trending.data.slice(0, 3).map((project) => (
-            <ProjectCard key={project.id} project={project} onPress={() => openProjectDetail(project.id)} />
-          ))
-        ) : (
-          <EmptyState title="No trending projects yet" />
-        )}
-      </View>
+      {trending.isLoading || (trending.data && trending.data.length > 0) ? (
+        <View className="mt-1">
+          <SectionHeader title="Trending Projects" onViewAll={() => (navigation as any).navigate("TrendingProjects")} />
+          {trending.isLoading ? (
+            <LoadingState label="Loading trending projects..." />
+          ) : (
+            trending.data?.slice(0, 3).map((project) => (
+              <ProjectCard key={project.id} project={project} onPress={() => openProjectDetail(project.id)} />
+            ))
+          )}
+        </View>
+      ) : null}
 
       {/* Learning section — sits directly above Latest Jobs and uses the same card as jobs. */}
       <View className="mt-3">
@@ -226,11 +193,24 @@ export function HomeScreen() {
         ) : learning.isError ? (
           <ErrorState message="Couldn't load learning resources." onRetry={() => learning.refetch()} />
         ) : learning.data && learning.data.length > 0 ? (
-          learning.data
-            .slice(0, 4)
-            .map((grid) => (
-              <LearningCard key={grid.id} grid={grid} onPress={() => openGrid(grid.slug, grid.name)} />
-            ))
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={HOME_LEARNING_CARD_WIDTH + HOME_LEARNING_CARD_GAP}
+              decelerationRate="fast"
+              scrollEventThrottle={16}
+              onScroll={(e) =>
+                setLearnIndex(Math.round(e.nativeEvent.contentOffset.x / (HOME_LEARNING_CARD_WIDTH + HOME_LEARNING_CARD_GAP)))
+              }
+              contentContainerStyle={{ gap: HOME_LEARNING_CARD_GAP, paddingTop: 4, paddingBottom: 16 }}
+            >
+              {learning.data.slice(0, 4).map((grid, i) => (
+                <HomeLearningCard key={grid.id} grid={grid} index={i} onPress={() => openGrid(grid.slug, grid.name)} />
+              ))}
+            </ScrollView>
+            <HomeLearningDots count={Math.min(learning.data.length, 4)} active={learnIndex} />
+          </>
         ) : (
           <EmptyState title="No learning resources yet" />
         )}
@@ -238,84 +218,42 @@ export function HomeScreen() {
 
       <View className="mt-3">
         <SectionHeader title="Practice" onViewAll={() => (navigation as any).navigate("PracticeHub")} />
-        <View className="flex-row flex-wrap justify-between">
-          {PRACTICE.map((c) => (
-            <PressableScale
-              key={c.title}
-              onPress={() => c.go(navigation)}
-              className="items-center bg-white rounded-2xl border border-gray-100 py-4 px-1 mb-3"
-              style={{ width: "31%", ...CARD_SHADOW }}
-            >
-              <View className="w-12 h-12 rounded-2xl items-center justify-center mb-2" style={{ backgroundColor: c.bg }}>
-                <Ionicons name={c.icon} size={24} color={c.color} />
-              </View>
-              <Text className="text-gray-900 text-[12px] font-bold text-center" numberOfLines={2}>
-                {c.title}
-              </Text>
-              <Text className="text-gray-500 text-[10px] text-center mt-0.5 px-1" numberOfLines={3}>
-                {c.subtitle}
-              </Text>
-            </PressableScale>
-          ))}
+        <CodingPracticeCard problemCount={practiceTotal} onPress={() => (navigation as any).navigate("PracticeProblems")} />
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <PracticeMiniCard
+            title="Mock Tests"
+            subtitle="Timed tests & scores"
+            icon="clipboard"
+            color="#F59E0B"
+            colors={["#FBBF24", "#D97706"]}
+            index={1}
+            onPress={openLearn}
+          />
+          <PracticeMiniCard
+            title="Interview Questions"
+            subtitle="Topic-wise Q&A"
+            icon="chatbubble-ellipses"
+            color="#8B5CF6"
+            colors={["#A78BFA", "#6D28D9"]}
+            index={2}
+            onPress={() => (navigation as any).navigate("InterviewCategories")}
+          />
         </View>
       </View>
 
-      <View className="mt-3">
-        <SectionHeader title="Latest Jobs" onViewAll={() => (navigation as any).navigate("LatestJobs")} />
-        {jobs.isLoading ? (
-          <LoadingState label="Loading jobs..." />
-        ) : jobs.isError ? (
-          <ErrorState message="Couldn't load jobs." onRetry={() => jobs.refetch()} />
-        ) : jobs.data && jobs.data.length > 0 ? (
-          jobs.data.slice(0, 3).map((job) => <JobCard key={job.id} job={job} onPress={() => openJobDetail(job.id)} />)
-        ) : (
-          <EmptyState title="No jobs available right now" />
-        )}
-      </View>
+      {jobs.isLoading || (jobs.data && jobs.data.length > 0) ? (
+        <View className="mt-3">
+          <SectionHeader title="Latest Jobs" onViewAll={() => (navigation as any).navigate("LatestJobs")} />
+          {jobs.isLoading ? (
+            <LoadingState label="Loading jobs..." />
+          ) : (
+            jobs.data?.slice(0, 3).map((job) => <JobCard key={job.id} job={job} onPress={() => openJobDetail(job.id)} />)
+          )}
+        </View>
+      ) : null}
 
       <View className="h-6" />
     </Screen>
-  );
-}
-
-/**
- * Learning card — mirrors {@link JobCard} exactly: same width, corner radius,
- * padding, vertical spacing, shadow and bottom margin, so the Learning section
- * reads as a full content feed rather than a compact list. Book icon + title +
- * a two-line description, then a bottom row with a topic-count badge (same style
- * as the job-type pill) and a right-aligned arrow.
- */
-function LearningCard({ grid, onPress }: { grid: LearningGridCard; onPress: () => void }) {
-  const topicLabel = `${grid.topic_count} Topic${grid.topic_count === 1 ? "" : "s"}`;
-  return (
-    <PressableScale
-      onPress={onPress}
-      className="bg-white rounded-2xl border border-gray-100 p-4 mb-3"
-      style={CARD_SHADOW}
-    >
-      <View className="flex-row items-start">
-        <View className="w-12 h-12 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: "#EEF0FF" }}>
-          <Ionicons name="book-outline" size={22} color="#4F39F6" />
-        </View>
-
-        <View className="flex-1">
-          <Text className="font-bold text-gray-900" numberOfLines={1}>
-            {grid.name}
-          </Text>
-          <Text className="text-gray-500 text-sm mt-0.5" numberOfLines={2}>
-            {topicLabel}
-            {grid.description ? ` • ${grid.description}` : ""}
-          </Text>
-        </View>
-      </View>
-
-      <View className="flex-row items-center justify-between mt-3">
-        <View className="rounded-lg px-2.5 py-1" style={{ backgroundColor: "#EEF0FF" }}>
-          <Text className="text-primary text-[11px] font-semibold">{topicLabel}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-      </View>
-    </PressableScale>
   );
 }
 

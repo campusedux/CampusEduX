@@ -16,19 +16,22 @@ const WEB_CONTENT: object = Platform.select({
 interface ScreenProps extends ViewProps {
   scroll?: boolean;
   edges?: ("top" | "bottom" | "left" | "right")[];
+  /** Page ground: white (default, unchanged) or the soft lavender canvas for card-based screens. */
+  background?: "white" | "canvas";
 }
 
 /**
  * Base screen wrapper handling safe-area insets consistently across
  * every screen in the app. Set scroll for content-heavy screens.
  */
-export function Screen({ children, scroll, edges = ["top", "bottom"], className, ...rest }: ScreenProps) {
+export function Screen({ children, scroll, edges = ["top", "bottom"], background = "white", className, ...rest }: ScreenProps) {
+  const bg = background === "canvas" ? "bg-canvas" : "bg-white";
   // For a ScrollView, padding/layout classes belong on the *content container*
   // — putting them on the ScrollView itself (or dropping them, as before) left
   // scrolling screens with no horizontal padding at all.
   if (scroll) {
     return (
-      <SafeAreaView edges={edges} className="flex-1 bg-white">
+      <SafeAreaView edges={edges} className={`flex-1 ${bg}`}>
         <ScrollView
           className="flex-1"
           contentContainerClassName={className}
@@ -43,7 +46,7 @@ export function Screen({ children, scroll, edges = ["top", "bottom"], className,
   }
 
   return (
-    <SafeAreaView edges={edges} className="flex-1 bg-white">
+    <SafeAreaView edges={edges} className={`flex-1 ${bg}`}>
       <View className={`flex-1 ${className ?? ""}`} style={WEB_CONTENT} {...(rest as any)}>
         {children}
       </View>

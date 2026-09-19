@@ -5,7 +5,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { LoadingState, ErrorState } from "@/components/ui";
 import { useCustomFeatures, useCustomPricing } from "@/hooks/useCustomProjects";
-import { estimatePrice, getFeaturesFor } from "@/services/customProjects.service";
+import { estimatePrice, getFeaturesFor, priceForFeature } from "@/services/customProjects.service";
 import { useBuilderStore } from "./builderStore";
 import { WizardScreen, rupees } from "./components/wizard";
 import type { CustomFeature, CustomProjectsStackParamList } from "@/types";
@@ -112,7 +112,7 @@ export function BuilderFeaturesScreen() {
               return (
                 <Pressable
                   key={f.id}
-                  onPress={() => toggleFeature(f.id)}
+                  onPress={() => toggleFeature(f.id, featuresQ.data ?? [])}
                   className="flex-row items-center rounded-xl border px-3 py-3 mb-2"
                   style={{ borderColor: selected ? "#4F39F6" : "#E5E7EB", backgroundColor: selected ? "#EEF0FF" : "#FFFFFF" }}
                 >
@@ -140,7 +140,10 @@ export function BuilderFeaturesScreen() {
                     ) : null}
                   </View>
                   <Text className="text-gray-700 text-sm font-semibold ml-2">
-                    {f.price > 0 ? `+ ${rupees(f.price)}` : "Free"}
+                    {(() => {
+                      const price = priceForFeature(f, config.projectType, false);
+                      return price > 0 ? `+ ${rupees(price)}` : "Free";
+                    })()}
                   </Text>
                 </Pressable>
               );

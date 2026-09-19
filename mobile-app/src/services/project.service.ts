@@ -3,11 +3,7 @@ import { rankByAcademicRelevance, type AcademicProfile } from "@/lib/personaliza
 import type { Project, ProjectDetail, ProjectFilters, Review, RatingBreakdown, PurchasedProject, DownloadRecord } from "@/types";
 import {
   SAMPLE_ALL_PROJECTS,
-  sampleProjectDetail,
   sampleReviews,
-  sampleWishlist,
-  samplePurchased,
-  sampleDownloads,
 } from "@/data/sampleProjectContent";
 
 const PROJECT_SELECT = "*, category:categories(name)";
@@ -17,33 +13,21 @@ const PAGE_SIZE = 20;
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 /**
- * Returns `run()`'s rows, or the sample rows when the query fails.
- *
- * `fallbackWhenEmpty` (default true) keeps showing sample content for shared
- * catalog reads (browse / search / similar) so the marketplace never looks
- * empty. Pass `false` for per-user reads (wishlist, purchases, downloads) where
- * an empty result is the correct answer for a new student.
- *
- * `fallbackWhenError` (default true) is safe for content reads. Pass `false`
- * for money / purchase reads (purchased projects, download history) so a real
- * fetch failure propagates to the hook (`isError` -> <ErrorState>) instead of
- * rendering fabricated rows a student could mistake for their real orders.
+ * Returns `run()`'s rows. A real empty result is always returned as-is (honest
+ * EmptyState). A failure throws so the hook reports `isError` (ErrorState +
+ * retry). Pass `sample` for catalog reads to get a `__DEV__`-only stand-in;
+ * omit it for per-user / purchase reads (wishlist, purchases, downloads) so
+ * fabricated rows can never appear, even in development.
  */
-async function orSample<T>(
-  label: string,
-  run: () => Promise<T[]>,
-  sample: T[],
-  fallbackWhenEmpty = true,
-  fallbackWhenError = true
-): Promise<T[]> {
+async function orSample<T>(label: string, run: () => Promise<T[]>, sample?: T[]): Promise<T[]> {
   try {
-    const rows = await run();
-    if (rows.length > 0) return rows;
-    return fallbackWhenEmpty ? sample : rows;
+    return await run();
   } catch (error) {
-    if (!fallbackWhenError) throw error instanceof Error ? error : new Error(String(error));
-    console.info(`[project.service] ${label}: using sample content (${(error as Error).message})`);
-    return sample;
+    if (__DEV__ && sample) {
+      console.info(`[project.service] ${label}: using sample content in dev (${(error as Error).message})`);
+      return sample;
+    }
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 
@@ -124,13 +108,16 @@ export const projectService = {
       const ordered = academic ? rankByAcademicRelevance(data ?? [], academic) : data ?? [];
       const projects = ordered.map(mapProjectRow);
       // An empty page is a real answer for this student — show the empty state,
-      // not unrelated sample marketplace rows (spec §18). Sample content is kept
-      // only for a genuine query failure (e.g. the table isn't created yet).
+      // not unrelated sample marketplace rows (spec §18). Sample content is a
+      // __DEV__-only stand-in for a genuine query failure.
       return { projects, hasMore: projects.length === PAGE_SIZE };
     } catch (error) {
-      console.info(`[project.service] getAllProjects: using sample content (${(error as Error).message})`);
-      const projects = page === 0 ? SAMPLE_ALL_PROJECTS.filter((p) => matchesFilters(p, filters)) : [];
-      return { projects, hasMore: false };
+      if (__DEV__) {
+        console.info(`[project.service] getAllProjects: using sample content in dev (${(error as Error).message})`);
+        const projects = page === 0 ? SAMPLE_ALL_PROJECTS.filter((p) => matchesFilters(p, filters)) : [];
+        return { projects, hasMore: false };
+      }
+      throw error instanceof Error ? error : new Error(String(error));
     }
   },
 
@@ -157,23 +144,23 @@ export const projectService = {
         const { data, error } = await supabase.from("projects").select(PROJECT_SELECT).ilike("title", `%${query}%`).limit(30);
         if (error) throw new Error(error.message);
         return (data ?? []).map(mapProjectRow);
-      },
-      SAMPLE_ALL_PROJECTS.filter((p) => p.title.toLowerCase().includes(query.trim().toLowerCase()))
+      }
+      // no sample: a search never returns rows that didn't match the query
     );
   },
 
+  /**
+   * Real rows only — NO sample fallback, not even in __DEV__. Buy / Payment /
+   * Download all read this, so a project that didn't come from Supabase must
+   * never reach the checkout path. Errors and missing rows throw (ErrorState + retry).
+   */
   async getProjectDetail(projectId: string, userId?: string): Promise<ProjectDetail> {
-    try {
-      const [{ data: row, error }, wishlisted] = await Promise.all([
-        supabase.from("projects").select(PROJECT_SELECT).eq("id", projectId).single(),
-        userId ? projectService.isWishlisted(projectId, userId) : Promise.resolve(false),
-      ]);
-      if (error || !row) throw new Error("Project not found.");
-      return mapProjectDetailRow(row, wishlisted);
-    } catch (error) {
-      console.info(`[project.service] getProjectDetail: using sample content (${(error as Error).message})`);
-      return sampleProjectDetail(projectId);
-    }
+    const [{ data: row, error }, wishlisted] = await Promise.all([
+      supabase.from("projects").select(PROJECT_SELECT).eq("id", projectId).single(),
+      userId ? projectService.isWishlisted(projectId, userId) : Promise.resolve(false),
+    ]);
+    if (error || !row) throw new Error("Project not found.");
+    return mapProjectDetailRow(row, wishlisted);
   },
 
   async getSimilarProjects(projectId: string, categoryId: string, limit = 10): Promise<Project[]> {
@@ -206,8 +193,11 @@ export const projectService = {
       // an empty list is real (nobody has reviewed this project yet) — only fall
       // back to sample reviews when the query itself failed.
     } catch (error) {
-      console.info(`[project.service] getReviews: using sample content (${(error as Error).message})`);
-      return sampleReviews();
+      if (__DEV__) {
+        console.info(`[project.service] getReviews: using sample content in dev (${(error as Error).message})`);
+        return sampleReviews();
+      }
+      throw error instanceof Error ? error : new Error(String(error));
     }
 
     const reviews: Review[] = (data ?? []).map((row: any) => ({
@@ -258,8 +248,7 @@ export const projectService = {
         if (error) throw new Error(error.message);
         return (data ?? []).map((row: any) => mapProjectRow(row.project));
       },
-      sampleWishlist(),
-      false
+      // per-user read: no sample, ever
     );
   },
 
@@ -290,9 +279,7 @@ export const projectService = {
           purchasedAt: row.created_at,
         }));
       },
-      samplePurchased(),
-      false,
-      false // money/purchase read — surface fetch errors, don't fake owned projects
+      // money/purchase read: no sample, ever — errors propagate
     );
   },
 
@@ -326,9 +313,7 @@ export const projectService = {
           downloadedAt: row.downloaded_at,
         }));
       },
-      sampleDownloads(),
-      false,
-      false // per-user entitlement record — surface fetch errors, don't fake it
+      // per-user entitlement record: no sample, ever — errors propagate
     );
   },
 

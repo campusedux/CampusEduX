@@ -1,116 +1,166 @@
-import React from "react";
-import { View, Text } from "react-native";
+import React, { useCallback, useRef, useState } from "react";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Ionicons } from "@expo/vector-icons";
-import { Screen, LoadingState, ErrorState, EmptyState, DrawerMenuButton, PressableScale } from "@/components/ui";
+import { DrawerMenuButton } from "@/components/ui";
+import { BookmarkedTopics } from "@/components/learning/BookmarkedTopics";
+import { ContinueLearningCard } from "@/components/learning/ContinueLearningCard";
+import { CourseCard } from "@/components/learning/CourseCard";
+import { FadeInUp } from "@/components/learning/FadeInUp";
+import { LearningHomeSkeleton, Skeleton } from "@/components/learning/LearningSkeleton";
+import { LearningScreen, PageContainer } from "@/components/learning/LearningScreen";
+import { StateBlock } from "@/components/learning/LearningStates";
+import { LearningSearchBar } from "@/components/learning/LearningSearchBar";
+import { SearchResults } from "@/components/learning/SearchResults";
+import { StreakPill } from "@/components/learning/StreakPill";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useLearningGrids } from "@/hooks/useLearning";
+import { firstName, matchesCourseFilter, type CourseFilter } from "@/learning/learningFormat";
+import { useCompletedByGrid, useStreak } from "@/learning/progress/progressStore";
 import { useAuthStore } from "@/store/authStore";
-import { CARD_SHADOW } from "@/constants/theme";
-import type { LearningGridCard, PlacementStackParamList } from "@/types";
+import { LAYOUT, RADII, SPACE, useTheme } from "@/theme";
+import type { LearningGridCard, LearningSearchHit, PlacementStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<PlacementStackParamList, "PlacementHome">;
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 /**
  * The "Learning" home (bottom-tab "Prep" — internal route name kept for deep
- * links). The grid list is 100% DB-driven: `learning_grids_list('mobile')`
- * returns every published, mobile-visible, audience-matching grid in the
- * admin-defined order. A grid the admin creates + publishes appears here on the
- * next refresh with NO app update. Every grid opens the same Grid → Section →
- * Topic → Content tree (`LearningGrid`). There is no sample/demo fallback — a
- * failed load shows a real error + retry.
+ * links). The course list is 100% DB-driven via `learning_grids_list('mobile')`;
+ * a grid published from the admin panel appears on the next refresh with no app
+ * update. Every course opens the same Grid → Section → Topic → Content tree.
+ * Presentation only: queries, routes and access checks are unchanged.
+ *
+ * Layout: greeting + streak → Continue Learning hero → STICKY search + filter
+ * chips → course grid (1 / 2 / 3 columns) or inline search / bookmarks results.
  */
-const TYPE_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
-  content: "book-outline",
-  custom: "sparkles-outline",
-};
-
-function isEmoji(s: string | null): s is string {
-  return !!s && /\p{Extended_Pictographic}/u.test(s);
-}
-
 export function PlacementHomeScreen() {
   const navigation = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
+  const { colors, type, width, wide, columns, gutter } = useTheme();
   const grids = useLearningGrids();
+  const streak = useStreak();
+  const completedByGrid = useCompletedByGrid();
 
-  const openGrid = (grid: LearningGridCard) => {
-    navigation.navigate("LearningGrid", { gridSlug: grid.slug, gridName: grid.name });
+  const [query, setQuery] = useState("");
+  const debounced = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
+  const [filter, setFilter] = useState<CourseFilter>("all");
+  const searching = query.trim().length >= 2;
+
+  const scrollRef = useRef<ScrollView>(null);
+  const contentY = useRef(0);
+
+  const openGrid = useCallback(
+    (slug: string, name: string) => navigation.navigate("LearningGrid", { gridSlug: slug, gridName: name }),
+    [navigation],
+  );
+  // Same destination as the normal topic list: the topic screen enforces the premium gate.
+  const openTopic = useCallback(
+    (gridSlug: string, _gridName: string, topicSlug: string, topicTitle: string) =>
+      navigation.navigate("LearningTopic", { gridSlug, topicSlug, topicTitle }),
+    [navigation],
+  );
+  const openHit = useCallback(
+    (hit: LearningSearchHit) => openTopic(hit.grid_slug, hit.grid_name, hit.topic_slug as string, hit.title),
+    [openTopic],
+  );
+
+  const data: LearningGridCard[] = grids.data ?? [];
+  const visible = data.filter((g) => matchesCourseFilter(filter, completedByGrid[g.slug] ?? 0, g.topic_count));
+
+  const gap = wide ? SPACE[4] : SPACE[3];
+  const inner = Math.min(width, LAYOUT.pageMaxWidth) - gutter * 2;
+  const cardWidth = Math.floor((inner - gap * (columns - 1)) / columns);
+
+  const filterEmpty: Record<Exclude<CourseFilter, "all" | "bookmarked">, { emoji: string; title: string; message: string }> = {
+    "in-progress": { emoji: "📖", title: "Nothing in progress", message: "Open any course and finish a topic — it will show up here." },
+    completed: { emoji: "🏆", title: "No completed courses yet", message: "Finish every topic in a course to see it here." },
   };
 
+  let body: React.ReactNode;
+  if (searching) {
+    body = (
+      <SearchResults query={query} debouncedQuery={debounced} grids={data} onOpenTopic={openHit} onOpenGrid={openGrid} />
+    );
+  } else if (filter === "bookmarked") {
+    body = <BookmarkedTopics grids={data} onOpenTopic={openTopic} />;
+  } else if (grids.isLoading) {
+    body = <LearningHomeSkeleton cardWidth={cardWidth} count={columns * 2} />;
+  } else if (grids.isError) {
+    body = <StateBlock tone="error" emoji="😕" title="Couldn't load courses" message="Check your connection and try again." actionLabel="Retry" onAction={() => grids.refetch()} />;
+  } else if (data.length === 0) {
+    body = <StateBlock emoji="🎓" title="Nothing here yet" message="Courses appear here as soon as they're published from the admin panel." />;
+  } else if (visible.length === 0 && filter !== "all") {
+    body = <StateBlock {...filterEmpty[filter]} />;
+  } else {
+    body = (
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap }}>
+        {visible.map((g, i) => (
+          <FadeInUp key={g.id} index={i} style={{ width: cardWidth }}>
+            <CourseCard grid={g} width={cardWidth} onPress={() => openGrid(g.slug, g.name)} />
+          </FadeInUp>
+        ))}
+      </View>
+    );
+  }
+
   return (
-    <Screen scroll className="px-6">
-      <View className="flex-row items-center justify-between mt-2 mb-5">
-        <View className="flex-row items-center" style={{ gap: 12 }}>
-          <DrawerMenuButton />
-          <View>
-            <Text className="text-xl font-bold text-gray-900">Learning</Text>
-            <Text className="text-gray-500 text-sm mt-0.5">
-              Hi {user?.fullName?.split(" ")[0] || "there"}, let&apos;s keep going!
-            </Text>
+    <LearningScreen>
+      <ScrollView
+        ref={scrollRef}
+        stickyHeaderIndices={[1]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: SPACE[10] }}
+        refreshControl={<RefreshControl refreshing={grids.isRefetching} onRefresh={() => grids.refetch()} tintColor={colors.primary} colors={[colors.primary]} />}
+      >
+        {/* 0 — greeting + Continue Learning (scrolls away) */}
+        <PageContainer style={{ paddingTop: SPACE[2], paddingBottom: SPACE[4] }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: SPACE[3], marginBottom: SPACE[4] }}>
+            <DrawerMenuButton color={colors.text} />
+            <View style={{ flex: 1 }}>
+              <Text numberOfLines={1} style={[type.h2, { color: colors.text }]}>
+                Hi {firstName(user?.fullName)} 👋
+              </Text>
+              <Text numberOfLines={1} style={[type.small, { color: colors.textSecondary, marginTop: 2 }]}>
+                Let&apos;s keep learning today
+              </Text>
+            </View>
+            <StreakPill days={streak} />
           </View>
+
+          {grids.isLoading ? (
+            <Skeleton height={210} radius={RADII["2xl"]} />
+          ) : (
+            <ContinueLearningCard
+              grids={data}
+              onResume={openTopic}
+              onExplore={() => scrollRef.current?.scrollTo({ y: Math.max(0, contentY.current - 8), animated: true })}
+            />
+          )}
+        </PageContainer>
+
+        {/* 1 — sticky search + filters (opaque so cards scroll cleanly beneath) */}
+        <View style={{ backgroundColor: colors.canvas }}>
+          <PageContainer style={{ paddingTop: SPACE[2], paddingBottom: SPACE[3] }}>
+            <LearningSearchBar value={query} onChange={setQuery} filter={filter} onFilter={setFilter} showChips={!searching} />
+          </PageContainer>
         </View>
-        <PressableScale onPress={() => navigation.navigate("LearningGrids")} hitSlop={8}>
-          <Ionicons name="search-outline" size={24} color="#111827" />
-        </PressableScale>
-      </View>
 
-      <View className="rounded-2xl p-5 mb-6" style={{ backgroundColor: "#4F39F6" }}>
-        <Text className="text-white font-bold text-base mb-1">Stay Consistent</Text>
-        <Text className="text-indigo-100 text-sm">Keep learning! You&apos;ll make it!</Text>
-      </View>
-
-      <Text className="font-bold text-gray-900 mb-3">Explore Learning</Text>
-      {grids.isLoading ? (
-        <LoadingState label="Loading learning areas..." />
-      ) : grids.isError ? (
-        <ErrorState message="Couldn't load learning areas." onRetry={() => grids.refetch()} />
-      ) : !grids.data || grids.data.length === 0 ? (
-        <EmptyState
-          icon="school-outline"
-          title="Nothing here yet"
-          subtitle="Learning areas appear here as soon as they're published from the admin panel."
-        />
-      ) : (
-        <View className="flex-row flex-wrap justify-between">
-          {grids.data.map((grid) => (
-            <GridCard key={grid.id} grid={grid} onPress={() => openGrid(grid)} />
-          ))}
+        {/* 2 — results / course grid */}
+        <View onLayout={(e) => (contentY.current = e.nativeEvent.layout.y)}>
+          <PageContainer style={{ paddingTop: SPACE[1] }}>
+            {!searching && filter === "all" && data.length > 0 ? (
+              <Text style={[type.h3, { color: colors.text, marginBottom: SPACE[3] }]} accessibilityRole="header">
+                Explore courses
+              </Text>
+            ) : null}
+            {body}
+          </PageContainer>
         </View>
-      )}
-
-      <View className="h-6" />
-    </Screen>
-  );
-}
-
-function GridCard({ grid, onPress }: { grid: LearningGridCard; onPress: () => void }) {
-  const tint = grid.accent_color || "#4F39F6";
-  return (
-    <PressableScale
-      onPress={onPress}
-      className="bg-white border border-gray-100 rounded-2xl p-4 mb-3 items-center"
-      style={{ width: "48%", ...CARD_SHADOW }}
-    >
-      <View className="w-12 h-12 rounded-2xl items-center justify-center mb-2" style={{ backgroundColor: `${tint}1A` }}>
-        {isEmoji(grid.icon) ? (
-          <Text style={{ fontSize: 22 }}>{grid.icon}</Text>
-        ) : (
-          <Ionicons name={TYPE_ICON[grid.grid_type] ?? "book-outline"} size={24} color={tint} />
-        )}
-      </View>
-      <View className="flex-row items-center" style={{ gap: 4 }}>
-        <Text className="font-semibold text-gray-900 text-sm text-center" numberOfLines={2}>
-          {grid.name}
-        </Text>
-        {grid.is_premium ? <Ionicons name="lock-closed" size={11} color="#B45309" /> : null}
-      </View>
-      {grid.topic_count > 0 ? (
-        <Text className="text-gray-400 text-[11px] mt-0.5">
-          {grid.topic_count} topic{grid.topic_count === 1 ? "" : "s"}
-        </Text>
-      ) : null}
-    </PressableScale>
+      </ScrollView>
+    </LearningScreen>
   );
 }
 

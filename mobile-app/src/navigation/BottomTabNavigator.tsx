@@ -1,6 +1,8 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import { TabBarIcon, TabBarButton } from "@/components/ui/TabBarIcon";
+import { COLORS } from "@/constants/theme";
 import { HomeNavigator } from "./HomeNavigator";
 import { ProjectNavigator } from "./ProjectNavigator";
 import { JobNavigator } from "./JobNavigator";
@@ -57,12 +59,23 @@ export function BottomTabNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: "#4F39F6",
-        tabBarInactiveTintColor: "#9CA3AF",
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
-        tabBarIcon: ({ color, size, focused }) => (
-          <Ionicons name={focused ? ICONS[route.name] : (`${ICONS[route.name]}-outline` as any)} size={size} color={color} />
-        ),
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textMuted,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "700", marginTop: 2 },
+        tabBarAllowFontScaling: false,
+        tabBarHideOnKeyboard: true,
+        tabBarStyle: {
+          backgroundColor: COLORS.white,
+          borderTopWidth: 0,
+          paddingTop: 6,
+          shadowColor: "#0F172A",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.06,
+          shadowRadius: 12,
+          elevation: 12,
+        },
+        tabBarButton: (props) => <TabBarButton {...props} />,
+        tabBarIcon: ({ color, focused }) => <TabBarIcon name={ICONS[route.name]} focused={focused} color={color} />,
       })}
     >
       <Tab.Screen name="Home" component={HomeNavigator} listeners={resetTabOnPress} />

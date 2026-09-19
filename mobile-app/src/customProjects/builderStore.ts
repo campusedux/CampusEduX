@@ -1,5 +1,8 @@
 import { create } from "zustand";
+import { notify } from "@/lib/notify";
+import { findConflict, resolveDependencies } from "@/services/customProjects.service";
 import type {
+  CustomFeature,
   CustomPlatform,
   CustomProjectBuilderConfig,
   CustomProjectLevel,
@@ -31,7 +34,12 @@ interface BuilderState {
   setType: (t: CustomProjectType) => void;
   setLevel: (l: CustomProjectLevel) => void;
   setPlatform: (p: CustomPlatform) => void;
-  toggleFeature: (id: string) => void;
+  /**
+   * `features` is the full eligible-for-this-tier catalog, so conflicts and
+   * dependencies can be checked/resolved the same way
+   * website/src/app/custom-projects/features/BuilderFeatures.tsx does.
+   */
+  toggleFeature: (id: string, features: CustomFeature[]) => void;
   /** Drop any selected feature ids that are no longer valid for the tier. */
   pruneFeatures: (validIds: string[]) => void;
   addRequirement: (text: string) => void;
@@ -58,17 +66,35 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   setLevel: (projectLevel) => set((s) => ({ config: { ...s.config, projectLevel } })),
   setPlatform: (platform) => set((s) => ({ config: { ...s.config, platform } })),
 
-  toggleFeature: (id) =>
+  toggleFeature: (id, features) =>
     set((s) => {
       const has = s.config.featureIds.includes(id);
-      return {
-        config: {
-          ...s.config,
-          featureIds: has
-            ? s.config.featureIds.filter((f) => f !== id)
-            : [...s.config.featureIds, id],
-        },
-      };
+      if (has) {
+        return {
+          config: { ...s.config, featureIds: s.config.featureIds.filter((f) => f !== id) },
+        };
+      }
+
+      const feature = features.find((f) => f.id === id);
+
+      // Same message as website/src/app/custom-projects/features/BuilderFeatures.tsx.
+      const conflict = findConflict(s.config.featureIds, id, features);
+      if (conflict && feature) {
+        notify("Can't add this feature", `"${feature.name}" and "${conflict.name}" can't be enabled together.`);
+        return s;
+      }
+
+      const { featureIds: withDeps, added } = resolveDependencies(s.config.featureIds, id, features);
+      const next = withDeps.includes(id) ? withDeps : [...withDeps, id];
+      if (added.length > 0 && feature) {
+        notify(
+          "Feature added automatically",
+          `"${feature.name}" requires ${added.map((a) => `"${a.name}"`).join(", ")}. ${
+            added.length > 1 ? "They have" : "It has"
+          } been enabled automatically.`
+        );
+      }
+      return { config: { ...s.config, featureIds: next } };
     }),
 
   pruneFeatures: (validIds) =>

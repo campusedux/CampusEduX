@@ -72,6 +72,13 @@ export interface JobFilters {
   minSalaryLPA: number;
   maxSalaryLPA: number;
   sortBy: "relevance" | "latest" | "salary";
+  /**
+   * Free-text title search. Composed in at the call site (SearchJobsScreen)
+   * from its own local text-input state — never held in useJobFilterStore —
+   * so tapping "Reset" in the filter modal can't silently wipe search text
+   * the user can still see on the previous screen.
+   */
+  query?: string;
 }
 
 export const DEFAULT_JOB_FILTERS: JobFilters = {

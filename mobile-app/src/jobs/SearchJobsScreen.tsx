@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, Pressable, TextInput, FlatList } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState, EmptyState } from "@/components/ui";
 import { JobCard } from "@/components/cards";
-import { useSearchJobs, useToggleSavedJob, useSavedJobs } from "@/hooks/useJobs";
+import { useAllJobs, useToggleSavedJob, useSavedJobs } from "@/hooks/useJobs";
+import { useJobFilterStore } from "@/store/jobFilterStore";
 import type { JobStackParamList, Job } from "@/types";
 
 type Nav = NativeStackNavigationProp<JobStackParamList, "SearchJobs">;
@@ -14,9 +15,21 @@ type Rte = RouteProp<JobStackParamList, "SearchJobs">;
 export function SearchJobsScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Rte>();
-  const [query, setQuery] = useState(params?.initialQuery ?? "");
+  const [rawQuery, setRawQuery] = useState(params?.initialQuery ?? "");
+  const [query, setQuery] = useState(rawQuery);
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(rawQuery.trim()), 250);
+    return () => clearTimeout(t);
+  }, [rawQuery]);
 
-  const { data, isLoading, isError, refetch } = useSearchJobs(query);
+  const { filters } = useJobFilterStore();
+  // `query` is composed in here, never written to useJobFilterStore, so
+  // "Reset" in the filter modal can't silently wipe this text box.
+  const effectiveFilters = { ...filters, query };
+  const { data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useAllJobs(effectiveFilters);
+  const jobs = data?.pages.flatMap((p) => p.jobs) ?? [];
+
   const { data: saved } = useSavedJobs();
   const savedIds = new Set((saved ?? []).map((j) => j.id));
 
@@ -30,14 +43,14 @@ export function SearchJobsScreen() {
           <Ionicons name="search-outline" size={18} color="#9CA3AF" />
           <TextInput
             className="flex-1 mx-2 text-gray-900"
-            value={query}
-            onChangeText={setQuery}
+            value={rawQuery}
+            onChangeText={setRawQuery}
             placeholder="Search job title, skills or company"
             placeholderTextColor="#9CA3AF"
             autoFocus={!params?.initialQuery}
           />
-          {query.length > 0 && (
-            <Pressable onPress={() => setQuery("")} hitSlop={8}>
+          {rawQuery.length > 0 && (
+            <Pressable onPress={() => setRawQuery("")} hitSlop={8}>
               <Ionicons name="close-circle" size={18} color="#9CA3AF" />
             </Pressable>
           )}
@@ -47,20 +60,29 @@ export function SearchJobsScreen() {
         </Pressable>
       </View>
 
-      {query.trim().length > 1 && <Text className="text-gray-400 text-sm mb-3">{data?.length ?? 0} jobs found</Text>}
+      {!isLoading && !isError && jobs.length > 0 && (
+        <Text className="text-gray-400 text-sm mb-3">{jobs.length} jobs found</Text>
+      )}
 
-      {query.trim().length < 2 ? (
-        <EmptyState icon="search-outline" title="Search for a job" subtitle="Try a title, skill, or company name." />
-      ) : isLoading ? (
-        <LoadingState label="Searching..." />
+      {isLoading ? (
+        <LoadingState label="Loading jobs..." />
       ) : isError ? (
-        <ErrorState message="Search failed." onRetry={refetch} />
-      ) : !data || data.length === 0 ? (
-        <EmptyState title="No jobs found" subtitle={`Nothing matched "${query}"`} />
+        <ErrorState message="Couldn't load jobs." onRetry={refetch} />
+      ) : jobs.length === 0 ? (
+        <EmptyState
+          icon="search-outline"
+          title="No jobs found"
+          subtitle={query ? `Nothing matched "${query}"` : "Try a different filter."}
+        />
       ) : (
         <FlatList
-          data={data}
+          data={jobs}
           keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          onEndReached={() => hasNextPage && fetchNextPage()}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={isFetchingNextPage ? <LoadingState label="Loading more..." /> : null}
           renderItem={({ item }) => (
             <SearchJobItem job={item} isSaved={savedIds.has(item.id)} navigation={navigation} />
           )}

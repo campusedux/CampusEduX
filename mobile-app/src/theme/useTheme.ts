@@ -1,12 +1,11 @@
 import { useMemo } from "react";
-import { Platform, useColorScheme, useWindowDimensions, type ViewStyle } from "react-native";
+import { Platform, useColorScheme, useWindowDimensions, type TextStyle, type ViewStyle } from "react-native";
 import { useSettingsStore } from "@/store/settingsStore";
 import { getColors, type ThemeColors, type ThemeScheme } from "./colors";
 import { accentTokens, resolveCourseAccent, type AccentTokens } from "./courseAccents";
 import { gridColumns, isWide, LAYOUT } from "./spacing";
 import { buildTypography, type ReaderFontSize, type TypeVariant } from "./typography";
 import { useLearningFonts } from "./fonts";
-import type { TextStyle } from "react-native";
 
 export interface Theme {
   scheme: ThemeScheme;

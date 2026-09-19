@@ -26,32 +26,27 @@ const JOB_SELECT = "*, company:companies(name, logo_url)";
 const PAGE_SIZE = 20;
 
 /**
- * Returns `run()`'s rows, or the sample rows when the query fails.
- *
- * `fallbackWhenEmpty` (default true) keeps sample content for shared catalog
- * reads (job listings, companies). Pass `false` for per-user reads (saved jobs,
- * applications, uploaded résumés) where an empty result is correct for a new
- * student.
+ * Returns `run()`'s rows. A real empty result is always returned as-is (an
+ * honest empty state) — sample rows are a __DEV__-only stand-in for a genuine
+ * query failure, never for "no rows", and never in production (spec: no
+ * sample/fake data in production builds).
  */
-async function orSample<T>(
-  label: string,
-  run: () => Promise<T[]>,
-  sample: T[],
-  fallbackWhenEmpty = true
-): Promise<T[]> {
+async function orSample<T>(label: string, run: () => Promise<T[]>, sample: T[]): Promise<T[]> {
   try {
-    const rows = await run();
-    if (rows.length > 0) return rows;
-    return fallbackWhenEmpty ? sample : rows;
+    return await run();
   } catch (error) {
-    console.info(`[job.service] ${label}: using sample content (${(error as Error).message})`);
-    return sample;
+    if (__DEV__) {
+      console.info(`[job.service] ${label}: using sample content in dev (${(error as Error).message})`);
+      return sample;
+    }
+    throw error;
   }
 }
 
 function matchesJobFilters(j: Job, f: Partial<JobFilters>): boolean {
   if (f.jobType && f.jobType !== "All" && j.jobType !== f.jobType) return false;
   if (f.location && !j.location.toLowerCase().includes(f.location.toLowerCase())) return false;
+  if (f.query?.trim() && !j.title.toLowerCase().includes(f.query.trim().toLowerCase())) return false;
   return true;
 }
 
@@ -106,10 +101,14 @@ function stageStatusOrder(status: ApplicationStage["status"]) {
   return { completed: 0, in_progress: 1, pending: 2 }[status];
 }
 
-function applyFilters(query: any, filters: Partial<JobFilters>) {
-  let q = query;
+function applyFilters(builder: any, filters: Partial<JobFilters>) {
+  let q = builder;
+  if (filters.query?.trim()) q = q.ilike("title", `%${filters.query.trim()}%`);
   if (filters.jobType && filters.jobType !== "All") q = q.eq("job_type", filters.jobType);
   if (filters.location) q = q.ilike("location", `%${filters.location}%`);
+  // `experience` is freeform text (e.g. "2-4 years"), not a structured range —
+  // best-effort substring match, same tier of precision as `location` above.
+  if (filters.experience) q = q.ilike("experience", `%${filters.experience}%`);
   if (typeof filters.minSalaryLPA === "number" && filters.minSalaryLPA > 0) q = q.gte("salary_min_lpa", filters.minSalaryLPA);
   if (typeof filters.maxSalaryLPA === "number" && filters.maxSalaryLPA < 50) q = q.lte("salary_max_lpa", filters.maxSalaryLPA);
 
@@ -143,26 +142,13 @@ export const jobService = {
       // sample jobs (spec §18). Sample stays only for a genuine query failure.
       return { jobs, hasMore: jobs.length === PAGE_SIZE };
     } catch (error) {
-      console.info(`[job.service] getAllJobs: using sample content (${(error as Error).message})`);
-      const jobs = page === 0 ? SAMPLE_JOBS.filter((j) => matchesJobFilters(j, filters)) : [];
-      return { jobs, hasMore: false };
+      if (__DEV__) {
+        console.info(`[job.service] getAllJobs: using sample content in dev (${(error as Error).message})`);
+        const jobs = page === 0 ? SAMPLE_JOBS.filter((j) => matchesJobFilters(j, filters)) : [];
+        return { jobs, hasMore: false };
+      }
+      throw error;
     }
-  },
-
-  async searchJobs(query: string): Promise<Job[]> {
-    return orSample(
-      "searchJobs",
-      async () => {
-        const { data, error } = await supabase.from("jobs").select(JOB_SELECT).ilike("title", `%${query}%`).limit(30);
-        if (error) throw new Error(error.message);
-        return (data ?? []).map(mapJobRow);
-      },
-      SAMPLE_JOBS.filter(
-        (j) =>
-          j.title.toLowerCase().includes(query.trim().toLowerCase()) ||
-          j.companyName.toLowerCase().includes(query.trim().toLowerCase())
-      )
-    );
   },
 
   async getRecommendedJobs(userId: string, limit = 15): Promise<Job[]> {
@@ -192,13 +178,17 @@ export const jobService = {
       if (res.error) throw new Error(res.error.message);
       data = res.data;
     } catch (error) {
-      console.info(`[job.service] getRecommendedJobs: using sample content (${(error as Error).message})`);
-      return SAMPLE_JOBS.slice(0, limit);
+      if (__DEV__) {
+        console.info(`[job.service] getRecommendedJobs: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_JOBS.slice(0, limit);
+      }
+      throw error;
     }
 
     const ordered = academic ? rankByAcademicRelevance(data ?? [], academic) : data ?? [];
-    const jobs = ordered.slice(0, limit).map(mapJobRow);
-    return jobs.length > 0 ? jobs : SAMPLE_JOBS.slice(0, limit);
+    // An empty result is a real answer (no jobs match this student's course/
+    // branch/year yet) — show it honestly, never unrelated sample jobs.
+    return ordered.slice(0, limit).map(mapJobRow);
   },
 
   async getCompanies(query = ""): Promise<Company[]> {
@@ -223,8 +213,11 @@ export const jobService = {
       if (error || !data) throw new Error("Company not found.");
       return mapCompanyRow(data);
     } catch (error) {
-      console.info(`[job.service] getCompanyDetails: using sample content (${(error as Error).message})`);
-      return SAMPLE_COMPANIES.find((c) => c.id === companyId) ?? SAMPLE_COMPANIES[0];
+      if (__DEV__) {
+        console.info(`[job.service] getCompanyDetails: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_COMPANIES.find((c) => c.id === companyId) ?? SAMPLE_COMPANIES[0];
+      }
+      throw error;
     }
   },
 
@@ -255,8 +248,11 @@ export const jobService = {
       if (res.error || !res.data) throw new Error("Job not found.");
       row = res.data;
     } catch (error) {
-      console.info(`[job.service] getJobDetail: using sample content (${(error as Error).message})`);
-      return sampleJobDetail(jobId);
+      if (__DEV__) {
+        console.info(`[job.service] getJobDetail: using sample content in dev (${(error as Error).message})`);
+        return sampleJobDetail(jobId);
+      }
+      throw error;
     }
 
     let isSaved = false;
@@ -293,8 +289,11 @@ export const jobService = {
       if (error || !data?.recruiter) throw new Error("Recruiter details not available for this job.");
       return mapRecruiterRow(data.recruiter);
     } catch (error) {
-      console.info(`[job.service] getRecruiterForJob: using sample content (${(error as Error).message})`);
-      return sampleRecruiter(jobId);
+      if (__DEV__) {
+        console.info(`[job.service] getRecruiterForJob: using sample content in dev (${(error as Error).message})`);
+        return sampleRecruiter(jobId);
+      }
+      throw error;
     }
   },
 
@@ -321,8 +320,7 @@ export const jobService = {
         if (error) throw new Error(error.message);
         return (data ?? []).map((row: any) => mapJobRow(row.job));
       },
-      sampleSavedJobs(),
-      false
+      sampleSavedJobs()
     );
   },
 
@@ -343,8 +341,7 @@ export const jobService = {
           uploadedAt: row.uploaded_at,
         }));
       },
-      sampleResumes(),
-      false
+      sampleResumes()
     );
   },
 
@@ -414,8 +411,7 @@ export const jobService = {
           stages: [] as ApplicationStage[],
         }));
       },
-      sampleAppliedJobs(),
-      false
+      sampleAppliedJobs()
     );
   },
 
@@ -443,8 +439,11 @@ export const jobService = {
           .sort((a: ApplicationStage, b: ApplicationStage) => stageStatusOrder(a.status) - stageStatusOrder(b.status)),
       };
     } catch (error) {
-      console.info(`[job.service] getApplicationDetail: using sample content (${(error as Error).message})`);
-      return sampleApplicationDetail(applicationId);
+      if (__DEV__) {
+        console.info(`[job.service] getApplicationDetail: using sample content in dev (${(error as Error).message})`);
+        return sampleApplicationDetail(applicationId);
+      }
+      throw error;
     }
   },
 
@@ -464,8 +463,11 @@ export const jobService = {
         jobType: data.job_type ?? "All",
       };
     } catch (error) {
-      console.info(`[job.service] getJobAlertPreferences: using sample content (${(error as Error).message})`);
-      return SAMPLE_JOB_ALERT_PREFS;
+      if (__DEV__) {
+        console.info(`[job.service] getJobAlertPreferences: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_JOB_ALERT_PREFS;
+      }
+      throw error;
     }
   },
 

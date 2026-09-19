@@ -1,6 +1,6 @@
 import { AMOLED_COLORS, DARK_COLORS, LIGHT_COLORS, type ThemeColors } from "@/theme/colors";
-import { contrast, ensureContrast } from "@/theme/colorUtils";
-import { COURSE_ACCENTS, accentTokens, courseKeyFor, resolveCourseAccent, type CourseKey } from "@/theme/courseAccents";
+import { contrast, darken, ensureContrast } from "@/theme/colorUtils";
+import { COURSE_ACCENTS, GRADIENT_SCRIM_OPACITY, accentTokens, courseKeyFor, resolveCourseAccent, type CourseKey } from "@/theme/courseAccents";
 import { gridColumns } from "@/theme/spacing";
 import { typeStyle } from "@/theme/typography";
 
@@ -50,6 +50,12 @@ describe("course accents", () => {
     expect(contrast(a.text.light, LIGHT_COLORS.canvas)).toBeGreaterThanOrEqual(AA);
     expect(contrast(a.text.dark, DARK_COLORS.surface)).toBeGreaterThanOrEqual(AA);
     expect(contrast(a.text.dark, AMOLED_COLORS.bg)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it.each(keys)("%s: small white text is AA on the scrimmed gradient", (k) => {
+    for (const stop of COURSE_ACCENTS[k].gradient) {
+      expect(contrast("#FFFFFF", darken(stop, GRADIENT_SCRIM_OPACITY))).toBeGreaterThanOrEqual(AA);
+    }
   });
 
   it("maps the five known courses", () => {

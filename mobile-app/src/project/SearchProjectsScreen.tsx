@@ -55,7 +55,7 @@ export function SearchProjectsScreen() {
       ) : isError ? (
         <ErrorState message="Search failed." onRetry={refetch} />
       ) : !data || data.length === 0 ? (
-        <EmptyState title="No projects found" subtitle={`Nothing matched "${query}"`} />
+        <EmptyState icon="search-outline" title={`No results for "${query.trim()}"`} subtitle="Try a different spelling or a shorter keyword." />
       ) : (
         <FlatList
           data={data}

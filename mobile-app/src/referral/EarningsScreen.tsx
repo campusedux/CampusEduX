@@ -38,10 +38,12 @@ export function EarningsScreen() {
                 <Text className="text-white font-bold">{data.totalReferrals}</Text>
                 <Text className="text-indigo-100 text-xs mt-0.5">Total Referrals</Text>
               </View>
-              <View>
-                <Text className="text-white font-bold">₹{data.pendingEarnings.toLocaleString()}</Text>
-                <Text className="text-indigo-100 text-xs mt-0.5">Pending Earnings</Text>
-              </View>
+              {data.pendingEarnings != null ? (
+                <View>
+                  <Text className="text-white font-bold">₹{data.pendingEarnings.toLocaleString()}</Text>
+                  <Text className="text-indigo-100 text-xs mt-0.5">Pending Earnings</Text>
+                </View>
+              ) : null}
             </View>
           </View>
 

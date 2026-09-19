@@ -13,7 +13,7 @@ export function NewArrivalScreen() {
         title: "New & Fresh",
         subtitle: "Projects Just For You!",
         icon: "sparkles-outline",
-        color: "#EC4899",
+        accent: "rose",
       }}
       emptyLabel="No new arrivals yet"
     />

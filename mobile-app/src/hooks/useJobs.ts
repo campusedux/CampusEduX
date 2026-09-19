@@ -8,7 +8,6 @@ import type { JobFilters, JobAlertPreferences } from "@/types";
 
 export const jobQueryKeys = {
   all: (filters: Partial<JobFilters>, academic = "") => ["jobs", "all", academic, filters] as const,
-  search: (query: string) => ["jobs", "search", query] as const,
   recommended: (academic = "") => ["jobs", "recommended", academic] as const,
   companies: (query: string) => ["companies", query] as const,
   companyDetail: (companyId: string) => ["companies", "detail", companyId] as const,
@@ -31,9 +30,6 @@ export const useAllJobs = (filters: Partial<JobFilters>) => {
     initialPageParam: 0,
   });
 };
-
-export const useSearchJobs = (query: string) =>
-  useQuery({ queryKey: jobQueryKeys.search(query), queryFn: () => jobService.searchJobs(query), enabled: query.trim().length > 1 });
 
 export const useRecommendedJobs = () => {
   const user = useAuthStore((s) => s.user);

@@ -20,14 +20,20 @@ function mapPlanRow(row: any): PremiumPlan {
 
 export const premiumService = {
   async getPlans(): Promise<PremiumPlan[]> {
+    // An empty catalog is a real, honest state — never substitute sample
+    // plans a real "Subscribe" tap could pass to create-premium-order as a
+    // non-existent planId. Sample data is a __DEV__-only stand-in for a
+    // genuine query failure.
     try {
       const { data, error } = await supabase.from("premium_plans").select("*").order("sort_order", { ascending: true });
       if (error) throw new Error(error.message);
-      const rows = (data ?? []).map(mapPlanRow);
-      return rows.length > 0 ? rows : SAMPLE_PREMIUM_PLANS;
+      return (data ?? []).map(mapPlanRow);
     } catch (error) {
-      console.info(`[premium.service] getPlans: using sample content (${(error as Error).message})`);
-      return SAMPLE_PREMIUM_PLANS;
+      if (__DEV__) {
+        console.info(`[premium.service] getPlans: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_PREMIUM_PLANS;
+      }
+      throw error;
     }
   },
 
@@ -35,11 +41,13 @@ export const premiumService = {
     try {
       const { data, error } = await supabase.from("premium_features").select("*").order("sort_order", { ascending: true });
       if (error) throw new Error(error.message);
-      const rows = (data ?? []).map((row) => ({ id: row.id, icon: row.icon, title: row.title, subtitle: row.subtitle }));
-      return rows.length > 0 ? rows : SAMPLE_PREMIUM_FEATURES;
+      return (data ?? []).map((row) => ({ id: row.id, icon: row.icon, title: row.title, subtitle: row.subtitle }));
     } catch (error) {
-      console.info(`[premium.service] getFeatures: using sample content (${(error as Error).message})`);
-      return SAMPLE_PREMIUM_FEATURES;
+      if (__DEV__) {
+        console.info(`[premium.service] getFeatures: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_PREMIUM_FEATURES;
+      }
+      throw error;
     }
   },
 

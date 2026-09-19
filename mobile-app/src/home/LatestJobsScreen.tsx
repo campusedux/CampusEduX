@@ -1,9 +1,9 @@
 import React from "react";
-import { View, Text, Pressable, FlatList } from "react-native";
+import { View, Text, FlatList } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, LoadingState, ErrorState, EmptyState } from "@/components/ui";
+import { Screen, ScreenHeader, Card, SkeletonList, ErrorState, EmptyState } from "@/components/ui";
 import { JobCard } from "@/components/cards";
 import { useLatestJobs } from "@/hooks/useHomeData";
 import type { HomeStackParamList } from "@/types";
@@ -13,41 +13,41 @@ type Nav = NativeStackNavigationProp<HomeStackParamList, "LatestJobs">;
 export function LatestJobsScreen() {
   const navigation = useNavigation<Nav>();
   const { data, isLoading, isError, refetch } = useLatestJobs();
+  const count = data?.length ?? 0;
 
   return (
     <Screen className="px-6">
-      <View className="flex-row items-center justify-between mt-2 mb-4">
-        <View className="flex-row items-center">
-          <Pressable onPress={() => navigation.goBack()} className="mr-3">
-            <Ionicons name="arrow-back" size={22} color="#111827" />
-          </Pressable>
-          <Text className="text-lg font-bold text-gray-900">Latest Jobs</Text>
-        </View>
-        <Pressable>
-          <Text className="text-primary text-sm font-medium">View All</Text>
-        </Pressable>
-      </View>
+      <ScreenHeader
+        title="Latest Jobs"
+        subtitle={count > 0 ? `${count} opening${count === 1 ? "" : "s"}` : undefined}
+        onBack={() => navigation.goBack()}
+      />
 
       {isLoading ? (
-        <LoadingState label="Loading jobs..." />
+        <SkeletonList count={4} hero />
       ) : isError ? (
         <ErrorState message="Couldn't load jobs." onRetry={refetch} />
       ) : !data || data.length === 0 ? (
-        <EmptyState icon="briefcase-outline" title="No jobs available right now" />
+        <EmptyState icon="briefcase-outline" accent="blue" title="No jobs available right now" subtitle="New openings will show up here." />
       ) : (
         <FlatList
           data={data}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
           ListHeaderComponent={
-            <View className="flex-row items-center rounded-2xl p-4 mb-4" style={{ backgroundColor: "#4F39F6" }}>
-              <View className="flex-1 pr-3">
-                <Text className="text-white font-bold text-base mb-1">Find Your Dream Job</Text>
-                <Text className="text-white/80 text-xs">Apply to top companies</Text>
-              </View>
-              <View className="w-12 h-12 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(255,255,255,0.18)" }}>
-                <Ionicons name="briefcase-outline" size={24} color="#FFFFFF" />
-              </View>
+            <View style={{ marginBottom: 16 }}>
+              <Card variant="gradient" accent="blue" padding={18}>
+                <View className="flex-row items-center">
+                  <View className="flex-1 pr-3">
+                    <Text className="text-white font-bold text-lg mb-1">Find Your Dream Job</Text>
+                    <Text className="text-white/90 text-sm">Apply to top companies</Text>
+                  </View>
+                  <View className="w-14 h-14 rounded-2xl items-center justify-center" style={{ backgroundColor: "rgba(255,255,255,0.2)" }}>
+                    <Ionicons name="briefcase-outline" size={28} color="#FFFFFF" />
+                  </View>
+                </View>
+              </Card>
             </View>
           }
           renderItem={({ item }) => (

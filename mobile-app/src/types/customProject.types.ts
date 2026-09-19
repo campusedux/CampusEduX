@@ -99,6 +99,8 @@ export interface CustomFeature {
   /** Optional — populated from the admin Feature Catalog (migration 0034). */
   level?: CustomFeatureLevel;
   dependencies?: string[];
+  /** Mutually-exclusive feature ids (migration 0090). Symmetric — checked both ways. */
+  conflicts?: string[];
   icon?: string | null;
   imageUrl?: string | null;
 }

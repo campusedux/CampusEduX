@@ -116,10 +116,17 @@ export const myProjectsService = {
           };
         })
       );
-      return rows.length > 0 ? rows : sampleProjectFiles(projectId, category);
+      // An empty result is real (no files uploaded for this category yet).
+      // A genuine error — including an RLS denial from the purchase-ownership
+      // check (migration 0100) — must surface as an error, never be masked by
+      // fake file entries a real purchaser could "download" and get nothing.
+      return rows;
     } catch (error) {
-      console.info(`[myProjects.service] getProjectFiles: using sample content (${(error as Error).message})`);
-      return sampleProjectFiles(projectId, category);
+      if (__DEV__) {
+        console.info(`[myProjects.service] getProjectFiles: using sample content in dev (${(error as Error).message})`);
+        return sampleProjectFiles(projectId, category);
+      }
+      throw error;
     }
   },
 
@@ -138,23 +145,23 @@ export const myProjectsService = {
         sizeMB: row.size_mb,
         changelog: row.changelog ?? [],
       }));
-      return rows.length > 0 ? rows : sampleVersionHistory();
+      return rows;
     } catch (error) {
-      console.info(`[myProjects.service] getVersionHistory: using sample content (${(error as Error).message})`);
-      return sampleVersionHistory();
+      if (__DEV__) {
+        console.info(`[myProjects.service] getVersionHistory: using sample content in dev (${(error as Error).message})`);
+        return sampleVersionHistory();
+      }
+      throw error;
     }
   },
 
   async markVersionUpdated(orderId: string, userId: string, newVersion: string): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from("purchases")
-        .update({ purchased_version: newVersion })
-        .eq("id", orderId)
-        .eq("user_id", userId);
-      if (error) throw new Error(error.message);
-    } catch (error) {
-      console.info(`[myProjects.service] markVersionUpdated: not persisted (${(error as Error).message})`);
-    }
+    // A user-triggered write: surface failures instead of pretending it worked.
+    const { error } = await supabase
+      .from("purchases")
+      .update({ purchased_version: newVersion })
+      .eq("id", orderId)
+      .eq("user_id", userId);
+    if (error) throw new Error(`Couldn't mark this project as updated: ${error.message}`);
   },
 };

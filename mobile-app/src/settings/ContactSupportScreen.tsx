@@ -4,6 +4,7 @@ import { notify } from "@/lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button } from "@/components/ui";
+import { BRAND } from "@/constants/brand";
 
 export function ContactSupportScreen() {
   const navigation = useNavigation();
@@ -15,7 +16,7 @@ export function ContactSupportScreen() {
       notify("Add a message", "Please describe your issue before submitting.");
       return;
     }
-    const url = `mailto:support@campusedux.app?subject=${encodeURIComponent(
+    const url = `mailto:${BRAND.supportEmail}?subject=${encodeURIComponent(
       "App feedback"
     )}&body=${encodeURIComponent(ticketText.trim())}`;
     try {
@@ -23,7 +24,7 @@ export function ContactSupportScreen() {
       setTicketVisible(false);
       setTicketText("");
     } catch {
-      notify("Couldn't open mail app", "Email us directly at support@campusedux.app.");
+      notify("Couldn't open mail app", `Email us directly at ${BRAND.supportEmail}.`);
     }
   };
 
@@ -46,12 +47,12 @@ export function ContactSupportScreen() {
 
       <Text className="text-gray-400 text-sm mb-3">How can we help you?</Text>
 
-      <Pressable onPress={() => Linking.openURL("mailto:support@campusedux.app")} className="flex-row items-center justify-between border border-gray-100 rounded-2xl p-4 mb-3">
+      <Pressable onPress={() => Linking.openURL(`mailto:${BRAND.supportEmail}`)} className="flex-row items-center justify-between border border-gray-100 rounded-2xl p-4 mb-3">
         <View className="flex-row items-center flex-1">
           <Ionicons name="mail-outline" size={20} color="#4F39F6" />
           <View className="ml-3 flex-1">
             <Text className="font-semibold text-gray-900">Email Us</Text>
-            <Text className="text-gray-400 text-sm mt-0.5">support@campusedux.app</Text>
+            <Text className="text-gray-400 text-sm mt-0.5">{BRAND.supportEmail}</Text>
           </View>
         </View>
         <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />

@@ -85,6 +85,14 @@ export function courseKeyFor(input: { slug?: string | null; name?: string | null
   return RULES.find((r) => r.re.test(hay))?.key ?? null;
 }
 
+/**
+ * Black scrim laid over every course gradient so SMALL white text on it is AA
+ * (≥ 4.5:1) at both gradient stops (verified in tests/unit/theme). Without it
+ * only large/bold text clears 3:1 on the lightest stops (e.g. Java orange).
+ */
+export const GRADIENT_SCRIM = "rgba(0,0,0,0.16)";
+export const GRADIENT_SCRIM_OPACITY = 0.16;
+
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 /** Build an accent from an arbitrary admin-supplied hex (future courses). */

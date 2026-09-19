@@ -18,15 +18,18 @@ function rewardPhrase(rule: ReferralRewardRule): string {
     : `${rule.bonusValue}% of their first order`;
 }
 
-function howItWorks(rule: ReferralRewardRule) {
+function howItWorks(rule: ReferralRewardRule | null) {
+  // Rule unknown (reward_settings unreadable): describe the flow with no amount and no timing claim.
   return [
     { step: 1, text: "Share your referral code or link with your friends" },
     { step: 2, text: "Your friend signs up using your link or code" },
     {
       step: 3,
-      text: rule.rewardOnSignup
-        ? `You instantly earn ${rewardPhrase(rule)} — no purchase needed`
-        : `When your friend makes their first purchase, you earn ${rewardPhrase(rule)}`,
+      text: !rule
+        ? "You earn a reward according to the current referral rules"
+        : rule.rewardOnSignup
+          ? `You instantly earn ${rewardPhrase(rule)} — no purchase needed`
+          : `When your friend makes their first purchase, you earn ${rewardPhrase(rule)}`,
     },
     { step: 4, text: "The reward is credited to your wallet balance" },
   ];
@@ -57,17 +60,23 @@ export function ReferralDashboardScreen() {
           <View className="rounded-2xl p-5 mb-4" style={{ backgroundColor: "#4F39F6" }}>
             <Text className="text-white font-bold text-lg mb-1">Refer & Earn</Text>
             <Text className="text-indigo-100 text-sm">
-              {data.rewardRule.bonusType === "flat"
-                ? `Earn ₹${data.rewardRule.bonusValue} for every friend who joins and buys`
-                : `Earn ${data.rewardRule.bonusValue}% of your friend's first order`}
+              {!data.rewardRule
+                ? "Share your referral code and invite friends"
+                : data.rewardRule.bonusType === "flat"
+                  ? `Earn ₹${data.rewardRule.bonusValue} for every friend who joins and buys`
+                  : `Earn ${data.rewardRule.bonusValue}% of your friend's first order`}
             </Text>
           </View>
 
-          <View className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 mb-6">
-            <Text className="text-[13px] leading-5 text-indigo-900">
-              {describeRewardRule(data.rewardRule)}
-            </Text>
-          </View>
+          {data.rewardRule ? (
+            <View className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 mb-6">
+              <Text className="text-[13px] leading-5 text-indigo-900">
+                {describeRewardRule(data.rewardRule)}
+              </Text>
+            </View>
+          ) : (
+            <View className="mb-6" />
+          )}
 
           <Text className="text-gray-500 text-sm mb-2">Your Referral Code</Text>
           <View className="flex-row items-center mb-6" style={{ gap: 10 }}>
@@ -84,7 +93,7 @@ export function ReferralDashboardScreen() {
             <Stat value={data.successfulReferrals} label="Successful" />
             <Stat value={data.pendingReferrals} label="Pending" />
             <Stat value={`₹${data.totalEarned}`} label="Total Earned" />
-            <Stat value={`₹${data.pendingRewards}`} label="Pending Rewards" />
+            {data.pendingRewards != null ? <Stat value={`₹${data.pendingRewards}`} label="Pending Rewards" /> : null}
             {data.cancelledReferrals > 0 ? (
               <Stat value={data.cancelledReferrals} label="Cancelled" />
             ) : null}
