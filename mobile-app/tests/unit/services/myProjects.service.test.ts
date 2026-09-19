@@ -90,7 +90,7 @@ describe("myProjectsService.getOwnedProjectDetail", () => {
 });
 
 describe("myProjectsService.getProjectFiles", () => {
-  it("maps file rows and builds storage URLs", async () => {
+  it("maps file rows and builds signed storage URLs", async () => {
     setTableResult("project_files", {
       data: [{ id: "f1", project_id: "pr-1", category: "main", label: "Source", file_name: "src.zip", size_mb: 4.2, storage_path: "pr-1/src.zip" }],
     });
@@ -98,7 +98,7 @@ describe("myProjectsService.getProjectFiles", () => {
     const files = await myProjectsService.getProjectFiles("pr-1", "main");
 
     expect(files[0]).toEqual(
-      expect.objectContaining({ id: "f1", fileName: "src.zip", sizeMB: 4.2, url: "https://cdn.test/pr-1/src.zip" })
+      expect.objectContaining({ id: "f1", fileName: "src.zip", sizeMB: 4.2, url: "https://cdn.test/signed/pr-1/src.zip" })
     );
   });
 
@@ -126,8 +126,10 @@ describe("myProjectsService.getVersionHistory", () => {
 });
 
 describe("myProjectsService.markVersionUpdated", () => {
-  it("does not throw when the write cannot be persisted", async () => {
+  it("throws instead of silently dropping the write when it fails (a mutation must surface failure)", async () => {
     setTableResult("purchases", { error: { message: "no table" } });
-    await expect(myProjectsService.markVersionUpdated("ord-1", "u-1", "1.2")).resolves.toBeUndefined();
+    await expect(myProjectsService.markVersionUpdated("ord-1", "u-1", "1.2")).rejects.toThrow(
+      "Couldn't mark this project as updated: no table"
+    );
   });
 });
