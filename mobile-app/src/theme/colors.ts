@@ -38,6 +38,9 @@ export interface ThemeColors {
   textOnAccent: string;
   // brand
   primary: string;
+  /** Background of FILLED primary controls (active chip, Retry, selected size). White text on it is AA in every scheme. */
+  primaryFill: string;
+  textOnPrimary: string;
   primaryText: string;
   primarySoft: string;
   link: string;
@@ -105,6 +108,8 @@ export const LIGHT_COLORS: ThemeColors = {
   textMuted: "#5F6B7A",
   textOnAccent: "#FFFFFF",
   primary: "#4F46E5",
+  primaryFill: "#4F46E5",
+  textOnPrimary: "#FFFFFF",
   primaryText: "#4338CA",
   primarySoft: "#EEF0FF",
   link: "#4338CA",
@@ -112,15 +117,15 @@ export const LIGHT_COLORS: ThemeColors = {
   successSoft: "#DCFCE7",
   danger: "#B91C1C",
   dangerSoft: "#FEE2E2",
-  warning: "#B45309",
+  warning: "#92400E",
   inlineCodeBg: "#EEF0FF",
   inlineCodeText: "#4338CA",
   ...CODE,
   callout: {
     definition: { bg: "#EEF2FF", border: "#6366F1", label: "#4338CA" },
     why: { bg: "#EFF6FF", border: "#3B82F6", label: "#1D4ED8" },
-    example: { bg: "#ECFDF5", border: "#10B981", label: "#047857" },
-    warning: { bg: "#FFFBEB", border: "#F59E0B", label: "#92400E" },
+    example: { bg: "#ECFDF5", border: "#059669", label: "#047857" },
+    warning: { bg: "#FFFBEB", border: "#B45309", label: "#92400E" },
     key: { bg: "#F5F3FF", border: "#8B5CF6", label: "#6D28D9" },
   },
   skeleton: "#E9ECF3",
@@ -145,6 +150,8 @@ export const DARK_COLORS: ThemeColors = {
   textMuted: "#98A2B3",
   textOnAccent: "#FFFFFF",
   primary: "#818CF8",
+  primaryFill: "#5B52F0",
+  textOnPrimary: "#FFFFFF",
   primaryText: "#A5B4FC",
   primarySoft: alpha("#818CF8", 0.16),
   link: "#A5B4FC",

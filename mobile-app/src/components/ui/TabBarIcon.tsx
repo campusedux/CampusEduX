@@ -5,7 +5,7 @@ import { COLORS } from "@/constants/theme";
 import { PressableScale } from "./PressableScale";
 
 /** Tab icon with a soft pill behind it that fades/scales in when the tab is active. */
-export function TabBarIcon({ name, focused, color }: { name: keyof typeof Ionicons.glyphMap; focused: boolean; color: string }) {
+export function TabBarIcon({ name, focused, color, pillColor = COLORS.primaryLight }: { name: keyof typeof Ionicons.glyphMap; focused: boolean; color: string; pillColor?: string }) {
   const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
   useEffect(() => {
     Animated.timing(progress, { toValue: focused ? 1 : 0, duration: 180, useNativeDriver: true }).start();
@@ -19,7 +19,7 @@ export function TabBarIcon({ name, focused, color }: { name: keyof typeof Ionico
           width: 56,
           height: 30,
           borderRadius: 15,
-          backgroundColor: COLORS.primaryLight,
+          backgroundColor: pillColor,
           opacity: progress,
           transform: [{ scaleX: progress.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
         }}

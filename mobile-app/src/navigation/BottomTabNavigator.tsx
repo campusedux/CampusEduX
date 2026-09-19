@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { TabBarIcon, TabBarButton } from "@/components/ui/TabBarIcon";
 import { COLORS } from "@/constants/theme";
+import { DARK_MODE_SCOPE, useSchemeColors } from "@/theme";
 import { HomeNavigator } from "./HomeNavigator";
 import { ProjectNavigator } from "./ProjectNavigator";
 import { JobNavigator } from "./JobNavigator";
@@ -55,28 +56,48 @@ const resetTabOnPress: React.ComponentProps<typeof Tab.Screen>["listeners"] = ({
  * published grid (Grid → Section → Topic → Content).
  */
 export function BottomTabNavigator() {
+  const { colors, isDark } = useSchemeColors();
+
+  // The bar takes its style from the FOCUSED tab. Under the "learning" dark scope only the Learning tab ("Prep")
+  // is dark-ready, so the bar goes dark there and stays light over the not-yet-migrated tabs. Light mode: unchanged.
+  const barIsDark = (focusedRoute: string) => isDark && (DARK_MODE_SCOPE === "all" || focusedRoute === "Prep");
+
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "700", marginTop: 2 },
-        tabBarAllowFontScaling: false,
-        tabBarHideOnKeyboard: true,
-        tabBarStyle: {
-          backgroundColor: COLORS.white,
-          borderTopWidth: 0,
-          paddingTop: 6,
-          shadowColor: "#0F172A",
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.06,
-          shadowRadius: 12,
-          elevation: 12,
-        },
-        tabBarButton: (props) => <TabBarButton {...props} />,
-        tabBarIcon: ({ color, focused }) => <TabBarIcon name={ICONS[route.name]} focused={focused} color={color} />,
-      })}
+      screenOptions={({ route, navigation }) => {
+        let focused: string = route.name;
+        try {
+          const st = navigation.getState();
+          focused = st.routes[st.index]?.name ?? route.name;
+        } catch {
+          /* fall back to this route */
+        }
+        const dark = barIsDark(focused);
+        return {
+          headerShown: false,
+          tabBarActiveTintColor: dark ? colors.primary : COLORS.primary,
+          tabBarInactiveTintColor: dark ? colors.textMuted : COLORS.textMuted,
+          tabBarLabelStyle: { fontSize: 11, fontWeight: "700", marginTop: 2 },
+          tabBarAllowFontScaling: false,
+          tabBarHideOnKeyboard: true,
+          tabBarStyle: dark
+            ? { backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, elevation: 0, shadowOpacity: 0 }
+            : {
+                backgroundColor: COLORS.white,
+                borderTopWidth: 0,
+                paddingTop: 6,
+                shadowColor: "#0F172A",
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.06,
+                shadowRadius: 12,
+                elevation: 12,
+              },
+          tabBarButton: (props) => <TabBarButton {...props} />,
+          tabBarIcon: ({ color, focused: isFocused }) => (
+            <TabBarIcon name={ICONS[route.name]} focused={isFocused} color={color} pillColor={dark ? colors.primarySoft : undefined} />
+          ),
+        };
+      }}
     >
       <Tab.Screen name="Home" component={HomeNavigator} listeners={resetTabOnPress} />
       <Tab.Screen name="Projects" component={ProjectNavigator} listeners={resetTabOnPress} />

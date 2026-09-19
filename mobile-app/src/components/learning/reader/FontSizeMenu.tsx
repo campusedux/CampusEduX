@@ -56,13 +56,13 @@ export function FontSizeMenu({ open, size, onSelect, onClose, top }: { open: boo
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 2,
-                  backgroundColor: on ? colors.primary : pressed ? colors.surfacePressed : colors.canvas,
+                  backgroundColor: on ? colors.primaryFill : pressed ? colors.surfacePressed : colors.canvas,
                   borderWidth: 1,
-                  borderColor: on ? colors.primary : colors.border,
+                  borderColor: on ? colors.primaryFill : colors.border,
                 })}
               >
-                <Text style={{ fontFamily: type.title.fontFamily, fontSize: o.sample, color: on ? colors.textOnAccent : colors.text }}>Aa</Text>
-                <Text style={[type.caption, { color: on ? colors.textOnAccent : colors.textSecondary }]}>{o.label}</Text>
+                <Text style={{ fontFamily: type.title.fontFamily, fontSize: o.sample, color: on ? colors.textOnPrimary : colors.text }}>Aa</Text>
+                <Text style={[type.caption, { color: on ? colors.textOnPrimary : colors.textSecondary }]}>{o.label}</Text>
               </Pressable>
             );
           })}

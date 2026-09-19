@@ -9,7 +9,7 @@ import { CourseCard } from "@/components/learning/CourseCard";
 import { FadeInUp } from "@/components/learning/FadeInUp";
 import { LearningHomeSkeleton, Skeleton } from "@/components/learning/LearningSkeleton";
 import { LearningScreen, PageContainer } from "@/components/learning/LearningScreen";
-import { StateBlock } from "@/components/learning/LearningStates";
+import { EmptyBlock, ErrorBlock } from "@/components/learning/LearningStates";
 import { LearningSearchBar } from "@/components/learning/LearningSearchBar";
 import { SearchResults } from "@/components/learning/SearchResults";
 import { StreakPill } from "@/components/learning/StreakPill";
@@ -18,7 +18,7 @@ import { useLearningGrids } from "@/hooks/useLearning";
 import { firstName, matchesCourseFilter, type CourseFilter } from "@/learning/learningFormat";
 import { useCompletedByGrid, useStreak } from "@/learning/progress/progressStore";
 import { useAuthStore } from "@/store/authStore";
-import { LAYOUT, RADII, SPACE, useTheme } from "@/theme";
+import { RADII, SPACE, gridCardWidth, useTheme } from "@/theme";
 import type { LearningGridCard, LearningSearchHit, PlacementStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<PlacementStackParamList, "PlacementHome">;
@@ -70,8 +70,7 @@ export function PlacementHomeScreen() {
   const visible = data.filter((g) => matchesCourseFilter(filter, completedByGrid[g.slug] ?? 0, g.topic_count));
 
   const gap = wide ? SPACE[4] : SPACE[3];
-  const inner = Math.min(width, LAYOUT.pageMaxWidth) - gutter * 2;
-  const cardWidth = Math.floor((inner - gap * (columns - 1)) / columns);
+  const cardWidth = gridCardWidth(width, gutter, columns, gap);
 
   const filterEmpty: Record<Exclude<CourseFilter, "all" | "bookmarked">, { emoji: string; title: string; message: string }> = {
     "in-progress": { emoji: "📖", title: "Nothing in progress", message: "Open any course and finish a topic — it will show up here." },
@@ -88,11 +87,11 @@ export function PlacementHomeScreen() {
   } else if (grids.isLoading) {
     body = <LearningHomeSkeleton cardWidth={cardWidth} count={columns * 2} />;
   } else if (grids.isError) {
-    body = <StateBlock tone="error" emoji="😕" title="Couldn't load courses" message="Check your connection and try again." actionLabel="Retry" onAction={() => grids.refetch()} />;
+    body = <ErrorBlock what="courses" onRetry={() => grids.refetch()} />;
   } else if (data.length === 0) {
-    body = <StateBlock emoji="🎓" title="Nothing here yet" message="Courses appear here as soon as they're published from the admin panel." />;
+    body = <EmptyBlock emoji="🎓" title="Nothing here yet" message="Courses appear here as soon as they're published from the admin panel." />;
   } else if (visible.length === 0 && filter !== "all") {
-    body = <StateBlock {...filterEmpty[filter]} />;
+    body = <EmptyBlock {...filterEmpty[filter]} />;
   } else {
     body = (
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap }}>

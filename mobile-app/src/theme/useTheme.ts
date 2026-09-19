@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo } from "react";
 import { Platform, useColorScheme, useWindowDimensions, type TextStyle, type ViewStyle } from "react-native";
 import { useSettingsStore } from "@/store/settingsStore";
 import { getColors, type ThemeColors, type ThemeScheme } from "./colors";
+import { resolveScheme } from "./scheme";
 import { accentTokens, resolveCourseAccent, type AccentTokens } from "./courseAccents";
 import { gridColumns, isWide, LAYOUT } from "./spacing";
 import { buildTypography, type ReaderFontSize, type TypeVariant } from "./typography";
@@ -42,7 +43,7 @@ export function useTheme(options: { reader?: ReaderFontSize } = {}): Theme {
   const contextReader = useContext(ReaderSizeContext);
   const reader = options.reader ?? contextReader;
 
-  const scheme: ThemeScheme = pref === "system" ? (system === "dark" ? "dark" : "light") : pref === "dark" ? "dark" : "light";
+  const scheme: ThemeScheme = resolveScheme(pref, system);
 
   return useMemo<Theme>(() => {
     const colors = getColors(scheme, amoled);

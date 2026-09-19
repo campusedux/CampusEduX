@@ -86,12 +86,12 @@ export function LearningSearchBar({
                   borderRadius: RADII.pill,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: on ? colors.primary : colors.surface,
+                  backgroundColor: on ? colors.primaryFill : colors.surface,
                   borderWidth: 1,
-                  borderColor: on ? colors.primary : colors.border,
+                  borderColor: on ? colors.primaryFill : colors.border,
                 }}
               >
-                <Text style={[type.label, { color: on ? colors.textOnAccent : colors.textSecondary, fontFamily: type.title.fontFamily }]}>{c.label}</Text>
+                <Text style={[type.label, { color: on ? colors.textOnPrimary : colors.textSecondary, fontFamily: type.title.fontFamily }]}>{c.label}</Text>
               </PressableScale>
             );
           })}

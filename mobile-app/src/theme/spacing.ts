@@ -72,3 +72,9 @@ export const READER_SPACING = {
   listItem: 9,
   block: 20,
 } as const;
+
+/** Width of one card in an N-column grid inside the page container (gutters + gaps accounted for). */
+export function gridCardWidth(viewport: number, gutter: number, columns: number, gap: number, pageMax: number = LAYOUT.pageMaxWidth): number {
+  const inner = Math.min(viewport, pageMax) - gutter * 2;
+  return Math.floor((inner - gap * (columns - 1)) / columns);
+}

@@ -60,3 +60,15 @@ export function ensureContrast(color: string, ground: string, min = 4.5): string
   for (let i = 1; i <= 20 && contrast(out, ground) < min; i++) out = mix(color, towards, i * 0.05);
   return out;
 }
+
+/** #RRGGBB or #RRGGBBAA → rgb + alpha (0–1). */
+export function parseRgba(hex: string): { rgb: RGB; a: number } {
+  const h = hex.trim().replace(/^#/, "");
+  return { rgb: hexToRgb(hex), a: h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1 };
+}
+
+/** Composite `fg` (may carry alpha) over an opaque `bg` → opaque hex. Lets contrast be checked on translucent tints. */
+export function over(fg: string, bg: string): string {
+  const { rgb, a } = parseRgba(fg);
+  return mix(bg, rgbToHex(rgb), a);
+}

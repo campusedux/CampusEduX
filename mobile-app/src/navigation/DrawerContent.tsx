@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "@/store/authStore";
 import { authService } from "@/services/auth.service";
 import { confirmAction, notify } from "@/lib/notify";
+import { alpha, lighten, useSchemeColors } from "@/theme";
 
 type Nav = DrawerContentComponentProps["navigation"];
 
@@ -46,6 +47,8 @@ export function DrawerContent({ navigation, state }: DrawerContentComponentProps
   const user = useAuthStore((s) => s.user);
   const reset = useAuthStore((s) => s.reset);
   const activeRoute = state.routeNames[state.index];
+  // Colours only. Light mode keeps the original classes/values exactly; Dark/AMOLED override via tokens.
+  const { colors, isDark } = useSchemeColors();
 
   const handleLogout = () => {
     confirmAction(
@@ -67,7 +70,7 @@ export function DrawerContent({ navigation, state }: DrawerContentComponentProps
   };
 
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+    <ScrollView className="flex-1 bg-white" style={isDark ? { backgroundColor: colors.surface } : undefined} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
       <LinearGradient colors={["#4F39F6", "#3A28C8"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ paddingTop: 56 }}>
         <View className="pb-6 px-6">
           <View className="flex-row items-center">
@@ -111,31 +114,37 @@ export function DrawerContent({ navigation, state }: DrawerContentComponentProps
                 navigation.closeDrawer();
               }}
               className="flex-row items-center justify-between px-3 py-2.5 rounded-xl mb-0.5"
-              style={isActive ? { backgroundColor: "#EEF0FF" } : undefined}
+              style={isActive ? { backgroundColor: isDark ? colors.primarySoft : "#EEF0FF" } : undefined}
             >
               <View className="flex-row items-center flex-1">
                 <View
                   className="w-9 h-9 rounded-xl items-center justify-center mr-3"
                   style={{ backgroundColor: `${item.tint}1A` }}
                 >
-                  <Ionicons name={item.icon} size={18} color={item.tint} />
+                  <Ionicons name={item.icon} size={18} color={isDark ? lighten(item.tint, 0.4) : item.tint} />
                 </View>
-                <Text className={`text-[15px] ${isActive ? "text-primary font-semibold" : "text-gray-800"}`} numberOfLines={1}>
+                <Text
+                  className={`text-[15px] ${isActive ? "text-primary font-semibold" : "text-gray-800"}`}
+                  style={isDark ? { color: isActive ? colors.primaryText : colors.text } : undefined}
+                  numberOfLines={1}
+                >
                   {item.label}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={isActive ? "#4F39F6" : "#D1D5DB"} />
+              <Ionicons name="chevron-forward" size={16} color={isDark ? (isActive ? colors.primaryText : colors.textMuted) : isActive ? "#4F39F6" : "#D1D5DB"} />
             </Pressable>
           );
         })}
 
-        <View className="h-px bg-gray-100 my-2 mx-3" />
+        <View className="h-px bg-gray-100 my-2 mx-3" style={isDark ? { backgroundColor: colors.divider } : undefined} />
 
         <Pressable onPress={handleLogout} className="flex-row items-center px-3 py-2.5 rounded-xl">
-          <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: "#FEE2E2" }}>
-            <Ionicons name="log-out-outline" size={18} color="#DC2626" />
+          <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: isDark ? alpha(colors.danger, 0.16) : "#FEE2E2" }}>
+            <Ionicons name="log-out-outline" size={18} color={isDark ? colors.danger : "#DC2626"} />
           </View>
-          <Text className="text-danger text-[15px] font-semibold">Logout</Text>
+          <Text className="text-danger text-[15px] font-semibold" style={isDark ? { color: colors.danger } : undefined}>
+            Logout
+          </Text>
         </Pressable>
       </View>
     </ScrollView>

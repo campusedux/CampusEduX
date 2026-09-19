@@ -8,7 +8,7 @@ import { splitHighlight } from "@/learning/learningFormat";
 import type { LearningGridCard, LearningSearchHit } from "@/types";
 import { FadeInUp } from "./FadeInUp";
 import { ListRowsSkeleton } from "./LearningSkeleton";
-import { StateBlock } from "./LearningStates";
+import { EmptyBlock, ErrorBlock } from "./LearningStates";
 
 /** Text with the matched words tinted + bold. */
 export function HighlightedText({ text, query, style, numberOfLines }: { text: string; query: string; style: any; numberOfLines?: number }) {
@@ -118,10 +118,10 @@ export function SearchResults({
 
   if (pending) return <ListRowsSkeleton />;
   if (isError) {
-    return <StateBlock tone="error" emoji="😕" title="Search failed" message="Check your connection and try again." actionLabel="Retry" onAction={() => refetch()} />;
+    return <ErrorBlock title="Search failed" onRetry={() => refetch()} />;
   }
   if (!hits || hits.length === 0) {
-    return <StateBlock emoji="🔍" title="No topics found" message={`Nothing matches “${query.trim()}”. Try a different word or a shorter search.`} />;
+    return <EmptyBlock emoji="🔍" title="No topics found" message={`Nothing matches “${query.trim()}”. Try a different word or a shorter search.`} />;
   }
 
   return (

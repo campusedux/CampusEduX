@@ -5,3 +5,5 @@ export * from "./spacing";
 export * from "./typography";
 export * from "./fonts";
 export * from "./useTheme";
+export * from "./scheme";
+export * from "./useSchemeColors";

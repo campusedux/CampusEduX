@@ -84,3 +84,20 @@ export function ListRowsSkeleton({ count = 4 }: { count?: number }) {
     </View>
   );
 }
+
+/** Course Detail loading: hero block + chapter rows. */
+export function CourseDetailSkeleton() {
+  const { gutter } = useTheme();
+  return (
+    <View accessible accessibilityRole="progressbar" accessibilityLabel="Loading course" style={{ paddingHorizontal: gutter, gap: SPACE[4], width: "100%", maxWidth: 960 + gutter * 2, alignSelf: "center" }}>
+      <Skeleton height={300} radius={RADII["2xl"]} />
+      <ListRowsSkeleton count={4} />
+    </View>
+  );
+}
+
+/** Reader loading, framed to the reading width. */
+export function ReaderLoading({ children }: { children: React.ReactNode }) {
+  const { gutter } = useTheme();
+  return <View style={{ padding: gutter, width: "100%", maxWidth: 720 + gutter * 2, alignSelf: "center" }}>{children}</View>;
+}

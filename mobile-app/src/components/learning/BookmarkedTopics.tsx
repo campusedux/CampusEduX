@@ -7,7 +7,7 @@ import { useAuthStore } from "@/store/authStore";
 import { SPACE, useTheme } from "@/theme";
 import type { LearningGridCard } from "@/types";
 import { ListRowsSkeleton } from "./LearningSkeleton";
-import { StateBlock } from "./LearningStates";
+import { EmptyBlock, ErrorBlock } from "./LearningStates";
 import { CourseBadge, TopicLinkRow } from "./SearchResults";
 
 /**
@@ -35,11 +35,11 @@ export function BookmarkedTopics({
   });
 
   if (!userId) {
-    return <StateBlock emoji="🔖" title="Sign in to see bookmarks" message="Your saved topics show up here once you're signed in." />;
+    return <EmptyBlock emoji="🔖" title="Sign in to see bookmarks" message="Your saved topics show up here once you're signed in." />;
   }
   if (bookmarks.isLoading || (bookmarks.data && bookmarks.data.size > 0 && trees.some((t) => t.isLoading))) return <ListRowsSkeleton />;
   if (bookmarks.isError) {
-    return <StateBlock tone="error" emoji="😕" title="Couldn't load bookmarks" actionLabel="Retry" onAction={() => bookmarks.refetch()} />;
+    return <ErrorBlock what="bookmarks" onRetry={() => bookmarks.refetch()} />;
   }
 
   const rows: { grid: LearningGridCard; sectionName: string; slug: string; title: string; premium: boolean }[] = [];
@@ -52,7 +52,7 @@ export function BookmarkedTopics({
   });
 
   if (rows.length === 0) {
-    return <StateBlock emoji="🔖" title="No bookmarks yet" message="Tap the bookmark icon on any topic to save it here for later." />;
+    return <EmptyBlock emoji="🔖" title="No bookmarks yet" message="Tap the bookmark icon on any topic to save it here for later." />;
   }
   return (
     <View style={{ gap: SPACE[3] }}>

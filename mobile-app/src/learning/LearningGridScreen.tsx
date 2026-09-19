@@ -2,13 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LayoutAnimation, SectionList, View } from "react-native";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { BackButton } from "@/components/learning/BackButton";
 import { ChapterHeader } from "@/components/learning/ChapterAccordion";
 import { CourseHero } from "@/components/learning/CourseHero";
 import { FadeInUp } from "@/components/learning/FadeInUp";
-import { ListRowsSkeleton, Skeleton } from "@/components/learning/LearningSkeleton";
+import { CourseDetailSkeleton } from "@/components/learning/LearningSkeleton";
 import { LearningScreen, PageContainer } from "@/components/learning/LearningScreen";
-import { StateBlock } from "@/components/learning/LearningStates";
+import { EmptyBlock, ErrorBlock, StateFrame } from "@/components/learning/LearningStates";
 import { TopicRow } from "@/components/learning/TopicRow";
 import { useLearningBookmarks, useLearningTree, useToggleLearningBookmark } from "@/hooks/useLearning";
 import { buildChapters, courseTotals, pickResumeTopic, type ChapterView } from "@/learning/courseTree";
@@ -17,7 +16,7 @@ import { estimateCourseTime } from "@/learning/learningFormat";
 import { useCompletedSlugs, useLastOpened } from "@/learning/progress/progressStore";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
-import { LAYOUT, MOTION, RADII, SPACE, useTheme } from "@/theme";
+import { LAYOUT, MOTION, SPACE, useTheme } from "@/theme";
 import type { LearningTopicRef, PlacementStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<PlacementStackParamList, "LearningGrid">;
@@ -146,39 +145,31 @@ export function LearningGridScreen() {
   const title = tree?.grid.name ?? params.gridName ?? "Course";
   const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
-  // ── non-list states ────────────────────────────────────────────────────────
-  const topBar = (
-    <PageContainer maxWidth={LAYOUT.listMaxWidth} style={{ paddingTop: SPACE[2], paddingBottom: SPACE[3] }}>
-      <BackButton onPress={goBack} />
-    </PageContainer>
-  );
-
+  // ── non-list states (shared frame + skeleton + error/empty blocks) ─────────────────────────────
   if (isLoading) {
     return (
       <LearningScreen>
-        <View accessible accessibilityRole="progressbar" accessibilityLabel={`Loading ${title}`}>
-          {topBar}
-          <PageContainer maxWidth={LAYOUT.listMaxWidth} style={{ gap: SPACE[4] }}>
-            <Skeleton height={300} radius={RADII["2xl"]} />
-            <ListRowsSkeleton count={4} />
-          </PageContainer>
-        </View>
+        <StateFrame onBack={goBack}>
+          <CourseDetailSkeleton />
+        </StateFrame>
       </LearningScreen>
     );
   }
   if (isError) {
     return (
       <LearningScreen>
-        {topBar}
-        <StateBlock tone="error" emoji="😕" title="Couldn't load this course" message="Check your connection and try again." actionLabel="Retry" onAction={() => refetch()} />
+        <StateFrame onBack={goBack} title={title}>
+          <ErrorBlock what="this course" onRetry={() => refetch()} />
+        </StateFrame>
       </LearningScreen>
     );
   }
   if (!tree) {
     return (
       <LearningScreen>
-        {topBar}
-        <StateBlock emoji="📭" title="Course not available" message="This course may have been unpublished." />
+        <StateFrame onBack={goBack} title={title}>
+          <EmptyBlock emoji="📭" title="Course not available" message="This course may have been unpublished." />
+        </StateFrame>
       </LearningScreen>
     );
   }
@@ -223,7 +214,7 @@ export function LearningGridScreen() {
             {hero}
           </PageContainer>
         }
-        ListEmptyComponent={<StateBlock emoji="📂" title="No chapters yet" message="Check back soon — content is added regularly." />}
+        ListEmptyComponent={<EmptyBlock emoji="📂" title="No chapters yet" message="Check back soon — content is added regularly." />}
         renderSectionHeader={({ section }) => (
           <PageContainer maxWidth={LAYOUT.listMaxWidth}>
             <ChapterHeader chapter={section.chapter} open={section.open} accent={accent} onToggle={toggleChapter} />

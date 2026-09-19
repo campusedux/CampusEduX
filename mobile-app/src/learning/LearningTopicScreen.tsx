@@ -5,7 +5,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Button } from "@/components/ui";
 import { LearningScreen } from "@/components/learning/LearningScreen";
-import { StateBlock } from "@/components/learning/LearningStates";
+import { EmptyBlock, ErrorBlock, StateFrame } from "@/components/learning/LearningStates";
+import { ReaderLoading } from "@/components/learning/LearningSkeleton";
 import { CompleteButton } from "@/components/learning/reader/CompleteButton";
 import { FontSizeMenu } from "@/components/learning/reader/FontSizeMenu";
 import { PracticeLinks } from "@/components/learning/reader/PracticeLinks";
@@ -47,7 +48,7 @@ export function LearningTopicScreen() {
 function TopicReader({ fontSize, setFontSize }: { fontSize: import("@/theme").ReaderFontSize; setFontSize: (s: import("@/theme").ReaderFontSize) => void }) {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Rte>();
-  const { colors, accentFor, width, gutter } = useTheme();
+  const { accentFor, width, gutter } = useTheme();
   const userId = useAuthStore((s) => s.user?.id);
   const isPremiumUser = useAuthStore((s) => s.user?.isPremium ?? false);
 
@@ -193,36 +194,20 @@ function TopicReader({ fontSize, setFontSize }: { fontSize: import("@/theme").Re
       <View style={{ flex: 1 }}>{children}</View>
     </LearningScreen>
   );
-  const bareBar = (
-    <ReaderTopBar
-      courseName={params.topicTitle ?? "Learning"}
-      onBack={goBack}
-      showFontControl={false}
-      fontMenuOpen={false}
-      onToggleFontMenu={() => undefined}
-      canBookmark={false}
-      bookmarked={false}
-      onToggleBookmark={() => undefined}
-      accentColor={accent.base}
-    />
-  );
-
   if (isLoading) {
     return shell(
-      <>
-        {bareBar}
-        <View style={{ padding: gutter, maxWidth: LAYOUT.readingMaxWidth, width: "100%", alignSelf: "center" }}>
+      <StateFrame onBack={goBack} title={params.topicTitle} maxWidth={LAYOUT.readingMaxWidth + gutter * 2}>
+        <ReaderLoading>
           <ReaderSkeleton />
-        </View>
-      </>,
+        </ReaderLoading>
+      </StateFrame>,
     );
   }
   if (isError || !data) {
     return shell(
-      <>
-        {bareBar}
-        <StateBlock tone="error" emoji="😕" title={isError ? "Couldn't load this topic" : "This topic isn't available"} message="Check your connection and try again." actionLabel="Retry" onAction={() => refetch()} />
-      </>,
+      <StateFrame onBack={goBack} title={params.topicTitle} maxWidth={LAYOUT.readingMaxWidth + gutter * 2}>
+        {isError ? <ErrorBlock what="this topic" onRetry={() => refetch()} /> : <ErrorBlock title="This topic isn't available" message="It may have been unpublished or moved." onRetry={() => refetch()} />}
+      </StateFrame>,
     );
   }
 
@@ -260,7 +245,7 @@ function TopicReader({ fontSize, setFontSize }: { fontSize: import("@/theme").Re
           ) : null}
           <View style={{ marginTop: SPACE[6] }}>
             {data.contents.length === 0 ? (
-              <Text style={{ color: colors.textSecondary }}>This topic has no content yet — check back soon.</Text>
+              <EmptyBlock compact emoji="📝" title="No content yet" message="This topic has no content yet — check back soon." />
             ) : (
               <ReaderContent blocks={prepared!.blocks} />
             )}

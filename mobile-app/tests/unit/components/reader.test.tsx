@@ -1,7 +1,6 @@
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
-jest.mock("@react-native-async-storage/async-storage", () => require("@react-native-async-storage/async-storage/jest/async-storage-mock"));
 jest.mock("@/theme/fonts", () => ({ useLearningFonts: () => true }));
 jest.mock("expo-linear-gradient", () => ({ LinearGradient: ({ children }: any) => children }));
 jest.mock("expo-clipboard", () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
