@@ -1,3 +1,5 @@
+import { PermissionGate } from '@/components/auth/PermissionGate';
+import { MONEY_RPC_ROLES } from '@/lib/permission-gate';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { requireModule } from '@/lib/auth';
@@ -23,7 +25,9 @@ export default async function PushNotificationsPage() {
         <PageHeader title="Push Notifications" subtitle="Compose and send in-app notifications to a target audience." />
       </div>
 
-      {admin.perms.cms.add ? <PushComposer /> : null}
+      <PermissionGate can={{ module: 'cms', action: 'add' }} roles={MONEY_RPC_ROLES} mode="disable" block>
+        <PushComposer />
+      </PermissionGate>
 
       <Card>
         <CardHeader title="Sent history" />

@@ -1,3 +1,5 @@
+import { PermissionGate } from '@/components/auth/PermissionGate';
+import { MONEY_RPC_ROLES } from '@/lib/permission-gate';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { requireModule } from '@/lib/auth';
@@ -18,7 +20,7 @@ export default async function RefundRequestsPage({
 }: {
   searchParams: { page?: string; status?: string };
 }) {
-  const admin = await requireModule('orders');
+  await requireModule('orders');
   const page = Math.max(1, Number(searchParams.page) || 1);
   const status = searchParams.status ?? '';
   const { rows, total, missing } = await listRefundRequests({ page, status });
@@ -83,9 +85,11 @@ export default async function RefundRequestsPage({
                     </td>
                     <td className="py-2.5 text-ink-muted">{formatDateTime(r.created_at)}</td>
                     <td className="py-2.5 text-right">
-                      {r.status === 'pending' && admin.perms.orders.edit ? (
+                      {r.status === 'pending' ? (
                         <div className="flex justify-end">
-                          <DecisionButtons action={decideRefund.bind(null, r.id)} />
+                          <PermissionGate can={{ module: 'orders', action: 'edit' }} roles={MONEY_RPC_ROLES} mode="disable">
+                            <DecisionButtons action={decideRefund.bind(null, r.id)} />
+                          </PermissionGate>
                         </div>
                       ) : (
                         <span className="text-xs text-ink-faint">

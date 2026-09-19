@@ -12,6 +12,7 @@ import {
   PROGRESS_BY_STATUS,
   type CustomProjectStatus,
 } from '@/lib/custom-projects/constants';
+import { PermissionGate } from '@/components/auth/PermissionGate';
 import { StatusControl } from './StatusControl';
 import { AdminNotesForm } from './AdminNotesForm';
 import { MessageThread } from './MessageThread';
@@ -272,11 +273,9 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
 
           <Card>
             <CardHeader title="Status" />
-            {canEdit ? (
+            <PermissionGate can={{ module: 'custom_projects', action: 'edit' }} mode="disable" block>
               <StatusControl id={r.id} current={r.status as CustomProjectStatus} />
-            ) : (
-              <p className="text-sm text-ink-faint">Read-only for your role.</p>
-            )}
+            </PermissionGate>
           </Card>
 
           <Card>

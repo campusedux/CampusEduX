@@ -6,7 +6,6 @@ import { createClient as createSbClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
-import { setAuthBan } from '@/lib/supabase/adminApi';
 
 type Result = { ok: boolean; error?: string };
 
@@ -138,27 +137,36 @@ export async function setStudentStatus(id: string, _prev: Result, fd: FormData):
   const { error } = await supabase.from('profiles').update(patch).eq('id', id);
   if (error) return { ok: false, error: error.message };
 
-  // DB-04: also ban/unban in Supabase Auth so existing sessions stop refreshing. Needs the
-  // optional server-only SUPABASE_SERVICE_ROLE_KEY; without it the DB-level block still applies.
-  const ban = await setAuthBan(id, block);
-  if (ban.status === 'skipped') console.warn(`[students] ${ban.warning}`);
-  if (ban.status === 'failed') console.error(`[students] Auth ban/unban failed for ${id}: ${ban.error}`);
+  // DB-04: also ban/unban in Supabase Auth so existing sessions stop refreshing. This is done by the
+  // `admin-ban-user` Edge Function (it holds the service-role key; the admin panel deliberately has none),
+  // called with THIS admin's session so the function can verify the caller is an admin with students:edit.
+  // The DB-level block above stays the primary enforcement, so a failure here is reported but not rolled back.
+  let banOk = true;
+  try {
+    const { data, error: invokeError } = await supabase.functions.invoke('admin-ban-user', {
+      body: { userId: id, banned: block },
+    });
+    if (invokeError || (data as { ok?: boolean } | null)?.ok === false) banOk = false;
+  } catch {
+    banOk = false;
+  }
+  if (!banOk) console.error(`[students] admin-ban-user failed for ${id}`);
 
   await logActivity({
     action: block ? 'student.block' : 'student.unblock',
     module: 'students',
     resourceType: 'profiles',
     resourceId: id,
-    details: { ...(block ? { reason } : {}), auth_ban: ban.status },
+    details: { ...(block ? { reason } : {}), auth_ban: banOk ? 'applied' : 'failed' },
   });
   revalidatePath(`/students/${id}`);
-  if (ban.status === 'failed') {
+  if (!banOk) {
     return {
       ok: false,
-      error: `Student ${block ? 'blocked' : 'unblocked'} in the database, but the Auth-level ${block ? 'ban' : 'unban'} failed: ${ban.error}`,
+      error: `Student ${block ? 'blocked' : 'unblocked'} in the database (the DB-level ${block ? 'block' : 'unblock'} IS applied), but the Auth-level ${block ? 'ban' : 'unban'} failed. Existing sessions may keep working until they expire. Try again or check the admin-ban-user function.`,
     };
   }
-  redirect(`/students/${id}?status=1${ban.status === 'skipped' ? '&warn=auth_ban_skipped' : ''}`);
+  redirect(`/students/${id}?status=1`);
 }
 
 export async function adjustStudentWallet(id: string, _prev: Result, fd: FormData): Promise<Result> {
