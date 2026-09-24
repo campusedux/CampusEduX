@@ -4,6 +4,7 @@ import type { ProjectCardData } from "@/components/ProjectCard";
 import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
 import { PROJECT_LIST_FIELDS } from "@/lib/marketplace";
 import { absoluteUrl } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui";
 
 export const revalidate = 300;
 
@@ -32,7 +33,10 @@ export default async function TrendingPage() {
   const projects = await getTrendingProjects();
   return (
     <div className="page-shell">
-      <h1 className="text-3xl font-bold text-ink">Trending Projects</h1>
+      <Breadcrumb className="mb-5" items={[{ label: "Projects", href: "/projects" }, { label: "Trending" }]} />
+      <p className="eyebrow">Marketplace</p>
+      <h1 className="h-hero mt-2">Trending projects</h1>
+      <p className="lede mt-2">The most-bought projects on CampusEduX right now.</p>
       <ProjectGrid projects={projects} showRank emptyTitle="No trending projects yet" />
     </div>
   );

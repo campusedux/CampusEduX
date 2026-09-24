@@ -42,7 +42,7 @@ export default async function ResumeEditPage({ params }: { params: { id: string 
   }));
 
   return (
-    <div className="container-page py-10">
+    <div>
       <ResumeEditor resume={mapResumeRow(row)} templates={templates} shares={shares} />
     </div>
   );

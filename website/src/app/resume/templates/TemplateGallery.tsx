@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
-import { Chip } from "@/components/ui";
+import { EmptyState, Chip } from "@/components/ui";
 import { createResumeFromTemplateAction } from "@/lib/actions/resumeBuilder";
 import type { ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
 import type { ResumeRenderModel } from "@/lib/resumeBuilder/renderModel";
@@ -67,8 +67,9 @@ export function TemplateGallery({
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-ink">Resume Templates</h1>
-      <p className="mt-2 max-w-2xl text-ink-muted">
+      <p className="eyebrow">Résumé Builder</p>
+      <h1 className="h-hero mt-2">Resume templates</h1>
+      <p className="lede mt-3 max-w-2xl">
         Choose a professional template and build an ATS-friendly resume. Every template previews with real content,
         and you can switch between them later without losing anything you&apos;ve written.
       </p>
@@ -87,7 +88,7 @@ export function TemplateGallery({
         </div>
       )}
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {visible.map((t) => (
           <TemplateGalleryCard
             key={t.id}
@@ -100,7 +101,7 @@ export function TemplateGallery({
         ))}
       </div>
 
-      {visible.length === 0 && <p className="mt-8 text-sm text-ink-faint">No templates match that filter.</p>}
+      {visible.length === 0 && <EmptyState className="mt-8" title="No templates match that filter" subtitle="Try another filter to see more templates." />}
 
       {previewing && (
         <TemplatePreviewModal

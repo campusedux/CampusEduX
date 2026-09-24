@@ -48,7 +48,7 @@ export default async function ResumeTemplatesPage() {
   }
 
   return (
-    <div className="container-page py-10">
+    <div className="page-shell">
       <TemplateGallery templates={templates} demos={demos} />
     </div>
   );

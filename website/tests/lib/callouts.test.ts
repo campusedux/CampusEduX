@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { detectCallout, detectParagraphCallout } from "@/lib/callouts";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+import { renderToStaticMarkup } from "react-dom/server";
+import { detectCallout, detectParagraphCallout, detectQuickRevision } from "@/lib/callouts";
+import { Markdown } from "@/components/learning/Markdown";
 
 describe("detectCallout", () => {
   it("recognises the two label shapes found in live content", () => {
@@ -49,5 +53,42 @@ describe("detectParagraphCallout", () => {
     for (const t of ["**Purpose:** the core concept", "**Output:**", "**Explanation:** x", "**Definition:** y", "Remember: plain text", "**Main idea:** z"]) {
       expect(detectParagraphCallout(t)).toBeNull();
     }
+  });
+});
+
+describe("Quick revision blocks", () => {
+  const BLOCK = [
+    "**Purpose:** the core Generative AI concept  ",
+    "**Main idea:** The topic becomes useful when its purpose and limitations are understood together.  ",
+    "**Remember:** problem first, technique second, evaluation always.",
+  ];
+
+  it("detects the three-line block and keeps each line separate", () => {
+    expect(detectQuickRevision(BLOCK)).toEqual([
+      { label: "Purpose", body: "the core Generative AI concept" },
+      { label: "Main idea", body: "The topic becomes useful when its purpose and limitations are understood together." },
+      { label: "Remember", body: "problem first, technique second, evaluation always." },
+    ]);
+  });
+
+  it("ignores single lines and mixed paragraphs", () => {
+    expect(detectQuickRevision([BLOCK[2]])).toBeNull();
+    expect(detectQuickRevision([BLOCK[0], "just some prose"])).toBeNull();
+    expect(detectQuickRevision(["**Purpose:** a", "**Output:** b"])).toBeNull();
+  });
+
+  it("renders three separate rows (no run-on paragraph) when callouts are on, and is unchanged when off", () => {
+    const source = `### 13. Quick revision\n${BLOCK.join("\n")}\n\nNext paragraph.`;
+    const on = renderToStaticMarkup(Markdown({ source, callouts: true }));
+    expect(on).toContain('aria-label="Quick revision"');
+    expect((on.match(/<dt/g) ?? []).length).toBe(3);
+    expect(on).toMatch(/<dt[^>]*>Purpose<\/dt>/);
+    expect(on).toMatch(/<dt[^>]*>Main idea<\/dt>/);
+    expect(on).toMatch(/<dt[^>]*>Remember<\/dt>/);
+    // The three labels are never joined into one paragraph.
+    expect(on).not.toMatch(/<p[^>]*>[^<]*Purpose[\s\S]*Main idea[\s\S]*<\/p>/);
+
+    const off = renderToStaticMarkup(Markdown({ source }));
+    expect(off).not.toContain("Quick revision</p>");
   });
 });

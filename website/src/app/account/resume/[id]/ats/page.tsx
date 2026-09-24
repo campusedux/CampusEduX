@@ -95,11 +95,8 @@ export default async function ResumeAtsPage({ params }: { params: { id: string }
   const analysis = breakdown ? buildAtsAnalysis(breakdown, resume.content, resume.personalDetails) : null;
 
   return (
-    <div className="container-page py-10">
-      <Link href="/resume" className="text-sm text-ink-muted hover:text-ink">
-        &larr; Back to your résumés
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold text-ink">ATS check — &ldquo;{resume.title}&rdquo;</h1>
+    <div>
+      <h1 className="font-display text-[1.6rem] font-bold tracking-tight text-ink">ATS check — &ldquo;{resume.title}&rdquo;</h1>
 
       {!analysis ? (
         <div className="mt-6 flex items-center gap-2 rounded-2xl border border-line bg-card p-6 text-sm text-ink-muted">

@@ -62,3 +62,32 @@ export function detectParagraphCallout(text: string): DetectedCallout | null {
   const hit = PARAGRAPH_LABELS.find(([re]) => re.test(label.toLowerCase()));
   return hit ? { variant: hit[1], subtle: hit[2] || undefined, label, body: m[2].trim() } : null;
 }
+
+/**
+ * "Quick revision" blocks — owner-approved 2026-09-24. In the live content
+ * every `**Remember:**` sits inside a block of consecutive lines like
+ *   **Purpose:** …␠␠
+ *   **Main idea:** …␠␠
+ *   **Remember:** …
+ * (Markdown hard line breaks). The paragraph renderer used to join them into
+ * one run-on line; this detects the block from its RAW lines so each line can
+ * render on its own row inside one subtle summary box. Only fires when EVERY
+ * line of the paragraph is one of these labels and there are at least two.
+ */
+const REVISION_LABELS = /^(purpose|main idea|remember)$/i;
+
+export interface RevisionLine {
+  label: string;
+  body: string;
+}
+
+export function detectQuickRevision(rawLines: string[]): RevisionLine[] | null {
+  if (rawLines.length < 2) return null;
+  const out: RevisionLine[] = [];
+  for (const raw of rawLines) {
+    const m = raw.trim().match(/^\*\*([^*]{1,20}?)\s*:\s*\*\*\s*(.+)$/);
+    if (!m || !REVISION_LABELS.test(m[1].trim())) return null;
+    out.push({ label: m[1].trim(), body: m[2].trim() });
+  }
+  return out;
+}

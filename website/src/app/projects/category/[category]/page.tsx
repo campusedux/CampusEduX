@@ -6,6 +6,7 @@ import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
 import { getCachedCategoryPreview, getCachedCategoryIds } from "@/lib/cache";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui";
 
 export const revalidate = 300;
 
@@ -47,17 +48,16 @@ export default async function CategoryPage({ params }: { params: { category: str
           { name, path: `/projects/category/${encodeURIComponent(params.category)}` },
         ])}
       />
-      <h1 className="text-3xl font-bold text-ink">{name}</h1>
+      <Breadcrumb className="mb-5" items={[{ label: "Projects", href: "/projects" }, { label: name }]} />
+      <p className="eyebrow">Category</p>
+      <h1 className="h-hero mt-2">{name}</h1>
       <ProjectGrid projects={projects} emptyTitle="No projects in this category yet" />
       {projects.length >= CATEGORY_PREVIEW_LIMIT && (
-        <p className="mt-8 text-sm">
-          <Link
-            href={`/projects?category=${params.category}`}
-            className="font-semibold text-primary hover:underline"
-          >
+        <div className="mt-10 flex justify-center">
+          <Link href={`/projects?category=${params.category}`} className="btn-secondary">
             Browse all {name} projects in the marketplace →
           </Link>
-        </p>
+        </div>
       )}
     </div>
   );

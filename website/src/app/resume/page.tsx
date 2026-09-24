@@ -69,14 +69,18 @@ export default async function ResumeBuilderPage() {
   if (!user) {
     return (
       <div className="page-shell">
-        <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-card to-primary-50/50 px-6 py-10 sm:px-10 sm:py-12">
-          <p className="eyebrow">CampusEduX Résumé Builder</p>
-          <h1 className="h-hero mt-4 max-w-2xl">Pick a template, start from a real résumé, ship a PDF.</h1>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button href="/resume/templates" rightIcon={ArrowRight}>
+        <section className="relative overflow-hidden rounded-3xl border border-line bg-card px-6 py-10 shadow-card sm:px-10 sm:py-14">
+          <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,#000_15%,transparent_65%)]" />
+          <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-accent-amber/15 blur-3xl" />
+          <p className="eyebrow relative">CampusEduX Résumé Builder</p>
+          <h1 className="h-display relative mt-4 max-w-3xl">
+            Pick a template, start from a real résumé, <span className="text-gradient">ship a PDF.</span>
+          </h1>
+          <div className="relative mt-8 flex flex-wrap gap-3">
+            <Button href="/resume/templates" size="lg" rightIcon={ArrowRight}>
               Browse templates
             </Button>
-            <Button href={`/login?next=${encodeURIComponent("/resume")}`} variant="ghost">
+            <Button href={`/login?next=${encodeURIComponent("/resume")}`} size="lg" variant="ghost">
               Sign in to build
             </Button>
           </div>
@@ -155,21 +159,17 @@ export default async function ResumeBuilderPage() {
     <div className="page-shell">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-ink">Résumé Builder</h1>
+          <p className="eyebrow">Résumé Builder</p>
+          <h1 className="mt-2 font-display text-[1.9rem] font-bold tracking-tight text-ink">Your résumés</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Your résumés stay in sync between here and the CampusEduX app.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/account/resume/import"
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-line bg-card px-3.5 text-xs font-semibold text-ink hover:bg-surface"
-          >
-            <FileUp className="h-3.5 w-3.5" /> Upload existing résumé
+          <Link href="/account/resume/import" className="btn-ghost">
+            <FileUp className="h-4 w-4" aria-hidden /> Upload existing résumé
           </Link>
-          <Button href="/resume/templates" size="sm">
-            New résumé
-          </Button>
+          <Button href="/resume/templates">New résumé</Button>
         </div>
       </div>
 

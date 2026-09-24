@@ -3,8 +3,8 @@ import Link from "next/link";
 import { CodeBlock } from "./CodeBlock";
 import { slugId } from "@/lib/blogText";
 import { createTopicLinkState, type TopicLinkEntry, type TopicLinkState } from "@/lib/topicLinks";
-import { detectCallout, detectParagraphCallout } from "@/lib/callouts";
-import { Callout } from "./Callout";
+import { detectCallout, detectParagraphCallout, detectQuickRevision } from "@/lib/callouts";
+import { Callout, QuickRevision } from "./Callout";
 
 export { slugId } from "@/lib/blogText";
 export { createTopicLinkState } from "@/lib/topicLinks";
@@ -354,6 +354,13 @@ function renderBlocks(
     ) {
       buf.push(lines[i]);
       i += 1;
+    }
+    const revision = callouts ? detectQuickRevision(buf) : null;
+    if (revision) {
+      out.push(
+        <QuickRevision key={`b${k++}`} lines={revision.map((r, ri) => ({ label: r.label, body: renderInline(r.body, `b${k}-r${ri}`) }))} />,
+      );
+      continue;
     }
     const paraCallout = callouts ? detectParagraphCallout(buf.join(" ")) : null;
     if (paraCallout) {

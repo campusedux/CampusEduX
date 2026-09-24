@@ -1,6 +1,8 @@
 import { safeHref } from "@/lib/safeUrl";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowLeft, Download, ExternalLink } from "lucide-react";
+import { StatusBadge } from "../../_builder/StatusBadge";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
@@ -104,42 +106,52 @@ export default async function Page({ params }: Params) {
   const pct = CUSTOM_PROJECT_PROGRESS[request.status as CustomProjectStatus] ?? 0;
   const customRequirements: { text: string }[] = Array.isArray(request.custom_requirements) ? request.custom_requirements : [];
 
+  const sectionTitle = "font-display text-lg font-bold text-ink";
+  const linkCls = "inline-flex items-center gap-1 font-semibold text-primary hover:text-primary-700";
+
   return (
-    <div className="container-prose py-12">
-      <Link href="/custom-projects/my-projects" className="text-sm text-ink underline">
-        ← All custom projects
+    <div className="container-prose py-10 sm:py-12">
+      <Link href="/custom-projects/my-projects" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> All custom projects
       </Link>
 
-      <div className="mt-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-ink">{request.title}</h1>
-          <div className="text-xs text-ink-muted">
-            {request.request_code} · {request.project_type}/{request.project_level} ·{" "}
-            {PLATFORM_LABELS[request.platform as Platform] ?? request.platform} · created {timeAgo(request.created_at)}
+      <header className="card mt-4 p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="font-display text-[1.6rem] font-bold leading-tight tracking-tight text-ink sm:text-[1.9rem]">{request.title}</h1>
+            <div className="mt-1 text-xs text-ink-muted">
+              <span className="font-mono">{request.request_code}</span> · {request.project_type}/{request.project_level} ·{" "}
+              {PLATFORM_LABELS[request.platform as Platform] ?? request.platform} · created {timeAgo(request.created_at)}
+            </div>
           </div>
+          <StatusBadge status={request.status} />
         </div>
-        <span className="whitespace-nowrap rounded-lg border border-line px-2 py-1 text-xs text-ink">
-          {STATUS_LABELS[request.status as CustomProjectStatus] ?? request.status}
-        </span>
-      </div>
-
-      <div className="mt-3 h-1.5 w-full rounded-lg bg-primary/10">
-        <div className="h-1.5 rounded-lg bg-success" style={{ width: `${pct}%` }} />
-      </div>
+        {request.status !== "cancelled" && (
+          <div className="mt-5">
+            <div className="flex justify-between text-xs font-medium text-ink-muted">
+              <span>Progress</span>
+              <span className="tabular-nums text-ink">{pct}%</span>
+            </div>
+            <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-line" aria-hidden>
+              <div className="h-full rounded-full bg-gradient-to-r from-primary to-success" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        )}
+      </header>
 
       {/* pricing snapshot */}
-      <div className="mt-6 border border-line bg-card p-5 text-sm">
-        <dl className="space-y-1 text-ink-muted">
+      <section className="card mt-5 p-5 text-sm sm:p-6" aria-label="Pricing">
+        <dl className="space-y-2 text-ink-muted">
           <div className="flex justify-between"><dt>Base price</dt><dd className="text-ink">{formatINR(request.base_price)}</dd></div>
           <div className="flex justify-between"><dt>Platform charge</dt><dd className="text-ink">{Number(request.platform_charge) > 0 ? formatINR(request.platform_charge) : "Included"}</dd></div>
           <div className="flex justify-between"><dt>Features</dt><dd className="text-ink">{formatINR(request.feature_total)}</dd></div>
-          <div className="flex justify-between border-t border-line pt-1 font-semibold text-ink"><dt>Estimated total</dt><dd>{formatINR(request.estimated_total)}</dd></div>
-          <div className="flex justify-between text-ink"><dt className="font-semibold">Token paid</dt><dd className="font-semibold">{formatINR(request.token_amount)}</dd></div>
+          <div className="flex justify-between border-t border-line pt-2 font-semibold text-ink"><dt>Estimated total</dt><dd>{formatINR(request.estimated_total)}</dd></div>
+          <div className="flex justify-between rounded-xl bg-success/10 px-3 py-2 font-semibold text-success"><dt>Token paid</dt><dd>{formatINR(request.token_amount)}</dd></div>
         </dl>
-      </div>
+      </section>
 
       {/* details */}
-      <div className="mt-6 space-y-3 text-sm">
+      <section className="card mt-5 space-y-4 p-5 text-sm sm:p-6" aria-label="Project details">
         {[
           ["Objective", request.objective],
           ["Problem statement", request.problem_statement],
@@ -150,49 +162,49 @@ export default async function Page({ params }: Params) {
           .filter(([, v]) => v)
           .map(([label, v]) => (
             <div key={label as string}>
-              <div className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</div>
-              <p className="mt-0.5 whitespace-pre-line text-ink">{v as string}</p>
+              <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{label}</div>
+              <p className="mt-1 whitespace-pre-line leading-relaxed text-ink">{v as string}</p>
             </div>
           ))}
-      </div>
 
-      {customRequirements.length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-lg font-bold text-ink">Custom requirements</h2>
-          <ul className="mt-2 list-disc pl-5 text-sm text-ink-muted">
-            {customRequirements.map((r, i) => (
-              <li key={i}>{r.text}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {customRequirements.length > 0 && (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Custom requirements</div>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-ink">
+              {customRequirements.map((r, i) => (
+                <li key={i}>{r.text}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       {(features ?? []).length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-lg font-bold text-ink">Selected features</h2>
-          <ul className="mt-2 space-y-1 text-sm text-ink-muted">
+        <section className="card mt-5 p-5 sm:p-6">
+          <h2 className={sectionTitle}>Selected features</h2>
+          <ul className="mt-3 divide-y divide-line text-sm">
             {(features ?? []).map((f) => (
-              <li key={f.feature_id} className="flex justify-between">
-                <span>{f.feature_name}</span>
-                <span className="text-ink">{Number(f.feature_price) > 0 ? formatINR(f.feature_price) : "Included"}</span>
+              <li key={f.feature_id} className="flex justify-between gap-3 py-2">
+                <span className="text-ink-muted">{f.feature_name}</span>
+                <span className="font-medium text-ink">{Number(f.feature_price) > 0 ? formatINR(f.feature_price) : "Included"}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
       {fileLinks.length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-lg font-bold text-ink">Reference files</h2>
-          <ul className="mt-2 space-y-1 text-sm">
+        <section className="card mt-5 p-5 sm:p-6">
+          <h2 className={sectionTitle}>Reference files</h2>
+          <ul className="mt-3 divide-y divide-line text-sm">
             {fileLinks.map((f) => (
-              <li key={f.id} className="flex justify-between">
-                <span className="text-ink-muted">
+              <li key={f.id} className="flex items-center justify-between gap-3 py-2">
+                <span className="min-w-0 truncate text-ink-muted">
                   {f.file_name || f.label} <span className="text-xs">({f.size_mb} MB)</span>
                 </span>
                 {safeHref(f.url) ? (
-                  <a href={safeHref(f.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="text-ink underline">
-                    Download
+                  <a href={safeHref(f.url) ?? undefined} target="_blank" rel="noopener noreferrer" className={linkCls}>
+                    <Download className="h-3.5 w-3.5" aria-hidden /> Download
                   </a>
                 ) : (
                   <span className="text-xs text-ink-muted">unavailable</span>
@@ -200,48 +212,51 @@ export default async function Page({ params }: Params) {
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
       {/* timeline */}
       {(history ?? []).length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-lg font-bold text-ink">Status history</h2>
-          <ul className="mt-2 space-y-1 text-sm text-ink-muted">
+        <section className="card mt-5 p-5 sm:p-6">
+          <h2 className={sectionTitle}>Status history</h2>
+          <ol className="mt-4 space-y-4 border-l-2 border-line pl-5">
             {(history ?? []).map((h, i) => (
-              <li key={i}>
-                {timeAgo(h.created_at)} —{" "}
-                {h.old_status ? `${STATUS_LABELS[h.old_status as CustomProjectStatus] ?? h.old_status} → ` : ""}
-                {STATUS_LABELS[h.new_status as CustomProjectStatus] ?? h.new_status}
+              <li key={i} className="relative text-sm">
+                <span aria-hidden className="absolute -left-[1.6rem] top-1 h-3 w-3 rounded-full border-2 border-card bg-primary" />
+                <p className="text-ink">
+                  {h.old_status ? `${STATUS_LABELS[h.old_status as CustomProjectStatus] ?? h.old_status} → ` : ""}
+                  <span className="font-semibold">{STATUS_LABELS[h.new_status as CustomProjectStatus] ?? h.new_status}</span>
+                </p>
+                <p className="text-xs text-ink-faint">{timeAgo(h.created_at)}</p>
               </li>
             ))}
-          </ul>
-        </div>
+          </ol>
+        </section>
       )}
 
       {/* delivery — only visible once status = delivered (RLS) */}
       {delivery && (
-        <div className="mt-6 border border-success/40 bg-card p-5">
-          <h2 className="text-lg font-bold text-ink">Delivery</h2>
+        <section className="mt-5 rounded-2xl border border-success/40 bg-success/[0.06] p-5 sm:p-6">
+          <h2 className={sectionTitle}>Delivery</h2>
           {delivery.delivered_at && <p className="text-xs text-ink-muted">Delivered {timeAgo(delivery.delivered_at)}</p>}
           {delivery.notes && <p className="mt-2 whitespace-pre-line text-sm text-ink">{delivery.notes}</p>}
           {safeHref(delivery.demo_url) && (
-            <p className="mt-2 text-sm">
-              <a href={safeHref(delivery.demo_url) ?? undefined} target="_blank" rel="noopener noreferrer" className="text-ink underline">
-                Live demo
+            <p className="mt-3 text-sm">
+              <a href={safeHref(delivery.demo_url) ?? undefined} target="_blank" rel="noopener noreferrer" className={linkCls}>
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Live demo
               </a>
             </p>
           )}
           {deliveryAssets.length > 0 && (
-            <ul className="mt-3 space-y-1 text-sm">
+            <ul className="mt-3 divide-y divide-success/20 text-sm">
               {deliveryAssets.map((a) => (
-                <li key={a.id} className="flex justify-between">
-                  <span className="text-ink-muted">
+                <li key={a.id} className="flex items-center justify-between gap-3 py-2">
+                  <span className="min-w-0 truncate text-ink-muted">
                     {a.label || a.file_name} <span className="text-xs">({a.kind})</span>
                   </span>
                   {safeHref(a.url) ? (
-                    <a href={safeHref(a.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="text-ink underline">
-                      Download
+                    <a href={safeHref(a.url) ?? undefined} target="_blank" rel="noopener noreferrer" className={linkCls}>
+                      <Download className="h-3.5 w-3.5" aria-hidden /> Download
                     </a>
                   ) : (
                     <span className="text-xs text-ink-muted">unavailable</span>
@@ -250,12 +265,12 @@ export default async function Page({ params }: Params) {
               ))}
             </ul>
           )}
-        </div>
+        </section>
       )}
 
       {/* messages */}
-      <div className="mt-8">
-        <h2 className="text-lg font-bold text-ink">Messages</h2>
+      <section className="mt-8">
+        <h2 className={sectionTitle}>Messages</h2>
         <MessageThread
           requestId={request.id}
           initialMessages={(messages ?? []).map((m) => ({
@@ -265,7 +280,7 @@ export default async function Page({ params }: Params) {
             createdAt: m.created_at,
           }))}
         />
-      </div>
+      </section>
     </div>
   );
 }

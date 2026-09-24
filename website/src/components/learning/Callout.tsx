@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, BookOpen, Info, Lightbulb, Sparkles, Star } from "lucide-react";
+import { AlertTriangle, BookOpen, Info, Lightbulb, ListChecks, Sparkles, Star } from "lucide-react";
 import type { CalloutVariant } from "@/lib/callouts";
 import { cn } from "@/lib/cn";
 
@@ -49,6 +49,29 @@ export function Callout({
         {label}
       </p>
       <div className="mt-1.5 leading-7 text-ink">{children}</div>
+    </aside>
+  );
+}
+
+/**
+ * "Quick revision" summary: Purpose / Main idea / Remember as separate rows in
+ * one light box (no heavy fill — these sit beside "Teacher's simple view"
+ * callouts in the same lessons).
+ */
+export function QuickRevision({ lines }: { lines: { label: string; body: React.ReactNode }[] }) {
+  return (
+    <aside className="my-5 rounded-2xl border border-line bg-surface/50 px-4 py-3 sm:px-5" aria-label="Quick revision">
+      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-faint">
+        <ListChecks className="h-3.5 w-3.5" aria-hidden /> Quick revision
+      </p>
+      <dl className="mt-2 divide-y divide-line/70">
+        {lines.map((l, i) => (
+          <div key={i} className="grid gap-0.5 py-2 sm:grid-cols-[7.5rem_1fr] sm:gap-3">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-ink-muted sm:pt-1">{l.label}</dt>
+            <dd className="leading-7 text-ink">{l.body}</dd>
+          </div>
+        ))}
+      </dl>
     </aside>
   );
 }

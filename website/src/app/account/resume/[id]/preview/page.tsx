@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Download, FileText, PencilRuler } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { getPublicSupabase } from "@/lib/supabase/server";
@@ -35,27 +36,33 @@ export default async function ResumePreviewPage({ params }: { params: { id: stri
   const spec = resolveDesign(templateSpec(resume.template), resume.design);
 
   return (
-    <div className="container-prose py-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <Link href="/resume" className="text-sm text-ink-muted hover:text-ink">
-          &larr; Back to your resumes
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link href={`/account/resume/${resume.id}/edit`} className="text-sm font-semibold text-primary hover:underline">
-            Edit
+    <div>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="font-display text-[1.6rem] font-bold tracking-tight text-ink">{resume.title}</h1>
+          <p className="mt-1 text-sm text-ink-muted">This is exactly what your downloaded résumé will look like.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/account/resume/${resume.id}/edit`} className="btn-ghost">
+            <PencilRuler className="h-4 w-4" aria-hidden /> Edit
           </Link>
-          <a href={`/api/resume/export/pdf?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
-            Download PDF
+          <a href={`/api/resume/export/docx?resumeId=${resume.id}`} className="btn-ghost">
+            <FileText className="h-4 w-4" aria-hidden /> DOCX
           </a>
-          <a href={`/api/resume/export/docx?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
-            DOCX
+          <a href={`/api/resume/export/pdf?resumeId=${resume.id}`} className="btn-primary">
+            <Download className="h-4 w-4" aria-hidden /> Download PDF
           </a>
         </div>
       </div>
 
-      <ResumeSheetScaler>
-        <ResumeDocumentView model={model} spec={spec} accentColor={effectiveAccent(accentColor, resume.design)} />
-      </ResumeSheetScaler>
+      {/* The paper itself renders inside ResumeDocumentView's theme-light island. */}
+      <div className="rounded-3xl border border-line bg-surface p-3 sm:p-6">
+        <div className="mx-auto max-w-3xl">
+          <ResumeSheetScaler>
+            <ResumeDocumentView model={model} spec={spec} accentColor={effectiveAccent(accentColor, resume.design)} />
+          </ResumeSheetScaler>
+        </div>
+      </div>
     </div>
   );
 }

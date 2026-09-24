@@ -3,7 +3,6 @@ import Link from "next/link";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { formatINR } from "@/lib/format";
 import { absoluteUrl } from "@/lib/seo";
-import { PageHeader } from "@/components/ui";
 
 export const revalidate = 300;
 export const metadata: Metadata = {
@@ -63,43 +62,61 @@ export default async function CustomProjectsPage() {
 
   return (
     <div className="page-shell">
-      <PageHeader
-        title="Custom Projects"
-        description="Need something the marketplace doesn't have yet? Describe what you need, pay a small token to start, and the CampusEduX team builds and delivers it — tracked the same way as everything else in your account."
-      />
+      <section className="relative overflow-hidden rounded-3xl bg-[#0F0B2E] px-6 py-10 text-white shadow-card-lg sm:px-10 sm:py-14">
+        <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-primary/50 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-28 right-0 h-72 w-80 rounded-full bg-accent-pink/30 blur-3xl" />
+        <div className="relative max-w-2xl">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#C9C2FF]">Custom projects</p>
+          <h1 className="mt-3 font-display text-[2rem] font-bold leading-tight tracking-tight sm:text-[2.6rem]">
+            Need something the marketplace doesn&apos;t have? <span className="text-[#B7ADFF]">We&apos;ll build it.</span>
+          </h1>
+          <p className="mt-4 text-[15px] leading-relaxed text-white/75">
+            Describe what you need, pay a small token to start, and the CampusEduX team builds and delivers it — tracked the
+            same way as everything else in your account.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Link
+              href="/custom-projects/start"
+              className="inline-flex h-12 items-center rounded-xl bg-white px-6 text-[0.95rem] font-semibold text-[#2A1FA8] shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
+            >
+              Start a request
+            </Link>
+            <Link
+              href="/custom-projects/my-projects"
+              className="inline-flex h-12 items-center rounded-xl border border-white/25 bg-white/5 px-6 text-[0.95rem] font-semibold text-white transition hover:bg-white/10"
+            >
+              My requests
+            </Link>
+          </div>
+        </div>
+      </section>
 
-      <div className="mt-5 flex flex-wrap gap-3">
-        <Link href="/custom-projects/start" className="btn-primary">
-          Start a request
-        </Link>
-        <Link href="/custom-projects/my-projects" className="btn-ghost">
-          My requests
-        </Link>
-      </div>
-
-      <h2 className="mt-12 text-xl font-bold text-ink">How it works</h2>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+      <h2 className="h-section mt-14">How it works</h2>
+      <ol className="mt-5 grid gap-4 sm:grid-cols-2">
         {STEPS.map((s, i) => (
-          <div key={s} className="flex items-start gap-3 rounded-2xl border border-line bg-card p-4 shadow-card">
-            <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+          <li key={s} className="card flex items-start gap-4 p-5">
+            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent-violet text-sm font-bold text-white shadow-glow">
               {i + 1}
             </span>
-            <span className="text-sm text-ink-muted">{s}</span>
-          </div>
+            <span className="pt-1.5 text-sm leading-relaxed text-ink-muted">{s}</span>
+          </li>
         ))}
-      </div>
+      </ol>
 
       {typeStarting.length > 0 && (
         <>
-          <h2 className="mt-12 text-xl font-bold text-ink">Starting price by project type</h2>
+          <h2 className="h-section mt-14">Starting price by project type</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {typeStarting.map((t) => (
               <div
                 key={t.type}
-                className="rounded-2xl border border-line bg-card p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+                className="card card-hover p-6"
               >
-                <div className="font-semibold text-ink">{TYPE_LABEL[t.type] ?? t.type}</div>
-                <div className="mt-1 text-lg font-bold text-ink">from {formatINR(t.from)}</div>
+                <div className="text-xs font-bold uppercase tracking-[0.12em] text-primary">{TYPE_LABEL[t.type] ?? t.type}</div>
+                <div className="mt-2 font-display text-3xl font-bold tracking-tight text-ink">
+                  <span className="text-base font-medium text-ink-muted">from </span>
+                  {formatINR(t.from)}
+                </div>
                 <div className="mt-1 text-xs text-ink-faint">{formatINR(t.token)} token to begin</div>
               </div>
             ))}
@@ -109,12 +126,12 @@ export default async function CustomProjectsPage() {
 
       {platforms.length > 0 && (
         <>
-          <h2 className="mt-12 text-xl font-bold text-ink">Platform options</h2>
+          <h2 className="h-section mt-14">Platform options</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {platforms.map((p: { platform: string; label: string; charge: number }) => (
               <div
                 key={p.platform}
-                className="rounded-2xl border border-line bg-card p-5 text-center shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+                className="card p-5 text-center"
               >
                 <div className="text-sm text-ink-muted">{p.label}</div>
                 <div className="mt-1 font-semibold text-ink">{Number(p.charge) > 0 ? `+${formatINR(p.charge)}` : "Included"}</div>
@@ -126,10 +143,10 @@ export default async function CustomProjectsPage() {
 
       {features.length > 0 && (
         <>
-          <h2 className="mt-12 text-xl font-bold text-ink">Add-on features</h2>
+          <h2 className="h-section mt-14">Add-on features</h2>
           <div className="mt-4 flex flex-wrap gap-2">
             {features.map((f: { id: string; name: string; price: number }) => (
-              <span key={f.id} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs text-ink">
+              <span key={f.id} className="rounded-full border border-line bg-card px-3.5 py-1.5 text-xs font-medium text-ink">
                 {f.name}
                 {Number(f.price) > 0 ? ` — +${formatINR(f.price)}` : ""}
               </span>
