@@ -22,6 +22,8 @@ const LABELS: [RegExp, CalloutVariant][] = [
 
 export interface DetectedCallout {
   variant: CalloutVariant;
+  /** Lighter treatment (left rule + label, no box) — paragraph "Remember" / "Key takeaway". */
+  subtle?: boolean;
   /** The label exactly as authored, e.g. "Teacher's simple view". */
   label: string;
   /** The blockquote text after the label. */
@@ -39,4 +41,24 @@ export function detectCallout(text: string): DetectedCallout | null {
   const key = label.toLowerCase().replace(/[’]/g, "'");
   const hit = LABELS.find(([re]) => re.test(key));
   return hit ? { variant: hit[1], label, body: m[2].trim() } : null;
+}
+
+/**
+ * Paragraph-level callouts — owner-approved 2026-09-24, deliberately narrower
+ * than blockquotes: only a paragraph that OPENS with bold `**Remember:**`,
+ * `**Key takeaway:**` (subtle style — they sit beside "Teacher's simple view"
+ * boxes in the same lessons) or `**Common Mistake(s):**` (warning style).
+ * Everything else stays an ordinary paragraph.
+ */
+const PARAGRAPH_LABELS: [RegExp, CalloutVariant, boolean][] = [
+  [/^(remember|key takeaway)$/, "key", true],
+  [/^common mistakes?$/, "warning", false],
+];
+
+export function detectParagraphCallout(text: string): DetectedCallout | null {
+  const m = text.trim().match(/^\*\*([^*]{1,30}?)\s*:\s*\*\*\s*(.+)$/s);
+  if (!m) return null;
+  const label = m[1].trim();
+  const hit = PARAGRAPH_LABELS.find(([re]) => re.test(label.toLowerCase()));
+  return hit ? { variant: hit[1], subtle: hit[2] || undefined, label, body: m[2].trim() } : null;
 }

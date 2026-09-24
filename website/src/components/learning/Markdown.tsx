@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CodeBlock } from "./CodeBlock";
 import { slugId } from "@/lib/blogText";
 import { createTopicLinkState, type TopicLinkEntry, type TopicLinkState } from "@/lib/topicLinks";
-import { detectCallout } from "@/lib/callouts";
+import { detectCallout, detectParagraphCallout } from "@/lib/callouts";
 import { Callout } from "./Callout";
 
 export { slugId } from "@/lib/blogText";
@@ -354,6 +354,16 @@ function renderBlocks(
     ) {
       buf.push(lines[i]);
       i += 1;
+    }
+    const paraCallout = callouts ? detectParagraphCallout(buf.join(" ")) : null;
+    if (paraCallout) {
+      out.push(
+        <Callout key={`b${k++}`} variant={paraCallout.variant} label={paraCallout.label} subtle={paraCallout.subtle}>
+          {/* Was a paragraph → keeps the paragraph's topic auto-linking. */}
+          {applyTopicLinks(renderInline(paraCallout.body, `b${k}`), linkCtx, `b${k}`)}
+        </Callout>,
+      );
+      continue;
     }
     out.push(
       <p key={`b${k++}`} className="my-3 leading-7 text-ink-muted">

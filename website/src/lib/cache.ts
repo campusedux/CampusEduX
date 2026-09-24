@@ -153,8 +153,10 @@ export const getCachedHomeData = unstable_cache(
 
 const PROJECT_LIST_FIELDS =
   "id,title,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller";
+// `experience_level` ('Fresher' | 'Experienced' | null, migration 0114) — read-only
+// addition approved 2026-09-24 for the Fresher/Experienced badge + filter.
 const JOB_LIST_FIELDS =
-  "id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at";
+  "id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at,experience_level";
 
 export interface ProjectsPageArgs {
   page: number;
@@ -202,6 +204,8 @@ export interface JobsPageArgs {
   q?: string;
   location?: string;
   type?: string;
+  /** Exact `experience_level` match. */
+  experience?: "Fresher" | "Experienced";
 }
 
 export const getCachedJobsPage = unstable_cache(
@@ -216,6 +220,7 @@ export const getCachedJobsPage = unstable_cache(
     if (a.q) query = query.ilike("title", `%${a.q}%`);
     if (a.location) query = query.ilike("location", `%${a.location}%`);
     if (a.type) query = query.eq("job_type", a.type);
+    if (a.experience) query = query.eq("experience_level", a.experience);
 
     const { data, count } = await query;
     return { jobs: data ?? [], count };
@@ -345,7 +350,7 @@ export const getCachedCompanyDetail = unstable_cache(
       onlyActiveJobs(
         supabase
           .from("jobs")
-          .select("id,title,company_name,company_logo_url,location,job_type,salary_range,posted_at"),
+          .select(JOB_LIST_FIELDS),
       )
         .eq("company_id", id)
         .order("posted_at", { ascending: false })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectCallout } from "@/lib/callouts";
+import { detectCallout, detectParagraphCallout } from "@/lib/callouts";
 
 describe("detectCallout", () => {
   it("recognises the two label shapes found in live content", () => {
@@ -27,5 +27,27 @@ describe("detectCallout", () => {
     expect(detectCallout(">>>>>> feature-login")).toBeNull();
     expect(detectCallout("**Output:** 5")).toBeNull();
     expect(detectCallout("Time: 10:30")).toBeNull();
+  });
+});
+
+describe("detectParagraphCallout", () => {
+  it("converts only the three approved paragraph labels", () => {
+    expect(detectParagraphCallout("**Remember:** problem first, technique second.")).toEqual({
+      variant: "key",
+      subtle: true,
+      label: "Remember",
+      body: "problem first, technique second.",
+    });
+    expect(detectParagraphCallout("**Key takeaway:** a partial index narrows it")?.subtle).toBe(true);
+    expect(detectParagraphCallout("**Common Mistakes:** Writing numbers with commas")).toMatchObject({
+      variant: "warning",
+      subtle: undefined,
+    });
+  });
+
+  it("leaves every other bold-label paragraph as a paragraph", () => {
+    for (const t of ["**Purpose:** the core concept", "**Output:**", "**Explanation:** x", "**Definition:** y", "Remember: plain text", "**Main idea:** z"]) {
+      expect(detectParagraphCallout(t)).toBeNull();
+    }
   });
 });

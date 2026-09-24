@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import Link from "next/link";
+import { ArrowRight, BadgeIndianRupee } from "lucide-react";
 import { EmptyState } from "@/components/ui";
+import { ReferralHero } from "@/components/referral/ReferralHero";
+import { ReferralHowItWorks } from "@/components/referral/ReferralHowItWorks";
 import { absoluteUrl } from "@/lib/seo";
 
 export const revalidate = 300;
@@ -38,34 +42,54 @@ export default async function ReferralPage() {
   const settings = await getRewardSettings();
 
   return (
-    <div className="page-shell-narrow">
-      <h1 className="text-3xl font-bold text-ink">Referral Program</h1>
-      <p className="mt-3 text-ink-muted">
-        Every CampusEduX student gets a referral code. When a friend joins through it, credit is added directly to your
-        wallet — tracked on a running dashboard in your account.
-      </p>
+    <div className="page-shell space-y-12">
+      <ReferralHero
+        title="Invite friends, earn wallet credit"
+        subtitle="Every CampusEduX student gets a referral code. When a friend joins through it, credit is added directly to your wallet — tracked on a running dashboard in your account."
+      >
+        <Link
+          href="/account/referral"
+          className="mt-7 inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-[0.95rem] font-semibold text-[#7A1F5C] shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
+        >
+          Get your referral link <ArrowRight className="h-4 w-4" aria-hidden />
+        </Link>
+      </ReferralHero>
 
-      {settings ? (
-        <div className="mt-8 rounded-2xl border border-line bg-card p-5 shadow-card">
-          <div className="font-semibold text-ink">Current reward rule</div>
-          <p className="mt-2 text-sm text-ink-muted">
-            {settings.bonus_type === "flat"
-              ? `A flat reward of ₹${settings.bonus_value} per successful referral.`
-              : `${settings.bonus_value}% of the referred student's first order (capped at ₹${settings.max_payout}).`}{" "}
-            {settings.reward_on_signup
-              ? "Credited as soon as a referred friend signs up."
-              : "Credited after the referred friend's first purchase."}
-          </p>
-          <p className="mt-2 text-xs text-ink-faint">
-            Credit is valid for {settings.bonus_validity_days} days. This rule is set in the admin panel and can change —
-            the app and website always show the current value.
-          </p>
-        </div>
-      ) : (
-        <EmptyState className="mt-8" title="Reward terms coming soon" subtitle="Current terms appear here once configured." />
-      )}
+      <ReferralHowItWorks rewardOnSignup={settings?.reward_on_signup} />
 
-      <p className="mt-8 text-xs text-ink-faint">
+      <section aria-labelledby="reward-rule-title">
+        <h2 id="reward-rule-title" className="h-section">
+          Current reward
+        </h2>
+        {settings ? (
+          <div className="card mt-5 flex flex-col gap-4 p-6 sm:flex-row sm:items-start">
+            <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-success/15">
+              <BadgeIndianRupee className="h-6 w-6 text-success" aria-hidden />
+            </span>
+            <div>
+              <p className="font-display text-xl font-bold text-ink">
+                {settings.bonus_type === "flat"
+                  ? `₹${settings.bonus_value} per successful referral`
+                  : `${settings.bonus_value}% of your friend's first order`}
+              </p>
+              <p className="mt-1.5 text-sm text-ink-muted">
+                {settings.bonus_type === "flat" ? "" : `Capped at ₹${settings.max_payout}. `}
+                {settings.reward_on_signup
+                  ? "Credited as soon as a referred friend signs up."
+                  : "Credited after the referred friend's first purchase."}
+              </p>
+              <p className="mt-3 text-xs text-ink-faint">
+                Credit is valid for {settings.bonus_validity_days} days. This rule is set in the admin panel and can
+                change — the app and website always show the current value.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <EmptyState className="mt-5" title="Reward terms coming soon" subtitle="Current terms appear here once configured." />
+        )}
+      </section>
+
+      <p className="text-xs text-ink-faint">
         Referral credit lands in your CampusEduX wallet and can be spent on projects, Premium, or withdrawn per the
         wallet&apos;s rules.
       </p>

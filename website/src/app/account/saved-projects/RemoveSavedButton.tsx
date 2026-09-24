@@ -21,7 +21,7 @@ export function RemoveSavedButton({ projectId }: { projectId: string }) {
       >
         {pending ? "Removing…" : "Remove from saved"}
       </button>
-      {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}
     </div>
   );
 }

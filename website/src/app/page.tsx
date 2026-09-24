@@ -228,7 +228,7 @@ export default async function HomePage() {
       {faqs.length > 0 && (
         <Reveal>
           <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-faq-title">
-            <div className="grid gap-8 lg:grid-cols-[1fr_1.6fr] lg:gap-14">
+            <div className="grid gap-8 lg:grid-cols-[1fr_1.6fr] lg:items-start lg:gap-14">
               <SectionHeader
                 id="home-faq-title"
                 eyebrow="FAQ"

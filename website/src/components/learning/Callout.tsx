@@ -13,10 +13,35 @@ const STYLE: Record<CalloutVariant, { icon: LucideIcon; box: string; fg: string 
   key: { icon: Star, box: "border-accent-violet/30 bg-accent-violet/[0.07]", fg: "text-violet-700 dark:text-violet-300" },
 };
 
-/** A labelled lesson callout (Tip / Note / Warning / Definition / …). */
-export function Callout({ variant, label, children }: { variant: CalloutVariant; label: string; children: React.ReactNode }) {
+/**
+ * A labelled lesson callout (Tip / Note / Warning / Definition / …).
+ * `subtle` = a light left rule + small label, no filled box — for frequent,
+ * short reminders that sit next to boxed callouts in the same lesson.
+ */
+export function Callout({
+  variant,
+  label,
+  subtle = false,
+  children,
+}: {
+  variant: CalloutVariant;
+  label: string;
+  subtle?: boolean;
+  children: React.ReactNode;
+}) {
   const s = STYLE[variant];
   const Icon = s.icon;
+  if (subtle) {
+    return (
+      <aside className="my-5 border-l-2 border-accent-violet/35 py-0.5 pl-4" aria-label={label}>
+        <p className={cn("flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] opacity-80", s.fg)}>
+          <Icon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+          {label}
+        </p>
+        <div className="mt-1 leading-7 text-ink-muted">{children}</div>
+      </aside>
+    );
+  }
   return (
     <aside className={cn("my-5 rounded-2xl border px-4 py-3.5 sm:px-5", s.box)} aria-label={label}>
       <p className={cn("flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em]", s.fg)}>
