@@ -20,15 +20,25 @@ const safeAccent = (c: string | null) => (c && /^#[0-9a-fA-F]{6}$/.test(c) ? c :
  * progress strip once the visitor has started it (device-only progress).
  * Server component; the progress strip is a tiny client island.
  */
-export function CourseCard({ course, className }: { course: CourseCardData; className?: string }) {
+export function CourseCard({
+  course,
+  compactOnMobile = false,
+  className,
+}: {
+  course: CourseCardData;
+  /** Below `sm`: drop the cover art for a compact row (Learning hub lists). */
+  compactOnMobile?: boolean;
+  className?: string;
+}) {
   const accent = safeAccent(course.accent_color);
+  const icon = course.icon && isEmoji(course.icon) ? course.icon : <BookOpen className="h-5 w-5" aria-hidden />;
   return (
     <Link
       href={`/learning/${course.slug}`}
       className={`card card-hover group flex flex-col overflow-hidden ${className ?? ""}`}
     >
       <div
-        className="relative flex aspect-[16/7] items-center justify-center overflow-hidden"
+        className={`relative items-center justify-center overflow-hidden ${compactOnMobile ? "hidden aspect-[16/7] sm:flex" : "flex aspect-[16/7]"}`}
         style={{ background: `linear-gradient(135deg, ${accent}26, ${accent}0d 60%, transparent)` }}
       >
         {course.cover_image_url ? (
@@ -68,6 +78,18 @@ export function CourseCard({ course, className }: { course: CourseCardData; clas
       </div>
 
       <div className="flex flex-1 flex-col p-5">
+        {compactOnMobile && (
+          <div className="mb-3 flex items-center gap-2 sm:hidden">
+            <span
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-line bg-surface text-lg"
+              style={{ color: accent }}
+            >
+              {icon}
+            </span>
+            {course.is_featured && <Badge tone="primary">Featured</Badge>}
+            {course.is_premium ? <Badge tone="premium">Premium</Badge> : <Badge tone="success">Free</Badge>}
+          </div>
+        )}
         <h3 className="font-display text-lg font-bold leading-snug tracking-tight text-ink group-hover:text-primary">
           {course.name}
         </h3>

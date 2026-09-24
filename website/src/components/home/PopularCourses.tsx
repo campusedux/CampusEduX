@@ -19,9 +19,10 @@ export function PopularCourses({ courses }: { courses: CourseCardData[] }) {
         viewAllHref="/learning"
         viewAllLabel="All courses"
       />
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Phone: horizontal snap row (a peek of the next card invites the swipe); sm+: grid. */}
+      <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-3 [scrollbar-width:none] sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3 [&::-webkit-scrollbar]:hidden">
         {ordered.map((c) => (
-          <CourseCard key={c.id} course={c} />
+          <CourseCard key={c.id} course={c} className="w-[82%] flex-shrink-0 snap-start sm:w-auto" />
         ))}
       </div>
     </section>

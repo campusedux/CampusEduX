@@ -7,6 +7,8 @@ import {
   dayKey,
   deriveBadges,
   emptyState,
+  firstIncomplete,
+  reconcileCourse,
   markComplete,
   markIncomplete,
   parseState,
@@ -110,5 +112,28 @@ describe("learning progress model", () => {
 
   it("reports 0% (not NaN) when the lesson total is unknown", () => {
     expect(courseProgress(emptyState(), "x", 0)).toMatchObject({ percent: 0, started: false });
+  });
+
+  it("reconciles away renamed/deleted lessons so Continue learning never 404s", () => {
+    const now = at(2026, 9, 24);
+    let s = markComplete(emptyState(), lesson("old-slug"), now);
+    s = markComplete(s, lesson("kept"), now);
+    s = recordVisit(s, lesson("old-slug"), now);
+    const r = reconcileCourse(s, "java-tutorial", ["kept", "new-slug"]);
+    expect(Object.keys(r.courses["java-tutorial"].completed)).toEqual(["kept"]);
+    expect(r.lastVisited).toBeNull();
+    expect(r.courses["java-tutorial"].lastVisited).toBeUndefined();
+    // Nothing stale → same object (no write).
+    expect(reconcileCourse(r, "java-tutorial", ["kept", "new-slug"])).toBe(r);
+    // Another course's last visit is left alone.
+    const other = recordVisit(emptyState(), lesson("x", "python"), now);
+    expect(reconcileCourse(other, "java-tutorial", []).lastVisited?.gridSlug).toBe("python");
+  });
+
+  it("finds the first incomplete lesson in course order", () => {
+    const now = at(2026, 9, 24);
+    const s = markComplete(emptyState(), lesson("a"), now);
+    expect(firstIncomplete(s, "java-tutorial", ["a", "b", "c"])).toBe("b");
+    expect(firstIncomplete(s, "java-tutorial", ["a"])).toBeNull();
   });
 });

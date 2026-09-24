@@ -6,6 +6,7 @@ import {
   courseProgress,
   dailyGoalInfo,
   deriveBadges,
+  firstIncomplete,
   recentDays,
   totalCompleted,
   type LearningProgressState,
@@ -42,6 +43,7 @@ export function useLearningProgress() {
       badges: deriveBadges(state, now),
       isComplete: (gridSlug: string, topicSlug: string) => !!state.courses[gridSlug]?.completed[topicSlug],
       courseProgress: (gridSlug: string, totalLessons: number) => courseProgress(state, gridSlug, totalLessons),
+      firstIncomplete: (gridSlug: string, orderedTopicSlugs: string[]) => firstIncomplete(state, gridSlug, orderedTopicSlugs),
       ...learningProgressService,
     };
   }, [state, ready]);

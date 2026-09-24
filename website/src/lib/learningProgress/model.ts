@@ -204,6 +204,44 @@ export function markIncomplete(state: LearningProgressState, gridSlug: string, t
   return { ...state, courses: { ...state.courses, [gridSlug]: { ...c, completed } } };
 }
 
+/**
+ * Drop progress that points at lessons no longer in the course (renamed or
+ * deleted by an admin): stale completions stop inflating the percentage, and a
+ * stale "last visited" is cleared so "Continue learning" never links to a
+ * missing lesson. Returns the same object when nothing changed.
+ */
+export function reconcileCourse(state: LearningProgressState, gridSlug: string, validTopicSlugs: Iterable<string>): LearningProgressState {
+  const valid = new Set(validTopicSlugs);
+  const c = state.courses[gridSlug];
+  const globalStale = state.lastVisited?.gridSlug === gridSlug && !valid.has(state.lastVisited.topicSlug);
+  if (!c && !globalStale) return state;
+
+  let changed = globalStale;
+  let nextCourse = c;
+  if (c) {
+    const completed: Record<string, string> = {};
+    for (const [slug, at] of Object.entries(c.completed)) {
+      if (valid.has(slug)) completed[slug] = at;
+      else changed = true;
+    }
+    const lastStale = !!c.lastVisited && !valid.has(c.lastVisited.topicSlug);
+    if (lastStale) changed = true;
+    nextCourse = { ...c, completed, lastVisited: lastStale ? undefined : c.lastVisited };
+  }
+  if (!changed) return state;
+  return {
+    ...state,
+    lastVisited: globalStale ? null : state.lastVisited,
+    courses: nextCourse ? { ...state.courses, [gridSlug]: nextCourse } : state.courses,
+  };
+}
+
+/** First lesson (in course order) that isn't complete yet; `null` when all are done. */
+export function firstIncomplete(state: LearningProgressState, gridSlug: string, orderedTopicSlugs: string[]): string | null {
+  const done = state.courses[gridSlug]?.completed ?? {};
+  return orderedTopicSlugs.find((slug) => !done[slug]) ?? null;
+}
+
 export function setDailyGoal(state: LearningProgressState, goal: number): LearningProgressState {
   const g = Math.min(MAX_DAILY_GOAL, Math.max(1, Math.floor(goal) || DEFAULT_DAILY_GOAL));
   return { ...state, dailyGoal: g };

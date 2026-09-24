@@ -15,6 +15,7 @@ export function Modal({
   title,
   children,
   footer,
+  ariaLabel,
   className,
 }: {
   open: boolean;
@@ -22,6 +23,8 @@ export function Modal({
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Accessible name when there's no visible `title`. */
+  ariaLabel?: string;
   className?: string;
 }) {
   useEffect(() => {
@@ -44,7 +47,7 @@ export function Modal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={title ?? ariaLabel}
         className={cn(
           "relative w-full max-w-lg animate-slide-up rounded-t-3xl border border-line bg-card shadow-card-lg sm:animate-scale-in sm:rounded-3xl",
           className,

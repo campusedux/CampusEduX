@@ -15,6 +15,7 @@ import {
   markComplete as markCompleteModel,
   markIncomplete as markIncompleteModel,
   parseState,
+  reconcileCourse as reconcileCourseModel,
   recordVisit as recordVisitModel,
   setDailyGoal as setDailyGoalModel,
   type LearningProgressState,
@@ -91,6 +92,9 @@ export const learningProgressService = {
   markComplete: (lesson: LessonRef) => update((s) => markCompleteModel(s, lesson, new Date())),
   markIncomplete: (gridSlug: string, topicSlug: string) => update((s) => markIncompleteModel(s, gridSlug, topicSlug)),
   setDailyGoal: (goal: number) => update((s) => setDailyGoalModel(s, goal)),
+  /** Prune progress for lessons that no longer exist in this course. */
+  reconcileCourse: (gridSlug: string, validTopicSlugs: string[]) =>
+    update((s) => reconcileCourseModel(s, gridSlug, validTopicSlugs)),
 };
 
 /** Test hook: forget the cached snapshot so the next read re-loads storage. */
