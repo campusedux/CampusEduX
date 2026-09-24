@@ -20,7 +20,7 @@ export default async function NotificationsPage() {
       {(!data || data.length === 0) ? (
         <EmptyState className="mt-6" title="No notifications yet" />
       ) : (
-        <div className="mt-6 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
+        <div className="mt-6 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
           {data.map((n) => (
             <NotificationRow key={n.id} notification={n} />
           ))}

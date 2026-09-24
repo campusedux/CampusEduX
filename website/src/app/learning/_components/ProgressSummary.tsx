@@ -39,7 +39,7 @@ export async function ProgressSummary({ gridSlug }: { gridSlug: string }) {
   const totalProblems = topics.reduce((n, t) => n + t.coding_total, 0);
 
   return (
-    <div className="mt-4 rounded-2xl border border-line bg-white p-5 shadow-card">
+    <div className="mt-4 rounded-2xl border border-line bg-card p-5 shadow-card">
       <h2 className="text-sm font-semibold text-ink">Your progress</h2>
       <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-ink-muted">
         <span>

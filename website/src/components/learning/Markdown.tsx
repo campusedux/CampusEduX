@@ -272,7 +272,7 @@ function renderBlocks(src: string, headingLevelOffset = 1, linkCtx: LinkCtx | nu
             </thead>
             <tbody>
               {rows.map((r, ri) => (
-                <tr key={ri} className="odd:bg-white even:bg-surface/60">
+                <tr key={ri} className="odd:bg-card even:bg-surface/60">
                   {r.map((c, ci) => (
                     <td key={ci} className="border-b border-line px-3 py-2 text-ink-muted last:border-r-0">
                       {renderInline(c, `td${ri}-${ci}`)}

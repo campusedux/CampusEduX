@@ -33,7 +33,7 @@ export function PremiumCard({
   return (
     <div
       className={cn(
-        "relative flex flex-col rounded-2xl border bg-white p-6 shadow-card transition",
+        "relative flex flex-col rounded-2xl border bg-card p-6 shadow-card transition",
         popular
           ? "border-primary shadow-card-lg ring-2 ring-primary lg:-translate-y-1"
           : "border-line hover:-translate-y-0.5 hover:shadow-card-lg motion-reduce:transform-none",

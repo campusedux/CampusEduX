@@ -174,10 +174,13 @@ export function GlobalSearchField({
 
   const wrap =
     variant === "header"
-      ? "flex h-10 w-48 items-center gap-2 rounded-full border border-line bg-surface px-4 transition-[width,background-color,border-color,box-shadow] focus-within:border-primary focus-within:bg-white focus-within:shadow-sm xl:w-64 xl:focus-within:w-72"
-      : "flex h-11 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 focus-within:border-primary focus-within:bg-white";
+      ? "flex h-10 w-44 items-center gap-2 rounded-full border border-line bg-surface px-4 transition-[width,background-color,border-color,box-shadow] focus-within:w-60 focus-within:border-primary focus-within:bg-card focus-within:shadow-sm 2xl:w-64 2xl:focus-within:w-72"
+      : "flex h-11 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 focus-within:border-primary focus-within:bg-card";
 
   const placeholder = "Search CampusEduX…";
+  // The compact header field is narrow — keep its visible hint short; the
+  // accessible name stays the full phrase.
+  const visiblePlaceholder = variant === "header" ? "Search…" : placeholder;
 
   return (
     <form
@@ -199,7 +202,7 @@ export function GlobalSearchField({
           onChange={(e) => setValue(e.target.value)}
           onFocus={() => setFocused(true)}
           onKeyDown={onKeyDown}
-          placeholder={placeholder}
+          placeholder={visiblePlaceholder}
           aria-label={placeholder}
           role="combobox"
           aria-expanded={open}
@@ -227,7 +230,7 @@ export function GlobalSearchField({
           role="listbox"
           aria-label="Search suggestions"
           className={cn(
-            "absolute z-[70] mt-2 max-h-[70vh] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-white py-1 shadow-card-lg",
+            "absolute z-[70] mt-2 max-h-[70vh] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card py-1 shadow-card-lg",
             variant === "header" ? "right-0 top-full w-[22rem]" : "left-0 right-0 top-full",
           )}
         >
@@ -386,9 +389,9 @@ export function GlobalSearchTrigger() {
   const overlay =
     open && mounted
       ? createPortal(
-          <div className="fixed inset-0 z-[100] lg:hidden">
-            <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} aria-hidden />
-            <div className="absolute inset-x-0 top-0 border-b border-line bg-white p-3 shadow-card-lg">
+          <div className="fixed inset-0 z-[100] xl:hidden">
+            <div className="absolute inset-0 bg-scrim/60" onClick={() => setOpen(false)} aria-hidden />
+            <div className="absolute inset-x-0 top-0 border-b border-line bg-card p-3 shadow-card-lg">
               <div className="container-page flex items-center gap-2">
                 <GlobalSearchField
                   variant="page"
@@ -423,7 +426,7 @@ export function GlobalSearchTrigger() {
         onClick={() => setOpen(true)}
         aria-label="Search CampusEduX"
         aria-expanded={open}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink transition hover:bg-surface lg:hidden"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink-muted transition hover:border-primary/40 hover:bg-surface hover:text-primary xl:hidden"
       >
         <Search className="h-5 w-5" aria-hidden />
       </button>

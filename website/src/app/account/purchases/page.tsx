@@ -31,7 +31,7 @@ export default async function PurchasesPage() {
           action={<Button href="/projects" size="sm">Browse the marketplace</Button>}
         />
       ) : (
-        <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-card">
           {purchases.map((p) => {
             const project = Array.isArray(p.project) ? p.project[0] : p.project;
             return (

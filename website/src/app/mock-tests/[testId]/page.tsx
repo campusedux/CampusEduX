@@ -58,7 +58,7 @@ export default async function MockTestPage({ params }: { params: { testId: strin
         </div>
       </header>
 
-      <div className="mt-6 rounded-2xl border border-line bg-white p-5 shadow-card">
+      <div className="mt-6 rounded-2xl border border-line bg-card p-5 shadow-card">
         <h2 className="text-sm font-semibold text-ink">Instructions</h2>
         <ul className="mt-2 space-y-1.5 text-sm text-ink-muted">
           <li>• {test.question_count} multiple-choice question{test.question_count === 1 ? "" : "s"}.</li>

@@ -100,7 +100,7 @@ export function CompilerPanel(props: CompilerPanelProps) {
   });
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-[#0b1120] shadow-card lg:h-full lg:rounded-none lg:border-0">
+    <div className="theme-light flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-[#0b1120] shadow-card lg:h-full lg:rounded-none lg:border-0">
       <div className="shrink-0">
         <CompilerToolbar
           languages={languages}

@@ -20,7 +20,7 @@ export default async function WalletPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-ink">Wallet</h1>
-      <div className="mt-4 rounded-2xl border border-line bg-white p-6 shadow-card">
+      <div className="mt-4 rounded-2xl border border-line bg-card p-6 shadow-card">
         <div className="text-xs text-ink-faint">Current balance</div>
         <div className="mt-1 text-3xl font-bold text-ink">{formatINR(balance)}</div>
         <TopUpForm />
@@ -30,7 +30,7 @@ export default async function WalletPage() {
       {!txns || txns.length === 0 ? (
         <EmptyState className="mt-3" title="No transactions yet" />
       ) : (
-        <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-card">
           {txns.map((t) => (
             <div key={t.id} className="flex items-center justify-between px-4 py-3 text-sm">
               <div>

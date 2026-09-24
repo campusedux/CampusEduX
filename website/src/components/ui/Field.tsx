@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
  */
 
 const control =
-  "block w-full rounded-xl border border-line bg-white px-3.5 text-sm text-ink shadow-sm outline-none transition " +
+  "block w-full rounded-xl border border-line bg-card px-3.5 text-sm text-ink shadow-sm outline-none transition " +
   "placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary/20 " +
   "disabled:cursor-not-allowed disabled:bg-surface disabled:opacity-70";
 const invalidRing = "border-danger focus:border-danger focus:ring-danger/20";
@@ -125,7 +125,7 @@ export function OptionChips<T extends string>({
               "rounded-xl border px-4 py-2 text-sm font-medium transition active:scale-[.98] motion-reduce:transform-none",
               selected
                 ? "border-primary bg-primary text-white shadow-sm"
-                : "border-line bg-white text-ink hover:border-primary/40 hover:bg-primary-50/60",
+                : "border-line bg-card text-ink hover:border-primary/40 hover:bg-primary-50/60",
             )}
           >
             {getLabel ? getLabel(o) : o}

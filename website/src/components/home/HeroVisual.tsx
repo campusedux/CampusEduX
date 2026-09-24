@@ -20,7 +20,7 @@ const ROWS: Row[] = [
 
 export function HeroVisual() {
   return (
-    <div className="relative rounded-3xl border border-line bg-white p-4 shadow-card-lg sm:p-5">
+    <div className="relative rounded-3xl border border-line bg-card p-4 shadow-card-lg sm:p-5">
       <div className="mb-3 flex items-center gap-1.5 px-1" aria-hidden>
         <span className="h-2.5 w-2.5 rounded-full bg-line" />
         <span className="h-2.5 w-2.5 rounded-full bg-line" />
@@ -34,7 +34,7 @@ export function HeroVisual() {
             <Link
               key={r.href}
               href={r.href}
-              className="group flex items-center gap-3 rounded-2xl border border-line bg-white p-3.5 transition hover:border-primary/30 hover:bg-surface active:scale-[.99] motion-reduce:transform-none"
+              className="group flex items-center gap-3 rounded-2xl border border-line bg-card p-3.5 transition hover:border-primary/30 hover:bg-surface active:scale-[.99] motion-reduce:transform-none"
             >
               <span
                 className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"

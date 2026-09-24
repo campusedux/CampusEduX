@@ -31,7 +31,7 @@ export function AccountNav() {
             className={cn(
               "whitespace-nowrap rounded-lg px-3 py-2 font-medium transition",
               active
-                ? "bg-white text-primary shadow-sm md:bg-primary-50 md:shadow-none"
+                ? "bg-card text-primary shadow-sm md:bg-primary-50 md:shadow-none"
                 : "text-ink-muted hover:text-ink md:hover:bg-surface",
             )}
           >

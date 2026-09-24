@@ -2,13 +2,21 @@ import { cn } from "@/lib/cn";
 
 /** Shimmer block. Compose the presets below or use directly with a size class. */
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-lg bg-line/70", className)} aria-hidden />;
+  return (
+    <div
+      className={cn(
+        "animate-shimmer rounded-lg bg-[linear-gradient(90deg,rgb(var(--line)/0.55)_0%,rgb(var(--line)/0.95)_50%,rgb(var(--line)/0.55)_100%)] bg-[length:200%_100%]",
+        className,
+      )}
+      aria-hidden
+    />
+  );
 }
 
 /** Matches the ProjectCard footprint (image-top + two text lines + footer row). */
 export function SkeletonProjectCard() {
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
+    <div className="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
       <Skeleton className="aspect-[16/9] rounded-none" />
       <div className="space-y-2 p-4">
         <Skeleton className="h-4 w-3/4" />
@@ -25,7 +33,7 @@ export function SkeletonProjectCard() {
 /** Matches the JobCard footprint. */
 export function SkeletonJobCard() {
   return (
-    <div className="rounded-2xl border border-line bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
       <div className="flex items-start gap-3">
         <Skeleton className="h-12 w-12 rounded-xl" />
         <div className="flex-1 space-y-2">

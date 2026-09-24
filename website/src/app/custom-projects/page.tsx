@@ -80,7 +80,7 @@ export default async function CustomProjectsPage() {
       <h2 className="mt-12 text-xl font-bold text-ink">How it works</h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {STEPS.map((s, i) => (
-          <div key={s} className="flex items-start gap-3 rounded-2xl border border-line bg-white p-4 shadow-card">
+          <div key={s} className="flex items-start gap-3 rounded-2xl border border-line bg-card p-4 shadow-card">
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
               {i + 1}
             </span>
@@ -96,7 +96,7 @@ export default async function CustomProjectsPage() {
             {typeStarting.map((t) => (
               <div
                 key={t.type}
-                className="rounded-2xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+                className="rounded-2xl border border-line bg-card p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
               >
                 <div className="font-semibold text-ink">{TYPE_LABEL[t.type] ?? t.type}</div>
                 <div className="mt-1 text-lg font-bold text-ink">from {formatINR(t.from)}</div>
@@ -114,7 +114,7 @@ export default async function CustomProjectsPage() {
             {platforms.map((p: { platform: string; label: string; charge: number }) => (
               <div
                 key={p.platform}
-                className="rounded-2xl border border-line bg-white p-5 text-center shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
+                className="rounded-2xl border border-line bg-card p-5 text-center shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none"
               >
                 <div className="text-sm text-ink-muted">{p.label}</div>
                 <div className="mt-1 font-semibold text-ink">{Number(p.charge) > 0 ? `+${formatINR(p.charge)}` : "Included"}</div>

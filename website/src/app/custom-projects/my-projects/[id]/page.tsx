@@ -128,7 +128,7 @@ export default async function Page({ params }: Params) {
       </div>
 
       {/* pricing snapshot */}
-      <div className="mt-6 border border-line bg-white p-5 text-sm">
+      <div className="mt-6 border border-line bg-card p-5 text-sm">
         <dl className="space-y-1 text-ink-muted">
           <div className="flex justify-between"><dt>Base price</dt><dd className="text-ink">{formatINR(request.base_price)}</dd></div>
           <div className="flex justify-between"><dt>Platform charge</dt><dd className="text-ink">{Number(request.platform_charge) > 0 ? formatINR(request.platform_charge) : "Included"}</dd></div>
@@ -221,7 +221,7 @@ export default async function Page({ params }: Params) {
 
       {/* delivery — only visible once status = delivered (RLS) */}
       {delivery && (
-        <div className="mt-6 border border-success/40 bg-white p-5">
+        <div className="mt-6 border border-success/40 bg-card p-5">
           <h2 className="text-lg font-bold text-ink">Delivery</h2>
           {delivery.delivered_at && <p className="text-xs text-ink-muted">Delivered {timeAgo(delivery.delivered_at)}</p>}
           {delivery.notes && <p className="mt-2 whitespace-pre-line text-sm text-ink">{delivery.notes}</p>}

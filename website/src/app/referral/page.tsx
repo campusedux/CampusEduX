@@ -46,7 +46,7 @@ export default async function ReferralPage() {
       </p>
 
       {settings ? (
-        <div className="mt-8 rounded-2xl border border-line bg-white p-5 shadow-card">
+        <div className="mt-8 rounded-2xl border border-line bg-card p-5 shadow-card">
           <div className="font-semibold text-ink">Current reward rule</div>
           <p className="mt-2 text-sm text-ink-muted">
             {settings.bonus_type === "flat"

@@ -21,7 +21,7 @@ export function TopicSection({
   chapterTest?: { id: string; title: string };
 }) {
   return (
-    <section className="rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
+    <section className="rounded-2xl border border-line bg-card p-5 shadow-card sm:p-6">
       <div className="border-b border-line pb-3.5">
         <h2 className="text-lg font-bold text-ink">{section.name}</h2>
         {section.description ? <p className="mt-1 text-sm text-ink-muted">{section.description}</p> : null}

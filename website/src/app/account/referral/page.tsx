@@ -32,7 +32,7 @@ export default async function AccountReferralPage() {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         {STATS.map((s) => (
-          <div key={s.label} className="rounded-2xl border border-line bg-white p-5 shadow-card">
+          <div key={s.label} className="rounded-2xl border border-line bg-card p-5 shadow-card">
             <div className="text-xs text-ink-faint">{s.label}</div>
             <div className="mt-1 text-xl font-bold text-ink">{s.value}</div>
           </div>
@@ -40,7 +40,7 @@ export default async function AccountReferralPage() {
       </div>
 
       {link && (
-        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-line bg-white p-4">
+        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-line bg-card p-4">
           <code className="flex-1 truncate text-sm text-ink-muted">{link}</code>
           <CopyLinkButton link={link} />
         </div>
@@ -50,7 +50,7 @@ export default async function AccountReferralPage() {
       {!referrals || referrals.length === 0 ? (
         <EmptyState className="mt-3" title="No referrals yet" subtitle="Share your link above to start earning." />
       ) : (
-        <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-card">
           {referrals.map((r) => {
             const ref = Array.isArray(r.referred_user) ? r.referred_user[0] : r.referred_user;
             return (

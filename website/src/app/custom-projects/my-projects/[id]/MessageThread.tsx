@@ -54,7 +54,7 @@ export default function MessageThread({
 
   return (
     <div className="mt-3">
-      <div className="max-h-96 space-y-3 overflow-y-auto border border-line bg-white p-4">
+      <div className="max-h-96 space-y-3 overflow-y-auto border border-line bg-card p-4">
         {messages.length === 0 ? (
           <p className="text-sm text-ink-muted">No messages yet. Ask the team anything about your request.</p>
         ) : (
@@ -85,7 +85,7 @@ export default function MessageThread({
           onChange={(e) => setBody(e.target.value)}
           maxLength={4000}
           placeholder="Write a message…"
-          className="h-11 flex-1 rounded-xl border border-line bg-white px-3.5 text-sm text-ink shadow-sm outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary/20"
+          className="h-11 flex-1 rounded-xl border border-line bg-card px-3.5 text-sm text-ink shadow-sm outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
         <button type="submit" disabled={sending || !body.trim()} className="btn-primary">
           {sending ? "Sending…" : "Send"}

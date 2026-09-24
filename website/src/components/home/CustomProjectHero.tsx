@@ -67,7 +67,7 @@ const TRUST_STRIP: TrustStat[] = [
  */
 export function CustomProjectHero() {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-white to-primary-50/40 shadow-card">
+    <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-card to-primary-50/40 shadow-card">
       <div
         aria-hidden
         className="pointer-events-none absolute -right-16 -top-16 hidden h-80 w-80 text-primary opacity-[0.10] lg:block"
@@ -132,7 +132,7 @@ export function CustomProjectHero() {
         </div>
       </div>
 
-      <div className="relative grid grid-cols-2 gap-4 border-t border-line/70 bg-white/70 px-6 py-6 sm:grid-cols-4 sm:px-10 lg:px-14">
+      <div className="relative grid grid-cols-2 gap-4 border-t border-line/70 bg-card/70 px-6 py-6 sm:grid-cols-4 sm:px-10 lg:px-14">
         {TRUST_STRIP.map((t) => {
           const Icon = t.icon;
           return (

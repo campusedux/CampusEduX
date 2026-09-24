@@ -24,7 +24,7 @@ export function TemplateGalleryCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-card transition duration-200",
+        "group relative flex flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-card transition duration-200",
         "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none",
       )}
     >
@@ -42,7 +42,7 @@ export function TemplateGalleryCard({
         </span>
         {/* Hover overlay (desktop) */}
         <span className="pointer-events-none absolute inset-0 hidden items-center justify-center bg-ink/5 opacity-0 transition group-hover:opacity-100 sm:flex">
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-ink shadow-card">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-card/95 px-3 py-1.5 text-xs font-semibold text-ink shadow-card">
             <Eye className="h-3.5 w-3.5" /> Preview
           </span>
         </span>
@@ -56,7 +56,7 @@ export function TemplateGalleryCard({
           <button
             type="button"
             onClick={() => onPreview(template)}
-            className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-white text-xs font-semibold text-ink transition hover:bg-surface"
+            className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-card text-xs font-semibold text-ink transition hover:bg-surface"
           >
             <Eye className="h-3.5 w-3.5" /> Preview
           </button>

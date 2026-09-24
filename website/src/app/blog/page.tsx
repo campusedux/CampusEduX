@@ -43,7 +43,7 @@ const chipCls = (active: boolean) =>
     "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
     active
       ? "border-primary bg-primary text-white"
-      : "border-line bg-white text-ink-muted hover:border-primary/40 hover:text-ink",
+      : "border-line bg-card text-ink-muted hover:border-primary/40 hover:text-ink",
   );
 
 export default async function BlogIndexPage({ searchParams }: { searchParams: SP }) {

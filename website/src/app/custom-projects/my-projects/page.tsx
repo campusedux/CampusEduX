@@ -58,7 +58,7 @@ export default async function Page() {
               <Link
                 key={r.id}
                 href={`/custom-projects/my-projects/${r.id}`}
-                className="block border border-line bg-white p-5 hover:border-line"
+                className="block border border-line bg-card p-5 hover:border-line"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>

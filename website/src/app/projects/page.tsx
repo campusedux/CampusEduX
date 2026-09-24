@@ -153,7 +153,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
                 <Link
                   key={c.label}
                   href={c.href}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-card px-3 py-1 text-xs font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
                 >
                   {c.label}
                   <X className="h-3 w-3" aria-hidden />

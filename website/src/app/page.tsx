@@ -115,7 +115,7 @@ export default async function HomePage() {
             </div>
           </Link>
         ) : (
-          <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 sm:px-12 sm:py-14 lg:px-14 lg:py-16">
+          <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-card to-primary-50/50 px-6 py-10 sm:px-12 sm:py-14 lg:px-14 lg:py-16">
             <div
               aria-hidden
               className="pointer-events-none absolute -right-10 top-1/2 hidden h-72 w-72 -translate-y-1/2 text-primary opacity-[0.12] lg:block"
@@ -284,7 +284,7 @@ export default async function HomePage() {
       {/* Premium promotion */}
       <Reveal>
         <section className="container-page pt-12 sm:pt-16">
-          <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/40 px-6 py-10 sm:px-12 sm:py-12">
+          <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-card to-primary-50/40 px-6 py-10 sm:px-12 sm:py-12">
             <div className="relative flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
               <div className="max-w-xl">
                 <span className="eyebrow inline-flex items-center gap-1.5">
@@ -355,7 +355,7 @@ export default async function HomePage() {
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link
                 href="/register"
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-white px-6 text-sm font-semibold text-primary transition hover:bg-white/90 active:scale-[.98] motion-reduce:active:scale-100"
+                className="inline-flex h-11 items-center justify-center theme-light rounded-xl bg-card px-6 text-sm font-semibold text-primary transition hover:bg-white/90 active:scale-[.98] motion-reduce:active:scale-100"
               >
                 Create your account
               </Link>

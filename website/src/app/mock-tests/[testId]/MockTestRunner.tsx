@@ -173,7 +173,7 @@ export function MockTestRunner({
 
   if (phase.k === "signin") {
     return (
-      <div className="mt-6 rounded-2xl border border-line bg-white p-6 text-center shadow-card">
+      <div className="mt-6 rounded-2xl border border-line bg-card p-6 text-center shadow-card">
         <h2 className="text-lg font-bold text-ink">Sign in to take this test</h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
           Your answers are scored on the server and saved to your account.
@@ -265,7 +265,7 @@ export function MockTestRunner({
                   ? "bg-primary text-white"
                   : done
                     ? "bg-emerald-100 text-emerald-700"
-                    : "border border-line bg-white text-ink-faint"
+                    : "border border-line bg-card text-ink-faint"
               }`}
             >
               {i + 1}
@@ -274,7 +274,7 @@ export function MockTestRunner({
         })}
       </div>
 
-      <fieldset className="rounded-2xl border border-line bg-white p-5 shadow-card">
+      <fieldset className="rounded-2xl border border-line bg-card p-5 shadow-card">
         <legend className="sr-only">Question {current + 1}</legend>
         <p className="text-base font-medium text-ink">{q.question_text}</p>
         <div className="mt-4 space-y-2">

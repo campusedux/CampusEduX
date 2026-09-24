@@ -104,7 +104,7 @@ export default async function MockTestResultPage({
           const correct = q.correct_index;
           const wasCorrect = chosen != null && chosen === correct;
           return (
-            <div key={q.id} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+            <div key={q.id} className="rounded-2xl border border-line bg-card p-4 shadow-card">
               <div className="flex items-start gap-2">
                 {wasCorrect ? (
                   <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-500" aria-hidden />
@@ -165,7 +165,7 @@ export default async function MockTestResultPage({
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-3 text-center shadow-card">
+    <div className="rounded-xl border border-line bg-card p-3 text-center shadow-card">
       <div
         className={`text-lg font-bold ${
           tone === "good" ? "text-emerald-600" : tone === "bad" ? "text-red-600" : "text-ink"

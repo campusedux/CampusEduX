@@ -112,7 +112,7 @@ export default async function PracticeSubmissionsPage({
 
   return (
     <Shell>
-      <div className="overflow-x-auto rounded-2xl border border-line bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-card">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">

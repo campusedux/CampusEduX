@@ -62,7 +62,7 @@ export default async function Page() {
           </p>
         </div>
         {draftUpdatedAt && (
-          <div className="flex-shrink-0 rounded-xl border border-line bg-white px-4 py-2.5 text-xs text-ink-muted shadow-card">
+          <div className="flex-shrink-0 rounded-xl border border-line bg-card px-4 py-2.5 text-xs text-ink-muted shadow-card">
             Draft last saved <span className="font-semibold text-ink">{timeAgo(draftUpdatedAt)}</span>
           </div>
         )}
@@ -119,7 +119,7 @@ function EstimateBody({
           {groupedIncluded.length === 0 ? (
             <p className="mt-3 text-sm text-ink-faint">No included features are configured for this tier yet.</p>
           ) : (
-            <div className="mt-4 space-y-4 rounded-2xl border border-line bg-white p-5 shadow-card">
+            <div className="mt-4 space-y-4 rounded-2xl border border-line bg-card p-5 shadow-card">
               {groupedIncluded.map(([category, rows]) => (
                 <div key={category}>
                   <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{category}</p>
@@ -141,7 +141,7 @@ function EstimateBody({
         {/* Extra Features */}
         <section>
           <h2 className="text-lg font-bold text-ink">Extra Features</h2>
-          <div className="mt-4 rounded-2xl border border-line bg-white p-5 shadow-card">
+          <div className="mt-4 rounded-2xl border border-line bg-card p-5 shadow-card">
             {additional.length === 0 ? (
               <p className="text-sm text-ink-faint">No extra features selected.</p>
             ) : (
@@ -160,7 +160,7 @@ function EstimateBody({
         {/* What you'll receive */}
         <section>
           <h2 className="text-lg font-bold text-ink">What you&apos;ll receive</h2>
-          <ul className="mt-4 space-y-2 rounded-2xl border border-line bg-white p-5 shadow-card">
+          <ul className="mt-4 space-y-2 rounded-2xl border border-line bg-card p-5 shadow-card">
             {RECEIVE.map((r) => (
               <li key={r} className="flex items-center gap-2.5 text-sm text-ink">
                 <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-success" aria-hidden />
@@ -173,7 +173,7 @@ function EstimateBody({
 
       {/* Right column */}
       <aside className="space-y-4 lg:sticky lg:top-24">
-        <div className="rounded-2xl border border-line bg-white p-5 shadow-card">
+        <div className="rounded-2xl border border-line bg-card p-5 shadow-card">
           <h2 className="text-base font-bold text-ink">Estimate summary</h2>
           <dl className="mt-4 space-y-2.5 text-sm">
             <Row label="Base project" value={formatINR(estimate.basePrice)} />
@@ -210,7 +210,7 @@ function EstimateBody({
           </ul>
         </div>
 
-        <div className="flex items-start gap-2.5 rounded-2xl border border-line bg-white p-4 shadow-card">
+        <div className="flex items-start gap-2.5 rounded-2xl border border-line bg-card p-4 shadow-card">
           <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" aria-hidden />
           <div>
             <p className="text-sm font-semibold text-ink">Secure estimate calculation</p>
@@ -221,7 +221,7 @@ function EstimateBody({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-line bg-white p-4 shadow-card">
+        <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
           <p className="text-sm font-semibold text-ink">Your selected scope</p>
           <dl className="mt-2.5 space-y-1.5 text-xs">
             <Row

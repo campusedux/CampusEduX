@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { ArrowRight, GraduationCap } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
+import { BrandMark } from "@/components/nav/BrandMark";
 
 /*
  * Site footer — renders on every route, so it is a Server Component with
@@ -84,7 +86,7 @@ const BOTTOM_LINKS: readonly FooterLink[] = [
 ];
 
 const linkCls = "text-sm text-ink-muted transition-colors hover:text-primary";
-const headingCls = "text-[13px] font-semibold uppercase tracking-wide text-ink";
+const headingCls = "font-sans text-xs font-bold uppercase tracking-[0.14em] text-ink-faint";
 
 /**
  * The `<li>` list for one nav group — reused for every group so each route
@@ -109,21 +111,47 @@ export default function Footer() {
   const entity = process.env.NEXT_PUBLIC_LEGAL_ENTITY_NAME?.trim() || BRAND.name;
   const supportEmail = "campusedux@gamil.com";
 
-  
   return (
-    <footer className="border-t border-line bg-surface">
+    <footer className="mt-8 border-t border-line bg-card">
+      <div className="container-page pt-10 sm:pt-14">
+        {/* Call-to-action band — same for every visitor, so the footer stays static. */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-accent-violet px-6 py-8 text-white sm:px-10 sm:py-10">
+          <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
+          <span aria-hidden className="pointer-events-none absolute -bottom-24 right-24 h-56 w-56 rounded-full bg-accent-pink/20 blur-2xl" />
+          <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-xl">
+              <p className="font-display text-2xl font-bold leading-tight tracking-tight sm:text-[1.75rem]">
+                Learn it. Build it. Get placed.
+              </p>
+              <p className="mt-2 text-sm text-white/80 sm:text-[15px]">
+                Free tutorials, practice problems, real projects and fresh jobs — all in one student account.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              <Link
+                href="/learning"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-card px-5 text-sm font-semibold text-primary-700 shadow-card transition hover:-translate-y-px motion-reduce:transform-none theme-light"
+              >
+                <GraduationCap className="h-4 w-4" aria-hidden />
+                Start learning
+              </Link>
+              <Link
+                href="/jobs"
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
+              >
+                Browse jobs
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="container-page py-10 sm:py-12">
         <div className="grid grid-cols-1 gap-x-8 gap-y-0 sm:grid-cols-3 sm:gap-y-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-x-10">
           {/* Brand — always visible above the link groups. */}
           <div className="pb-8 sm:col-span-3 sm:pb-0 lg:col-span-1">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary text-base font-black text-white shadow-[0_4px_12px_-3px_rgba(79,57,246,0.5)]">
-                C
-              </span>
-              <span className="text-base font-bold tracking-tight text-ink">
-                Campus<span className="text-primary">EduX</span>
-              </span>
-            </div>
+            <BrandMark />
 
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-muted">
               {BRAND.tagline} — one student account for projects, jobs, placement prep and resumes, on the web and the

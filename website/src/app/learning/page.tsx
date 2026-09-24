@@ -63,7 +63,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
           {hits.length === 0 ? (
             <EmptyState className="mt-4" title="No matches" subtitle="Try a different word, or browse the resources below." />
           ) : (
-            <ul className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
+            <ul className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
               {hits.map((h, i) => (
                 <li key={`${h.grid_slug}-${h.topic_slug ?? "grid"}-${i}`}>
                   <Link

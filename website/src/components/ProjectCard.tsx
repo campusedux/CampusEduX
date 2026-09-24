@@ -61,7 +61,7 @@ export function ProjectCard({ project, rank, className }: { project: ProjectCard
           </span>
         )}
         {badge && (
-          <span className="absolute right-3 top-3 rounded-full bg-ink/80 px-2.5 py-1 text-[0.62rem] font-bold tracking-wide text-white">
+          <span className="absolute right-3 top-3 rounded-full bg-scrim/80 px-2.5 py-1 text-[0.62rem] font-bold tracking-wide text-white">
             {badge}
           </span>
         )}

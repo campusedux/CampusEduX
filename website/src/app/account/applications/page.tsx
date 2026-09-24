@@ -40,7 +40,7 @@ export default async function ApplicationsPage() {
           action={<Button href="/jobs" size="sm">Browse open roles</Button>}
         />
       ) : (
-        <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-card">
           {applications.map((a) => {
             const job = Array.isArray(a.job) ? a.job[0] : a.job;
             return (

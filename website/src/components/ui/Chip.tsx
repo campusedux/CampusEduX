@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
  */
 const base = "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm font-medium transition";
 const state = (active: boolean) =>
-  active ? "border-primary bg-primary text-white" : "border-line bg-white text-ink-muted hover:border-primary/40";
+  active ? "border-primary bg-primary text-white" : "border-line bg-card text-ink-muted hover:border-primary/40";
 
 type ChipProps = {
   active?: boolean;

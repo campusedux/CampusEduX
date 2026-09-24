@@ -50,7 +50,7 @@ export default async function PremiumPage() {
   return (
     <div className="page-shell">
       {/* Hero */}
-      <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 text-center sm:px-10 sm:py-12">
+      <section className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-card to-primary-50/50 px-6 py-10 text-center sm:px-10 sm:py-12">
         <p className="eyebrow">Premium</p>
         <h1 className="h-hero mx-auto mt-4 max-w-2xl">Go further, faster.</h1>
         <p className="mt-3 text-xs font-medium text-ink-faint">One subscription, same account across web and the app.</p>

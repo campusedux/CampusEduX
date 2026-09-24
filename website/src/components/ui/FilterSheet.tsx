@@ -26,7 +26,7 @@ export function FilterSheet({
     <>
       {/* Desktop: inline sidebar, sticky alongside the results column */}
       <aside className="hidden self-start lg:block lg:sticky lg:top-20">
-        <div className="rounded-2xl border border-line bg-white p-5 shadow-card">
+        <div className="rounded-2xl border border-line bg-card p-5 shadow-card">
           <div className="mb-4 font-bold text-ink">{title}</div>
           {children}
         </div>
@@ -37,7 +37,7 @@ export function FilterSheet({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink"
+          className="inline-flex items-center gap-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm font-semibold text-ink"
         >
           <SlidersHorizontal className="h-4 w-4" aria-hidden />
           {triggerLabel}

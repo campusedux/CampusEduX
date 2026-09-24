@@ -78,7 +78,7 @@ export function ProblemPanel({
           {ex.input !== undefined ? (
             <div className="mt-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Input</div>
-              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-white px-2.5 py-2 font-mono text-[13px] text-ink-muted">
+              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-card px-2.5 py-2 font-mono text-[13px] text-ink-muted">
                 {ex.input || "(none)"}
               </pre>
             </div>
@@ -86,7 +86,7 @@ export function ProblemPanel({
           {ex.output !== undefined ? (
             <div className="mt-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Output</div>
-              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-white px-2.5 py-2 font-mono text-[13px] text-ink-muted">
+              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-card px-2.5 py-2 font-mono text-[13px] text-ink-muted">
                 {ex.output}
               </pre>
             </div>
@@ -197,7 +197,7 @@ export function ProblemPanel({
           <h2 className="text-lg font-bold text-ink">Related Problems</h2>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {related.map((r) => (
-              <li key={r.slug} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+              <li key={r.slug} className="rounded-2xl border border-line bg-card p-4 shadow-card">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-ink">{r.title}</span>
                   {r.is_premium ? (

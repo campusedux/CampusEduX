@@ -24,7 +24,7 @@ export default function StepBar({ current }: { current: 0 | 1 | 2 | 3 }) {
                   ? "border-primary bg-primary text-white"
                   : active
                     ? "border-primary bg-primary-50 text-primary"
-                    : "border-line bg-white text-ink-faint",
+                    : "border-line bg-card text-ink-faint",
               )}
             >
               {done ? <Check className="h-3.5 w-3.5" aria-hidden /> : i + 1}

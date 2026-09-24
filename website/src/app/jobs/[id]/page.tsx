@@ -186,7 +186,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
       {applyButton && <div className="mt-6">{applyButton}</div>}
 
       {facts.some(([, v]) => v) && (
-        <dl className="mt-6 grid gap-x-6 gap-y-3 rounded-2xl border border-line bg-white p-5 shadow-card sm:grid-cols-2">
+        <dl className="mt-6 grid gap-x-6 gap-y-3 rounded-2xl border border-line bg-card p-5 shadow-card sm:grid-cols-2">
           {facts.map(([k, v]) =>
             v ? (
               <div key={k}>
@@ -237,7 +237,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
       )}
 
       {job.company?.about && (
-        <section className="mt-8 rounded-2xl border border-line bg-white p-5 shadow-card">
+        <section className="mt-8 rounded-2xl border border-line bg-card p-5 shadow-card">
           <h2 className="text-lg font-bold text-ink">About {company}</h2>
           <p className="mt-2 text-sm text-ink-muted">{job.company.about}</p>
         </section>
