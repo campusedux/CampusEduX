@@ -1,82 +1,71 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, Compass, LayoutGrid, GraduationCap, Code2, Briefcase, FileText, Wrench } from "lucide-react";
+import { ArrowRight, Briefcase, Code2, FileText, GraduationCap, LayoutGrid, Wrench } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { SectionHeader } from "@/components/ui";
 
-type Accent = "indigo" | "emerald" | "sky" | "amber" | "pink";
+type Accent = "indigo" | "emerald" | "sky" | "amber" | "pink" | "teal";
 
-interface ModuleTile {
+/** Literal class strings so Tailwind's JIT keeps them. */
+const ACCENT: Record<Accent, { tile: string; fg: string; glow: string }> = {
+  indigo: { tile: "bg-primary-50", fg: "text-primary", glow: "bg-primary/10" },
+  emerald: { tile: "bg-accent-emerald/10", fg: "text-accent-emerald", glow: "bg-accent-emerald/10" },
+  sky: { tile: "bg-accent-sky/10", fg: "text-accent-sky", glow: "bg-accent-sky/10" },
+  amber: { tile: "bg-accent-amber/10", fg: "text-accent-amber", glow: "bg-accent-amber/10" },
+  pink: { tile: "bg-accent-pink/10", fg: "text-accent-pink", glow: "bg-accent-pink/10" },
+  teal: { tile: "bg-accent-teal/10", fg: "text-accent-teal", glow: "bg-accent-teal/10" },
+};
+
+interface Feature {
   label: string;
-  desc: string;
+  benefit: string;
   href: string;
+  cta: string;
   icon: LucideIcon;
   accent: Accent;
 }
 
-/** Literal class strings so Tailwind's JIT keeps them. */
-const ACCENT: Record<Accent, { tile: string; fg: string }> = {
-  indigo: { tile: "bg-primary-50", fg: "text-primary" },
-  emerald: { tile: "bg-accent-emerald/10", fg: "text-accent-emerald" },
-  sky: { tile: "bg-accent-sky/10", fg: "text-accent-sky" },
-  amber: { tile: "bg-accent-amber/10", fg: "text-accent-amber" },
-  pink: { tile: "bg-accent-pink/10", fg: "text-accent-pink" },
-};
-
-/**
- * "Explore" quick-access grid under the hero. Curated + static (the primary
- * modules don't change per request). One consistent white card language with a
- * tinted icon tile — no per-tile gradients.
- */
-const MODULES: ModuleTile[] = [
-  { label: "Projects", desc: "Explore and buy final year projects", href: "/projects", icon: LayoutGrid, accent: "indigo" },
-  { label: "Learning", desc: "Courses, tutorials and study material", href: "/learning", icon: GraduationCap, accent: "emerald" },
-  { label: "Practice", desc: "Practice coding problems and improve your programming skills", href: "/practice", icon: Code2, accent: "pink" },
-  { label: "Jobs", desc: "Find jobs & internships", href: "/jobs", icon: Briefcase, accent: "sky" },
-  { label: "Resume", desc: "Build ATS-friendly resumes", href: "/resume", icon: FileText, accent: "amber" },
-  { label: "Custom Projects", desc: "Get your custom project built", href: "/custom-projects", icon: Wrench, accent: "pink" },
+/** Curated + static — the primary modules don't change per request. */
+const FEATURES: Feature[] = [
+  { label: "Learning", benefit: "Structured tutorials from basics to advanced — Java, Python, DBMS, AI/ML and more.", href: "/learning", cta: "Start learning", icon: GraduationCap, accent: "emerald" },
+  { label: "Coding practice", benefit: "Solve problems in Java, Python, C, C++ or JavaScript with instant feedback.", href: "/practice", cta: "Practise now", icon: Code2, accent: "pink" },
+  { label: "Jobs & internships", benefit: "Fresh roles for students and freshers — apply straight from the listing.", href: "/jobs", cta: "Find jobs", icon: Briefcase, accent: "sky" },
+  { label: "Project marketplace", benefit: "Ready final-year projects with source code, or sell your own.", href: "/projects", cta: "Browse projects", icon: LayoutGrid, accent: "indigo" },
+  { label: "Resume builder", benefit: "ATS-friendly templates, a score check and one-click PDF export.", href: "/resume", cta: "Build my resume", icon: FileText, accent: "amber" },
+  { label: "Custom projects", benefit: "Tell us your idea — we build and deliver it with full source code.", href: "/custom-projects", cta: "Get it built", icon: Wrench, accent: "teal" },
 ];
 
+/** Home "What you get" — one card per module, each a real link. */
 export function ModuleGrid() {
   return (
-    <section className="container-page pt-12 sm:pt-16" aria-label="Explore CampusEduX">
-      <div className="mb-6">
-        <span className="eyebrow inline-flex items-center gap-1.5">
-          <Compass className="h-3.5 w-3.5" aria-hidden />
-          Quick access
-        </span>
-        <h2 className="h-section mt-2">Explore</h2>
-      </div>
-      {/*
-       * Responsive, capped at 4 columns — an explicit breakpoint ladder
-       * (1 → 2 → 3 → 4), never `auto-fit`, so even an ultrawide monitor shows
-       * at most 4 tiles per row. Cards carry no fixed width and reflow on resize.
-       */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-        {MODULES.map((m) => {
-          const Icon = m.icon;
-          const a = ACCENT[m.accent];
+    <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-features-title">
+      <SectionHeader
+        id="home-features-title"
+        eyebrow="What you get"
+        title="Everything you need, from first lesson to first offer"
+        description="One account for learning, practice, projects and your job search — on the web and the CampusEduX app."
+      />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {FEATURES.map((f) => {
+          const Icon = f.icon;
+          const a = ACCENT[f.accent];
           return (
-            <Link
-              key={m.label}
-              href={m.href}
-              className="card card-hover group relative flex min-h-[132px] flex-col p-4"
-            >
+            <Link key={f.href} href={f.href} className="card card-hover group relative flex flex-col overflow-hidden p-6">
+              <span aria-hidden className={cn("pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-2xl transition-opacity group-hover:opacity-100 opacity-60", a.glow)} />
               <span
                 className={cn(
-                  "flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 motion-reduce:transform-none",
+                  "relative flex h-12 w-12 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-105 motion-reduce:transform-none",
                   a.tile,
                 )}
               >
-                <Icon className={cn("h-[22px] w-[22px]", a.fg)} aria-hidden />
+                <Icon className={cn("h-6 w-6", a.fg)} aria-hidden />
               </span>
-              <span className="mt-3 text-[15px] font-bold leading-tight text-ink group-hover:text-primary">
-                {m.label}
+              <h3 className="relative mt-4 font-display text-lg font-bold tracking-tight text-ink">{f.label}</h3>
+              <p className="relative mt-1.5 flex-1 text-sm leading-relaxed text-ink-muted">{f.benefit}</p>
+              <span className="relative mt-5 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                {f.cta}
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden />
               </span>
-              <span className="mt-1 pr-7 text-[13px] leading-snug text-ink-muted">{m.desc}</span>
-              <ArrowRight
-                className="absolute bottom-4 right-4 h-4 w-4 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transform-none"
-                aria-hidden
-              />
             </Link>
           );
         })}

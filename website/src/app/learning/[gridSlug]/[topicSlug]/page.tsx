@@ -15,6 +15,7 @@ import { LearningBookmarkButton } from "./LearningBookmarkButton";
 import { PremiumTopicContent } from "./PremiumTopicContent";
 import { TopicPractice } from "./_components/TopicPractice";
 import { TopicDiscovery } from "./_components/TopicDiscovery";
+import { RecordLessonVisit } from "./RecordLessonVisit";
 
 export const revalidate = 300;
 export const dynamicParams = true;
@@ -83,6 +84,13 @@ export default async function TopicPage({
         ])}
       />
       <DocsShell tree={tree} gridSlug={grid.slug}>
+        <RecordLessonVisit
+          gridSlug={grid.slug}
+          gridName={grid.name}
+          topicSlug={topic.slug}
+          topicTitle={topic.title}
+          sectionName={section.name}
+        />
         <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-ink-faint">
           <Link href="/learning" className="hover:text-ink">
             Learning

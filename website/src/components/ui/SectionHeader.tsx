@@ -14,6 +14,7 @@ export function SectionHeader({
   viewAllLabel = "View all",
   action,
   as: Heading = "h2",
+  id,
   className,
 }: {
   title: string;
@@ -23,13 +24,17 @@ export function SectionHeader({
   viewAllLabel?: string;
   action?: React.ReactNode;
   as?: "h1" | "h2" | "h3";
+  /** Id for the heading, so a `<section aria-labelledby>` can point at it. */
+  id?: string;
   className?: string;
 }) {
   return (
     <div className={cn("mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 sm:mb-6", className)}>
       <div className="min-w-0 max-w-2xl">
         {eyebrow && <p className="eyebrow mb-1.5">{eyebrow}</p>}
-        <Heading className="h-section">{title}</Heading>
+        <Heading id={id} className="h-section">
+          {title}
+        </Heading>
         {description && <p className="mt-1.5 text-sm text-ink-muted sm:text-[15px]">{description}</p>}
       </div>
       {action}

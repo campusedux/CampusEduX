@@ -109,7 +109,7 @@ function FooterLinkList({ links }: { links: readonly FooterLink[] }) {
 export default function Footer() {
   const year = new Date().getFullYear();
   const entity = process.env.NEXT_PUBLIC_LEGAL_ENTITY_NAME?.trim() || BRAND.name;
-  const supportEmail = "campusedux@gamil.com";
+  const supportEmail = "campusedux@gmail.com";
 
   return (
     <footer className="mt-8 border-t border-line bg-card">
