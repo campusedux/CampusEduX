@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Text } from "react-native";
-import { notify } from "@/lib/notify";
+import { notify, notifyThen } from "@/lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, Input, Button, AuthHeader } from "@/components/ui";
@@ -28,7 +28,16 @@ export function ForgotPasswordScreen() {
     setError(undefined);
     setSubmitting(true);
     try {
-      await authService.requestPasswordReset(identifier.trim());
+      const channel = await authService.requestPasswordReset(identifier.trim());
+      if (channel === "email-link") {
+        // The reset link opens /reset-password on the website; no OTP step here.
+        notifyThen(
+          "Check your email",
+          "We've sent a link to reset your password.",
+          () => goBackSafely(navigation, "Login")
+        );
+        return;
+      }
       setPendingIdentifier(identifier.trim());
       // Verifying the OTP creates a real session; this flag tells the auth
       // listener not to treat the user as "logged in" until they set a new

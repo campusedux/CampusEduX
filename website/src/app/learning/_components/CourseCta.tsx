@@ -6,7 +6,7 @@ import { ArrowRight, Bookmark, CheckCircle2, ListChecks, PlayCircle, RotateCcw }
 import { useLearningProgress } from "@/lib/learningProgress";
 import { useLearningBookmarks } from "@/lib/useLearningBookmarks";
 import { findLesson, type CourseOutline } from "@/lib/courseOutline";
-import { ProgressBar } from "@/components/ui/ProgressBar";
+import { ProgressRing } from "@/components/ui/ProgressRing";
 
 type Target = { slug: string; title: string; label: string; icon: typeof PlayCircle };
 
@@ -51,25 +51,29 @@ export function CourseCta({ outline, courseTest }: { outline: CourseOutline; cou
     <>
       {/* Desktop / tablet card */}
       <div className="card hidden p-5 lg:block">
-        {allDone ? (
-          <p className="flex items-center gap-2 font-display text-lg font-bold text-success">
-            <CheckCircle2 className="h-5 w-5" aria-hidden /> Course complete
-          </p>
-        ) : (
-          <p className="font-display text-lg font-bold text-ink">{p.started ? "Your progress" : "Ready to start?"}</p>
-        )}
-        {progress.ready && p.started ? (
-          <div className="mt-3">
-            <ProgressBar value={p.completed} max={outline.total} label="Course progress" showLabel tone={allDone ? "success" : "primary"} />
-            <p className="mt-1.5 text-xs text-ink-muted">
-              {p.completed} of {outline.total} lessons done
+        {/* Ring + counts: the card's focal point. 0% until the stored progress is readable. */}
+        <div className="flex items-center gap-4">
+          <ProgressRing
+            value={progress.ready ? p.completed : 0}
+            max={outline.total}
+            label="Course progress"
+            tone={allDone ? "success" : "primary"}
+          />
+          <div className="min-w-0">
+            {allDone ? (
+              <p className="flex items-center gap-1.5 font-display text-lg font-bold text-success">
+                <CheckCircle2 className="h-5 w-5" aria-hidden /> Course complete
+              </p>
+            ) : (
+              <p className="font-display text-lg font-bold text-ink">{progress.ready && p.started ? "Your progress" : "Ready to start?"}</p>
+            )}
+            <p className="mt-1 text-sm text-ink-muted">
+              <span className="font-semibold tabular-nums text-ink">{progress.ready ? p.completed : 0}</span> of{" "}
+              <span className="tabular-nums">{outline.total}</span> lessons done
             </p>
+            <p className="mt-0.5 text-xs text-ink-faint">Saved on this device</p>
           </div>
-        ) : (
-          <p className="mt-1 text-sm text-ink-muted">
-            {outline.total} lessons · learn at your own pace. Progress is saved on this device.
-          </p>
-        )}
+        </div>
         <Link href={href} className="btn-primary mt-5 h-12 w-full">
           <Icon className="h-4 w-4" aria-hidden />
           {target.label}

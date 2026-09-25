@@ -11,9 +11,15 @@ export default function GoogleAnalytics() {
 
   return (
     <>
+      {/* lazyOnload, not afterInteractive: in the App Router an afterInteractive
+          `src` script is also emitted as a high-priority <link rel="preload"> in
+          <head>, so the ~170KB gtag.js competed with CSS/fonts/app JS on every
+          first load. lazyOnload fetches it only after `load`, when idle. Hits
+          aren't lost: the inline init below defines gtag() and queues into
+          dataLayer, which gtag.js drains once it arrives. */}
       <Script
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
-        strategy="afterInteractive"
+        strategy="lazyOnload"
       />
       <Script id="ga4-init" strategy="afterInteractive">
         {`

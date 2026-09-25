@@ -92,15 +92,18 @@ export function LessonSidebar({
                         onClick={onNavigate}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "-ml-px flex items-center gap-2 rounded-r-lg border-l-2 py-1.5 pl-3 pr-2 leading-snug transition-colors",
+                          "-ml-px flex items-center gap-2 rounded-r-lg border-l-[3px] py-1.5 pl-3 pr-2 leading-snug transition-colors",
+                          // primary-50 is nearly the page colour in dark mode, so the active tint is an alpha of primary.
                           active
-                            ? "border-primary bg-primary-50 font-semibold text-primary"
+                            ? "border-primary bg-primary/10 font-semibold text-primary dark:bg-primary/25 dark:text-white"
                             : "border-transparent text-ink-muted hover:border-line hover:bg-surface hover:text-ink",
                         )}
                       >
                         <span className="min-w-0 flex-1">{l.title}</span>
                         {done ? (
-                          <Check className="h-3.5 w-3.5 flex-shrink-0 text-success" strokeWidth={3} aria-label="Completed" />
+                          <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-success text-white">
+                            <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-label="Completed" />
+                          </span>
                         ) : l.isPremium ? (
                           <Lock className="h-3 w-3 flex-shrink-0 text-amber-500" aria-label="Premium" />
                         ) : null}

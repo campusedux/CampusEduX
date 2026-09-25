@@ -211,8 +211,21 @@ export const authService = {
     return data;
   },
 
-  async requestPasswordReset(identifier: string) {
+  /**
+   * Email → Supabase recovery link that lands on the website's /reset-password
+   * page (an OTP/magic-link email has no redirect and falls back to the Site
+   * URL home page). Mobile number → the existing SMS OTP flow.
+   */
+  async requestPasswordReset(identifier: string): Promise<"email-link" | "otp"> {
+    if (isEmail(identifier)) {
+      const { error } = await supabase.auth.resetPasswordForEmail(identifier, {
+        redirectTo: "https://www.campusedux.com/reset-password",
+      });
+      if (error) throw authError(error, identifier);
+      return "email-link";
+    }
     await authService.sendOTP(identifier);
+    return "otp";
   },
 
   async updatePassword(newPassword: string) {

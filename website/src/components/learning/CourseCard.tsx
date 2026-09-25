@@ -2,23 +2,21 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, Layers, Sparkles } from "lucide-react";
 import type { LearningGridCard } from "@/lib/learning.types";
 import { Badge } from "@/components/ui/Badge";
+import { courseAccent, isEmojiIcon } from "@/lib/courseCover";
 import { CourseCardProgress } from "./CourseCardProgress";
+import { CourseCover } from "./CourseCover";
 
 export type CourseCardData = Pick<
   LearningGridCard,
   "id" | "slug" | "name" | "description" | "icon" | "cover_image_url" | "accent_color" | "is_featured" | "is_premium" | "section_count" | "topic_count"
 >;
 
-const isEmoji = (s: string) => /\p{Extended_Pictographic}/u.test(s);
-const FALLBACK_ACCENT = "#4F39F6";
-/** Only a plain 6-digit hex is trusted for the inline tint (admin-entered value). */
-const safeAccent = (c: string | null) => (c && /^#[0-9a-fA-F]{6}$/.test(c) ? c : FALLBACK_ACCENT);
 
 /**
  * Course (Learning grid) card: cover art, title, Featured / Free / Premium
- * badges, sections · lessons, a one-line outcome (the description), and a
- * progress strip once the visitor has started it (device-only progress).
- * Server component; the progress strip is a tiny client island.
+ * badges, sections · lessons, a two-line outcome (the description), and a
+ * progress row (device-only progress; "Not started" until the visitor starts).
+ * Server component; the progress row is a tiny client island.
  */
 export function CourseCard({
   course,
@@ -30,37 +28,15 @@ export function CourseCard({
   compactOnMobile?: boolean;
   className?: string;
 }) {
-  const accent = safeAccent(course.accent_color);
-  const icon = course.icon && isEmoji(course.icon) ? course.icon : <BookOpen className="h-5 w-5" aria-hidden />;
+  const accent = courseAccent(course.accent_color, course.slug);
+  const icon = isEmojiIcon(course.icon) ? course.icon : <BookOpen className="h-5 w-5" aria-hidden />;
   return (
     <Link
       href={`/learning/${course.slug}`}
       className={`card card-hover group flex flex-col overflow-hidden ${className ?? ""}`}
     >
-      <div
-        className={`relative items-center justify-center overflow-hidden ${compactOnMobile ? "hidden aspect-[16/7] sm:flex" : "flex aspect-[16/7]"}`}
-        style={{ background: `linear-gradient(135deg, ${accent}26, ${accent}0d 60%, transparent)` }}
-      >
-        {course.cover_image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- admin-supplied Storage URL (any host)
-          <img
-            src={course.cover_image_url}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transform-none"
-          />
-        ) : (
-          <>
-            <span aria-hidden className="bg-grid absolute inset-0 opacity-60" />
-            <span
-              className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-line bg-card text-2xl shadow-card transition-transform duration-300 group-hover:-rotate-3 group-hover:scale-105 motion-reduce:transform-none"
-              style={{ color: accent }}
-            >
-              {course.icon && isEmoji(course.icon) ? course.icon : <BookOpen className="h-6 w-6" aria-hidden />}
-            </span>
-          </>
-        )}
+      <div className={`relative overflow-hidden ${compactOnMobile ? "hidden aspect-[16/7] sm:block" : "aspect-[16/7]"}`}>
+        <CourseCover course={course} />
         {/* Solid card-coloured underlay so the tinted badges stay legible on any cover image. */}
         <span className="absolute left-3 top-3 flex gap-1.5">
           {course.is_featured && (
@@ -77,7 +53,7 @@ export function CourseCard({
         </span>
       </div>
 
-      <div className="flex flex-1 flex-col p-5">
+      <div className="flex flex-1 flex-col px-5 pb-4 pt-4">
         {compactOnMobile && (
           <div className="mb-3 flex items-center gap-2 sm:hidden">
             <span
@@ -93,10 +69,9 @@ export function CourseCard({
         <h3 className="font-display text-lg font-bold leading-snug tracking-tight text-ink group-hover:text-primary">
           {course.name}
         </h3>
-        {course.description ? (
-          <p className="mt-1.5 line-clamp-2 text-sm text-ink-muted">{course.description}</p>
-        ) : null}
-        <div className="mt-auto pt-4">
+        {/* Always two lines tall, so every card in a row lines up exactly. */}
+        <p className="mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-ink-muted">{course.description}</p>
+        <div className="mt-auto pt-3">
           <div className="flex items-center gap-4 text-xs font-medium text-ink-faint">
             {course.section_count > 0 && (
               <span className="inline-flex items-center gap-1.5">

@@ -2,7 +2,7 @@
 
 Branch: `fix/batch-a` (based on `wip/pre-batch-a`, which holds the previously uncommitted WIP). Nothing here has been applied to any live database, deployed, or merged. **All payment items are deliberately untouched** (PAY-\*, DB-01/02/06/29, MOB-01..04/19/22) — see "Deferred" at the end.
 
-Verified locally: PG17 harness (`mobile-app/supabase/tests/harness/`, 216-migration chain + website tree, **14 SQL test files all PASS**, all Batch A migration files re-apply **twice** with no error, every mobile/admin twin byte-identical); Deno tests for the new edge function actually executed (9 pass) plus a jest twin; `tsc`, lint, tests, `next build`, `expo export` web green for all three apps (counts at the bottom). **Not done here:** device/browser runs, real Storage upload/mime enforcement, anything against live Supabase.
+Verified locally: PG17 harness (`mobile-app/supabase/tests/harness/`, 216-migration chain + website tree, **14 SQL test files all PASS**, plus `123_submit_requires_visible_test.sql` for the 0123 follow-up (PASS via `run_dba.sh`), all Batch A migration files re-apply **twice** with no error, every mobile/admin twin byte-identical); Deno tests for the new edge function actually executed (9 pass) plus a jest twin; `tsc`, lint, tests, `next build`, `expo export` web green for all three apps (counts at the bottom). **Not done here:** device/browser runs, real Storage upload/mime enforcement, anything against live Supabase.
 
 ---
 
@@ -31,13 +31,14 @@ Twin migration files (mobile `01xx` ↔ admin `0xx`) are **byte-identical** and 
 |---|---|---|---|
 | 1 | `0117_project_files_private_check` / `089` | DB-22 + storage limits | forces `project-files` private + purchaser-only read; **avatars 2 MB, image/jpeg·png·webp**; **resumes 5 MB, pdf·doc·docx**; **custom-project-uploads 15 MB** (png/jpeg/webp/pdf/doc/docx/zip); owner-only avatar select policy. `application/octet-stream` is *not* allowed anywhere |
 | 2 | `0118_profiles_guard_and_blocked_enforcement` / `090` | DB-03, 04, 32 | profile column guard; `is_active_user()`; blocked users can't write (45 own-row policies + 7 storage policies); guard in 3 RPCs |
-| 3 | `0119_admin_permission_enforcement` / `091` | DB-07, 26, 27, 28 | admin **write** policies (60 tables + 7 storage) need `has_permission(module, action)`; money/destructive admin RPCs need super_admin/admin |
-| 4 | `0120_hide_secrets_and_premium_content` / `092` | DB-05, 10, 11, 13 | column-revokes `test_cases`/`solution_code`; secret-gated `*_run_cases`; **solution code only after ≥1 submission (or admin)**; new `record_coding_submission` RPC (direct submission insert removed); premium question bank + **premium prep_notes shown locked** via `prep_notes_public_list` / `prep_note_get`; draft jobs/projects hidden; **`my_wishlist()`** RPC (tombstones, no draft leak); `regrant_dsa_problems_client_columns()` helper |
-| 5 | `0121_resume_shares_and_referral_rules` / `093` | DB-17, 08 (non-payment), 15, 38 | share ownership + pinned token; signup reward disabled; daily referral cap; self-referral normalisation; random codes; `referral_leaderboard()` |
-| 6 | `0122_rate_limit_and_ai_budget` / `094` | (WEB-01/08 backend) | `rl_hit()`, `ai_budget_take()` + tables |
-| 7 | `website/supabase/migrations/0002_contact_limiter_hardening.sql` | DB-20, DB-07 | contact limiter hardening; contact status updates need `cms:edit` (needs website `0001` and, for the permission part, mobile 0119 already applied) |
+| 3 | `0123_submit_attempt_requires_visible_test` / `095` | follow-up (hidden tests) | `submit_test_attempt` / `submit_randomized_test_attempt` refuse a test students can't see (unpublished/archived, off on both website and mobile, or targeted elsewhere) with the usual "Test … not found" error; existing attempts untouched. **Needs 0118 first:** it keeps 0118's blocked-user guard, which calls `is_active_user()` (created by 0118); PL/pgSQL only resolves that at call time, so applied without 0118 the migration succeeds but every test submission then fails. (Its file number is later than 0122, but it depends only on 0118; `db push`'s numeric order is fine too.) |
+| 4 | `0119_admin_permission_enforcement` / `091` | DB-07, 26, 27, 28 | admin **write** policies (60 tables + 7 storage) need `has_permission(module, action)`; money/destructive admin RPCs need super_admin/admin |
+| 5 | `0120_hide_secrets_and_premium_content` / `092` | DB-05, 10, 11, 13 | column-revokes `test_cases`/`solution_code`; secret-gated `*_run_cases`; **solution code only after ≥1 submission (or admin)**; new `record_coding_submission` RPC (direct submission insert removed); premium question bank + **premium prep_notes shown locked** via `prep_notes_public_list` / `prep_note_get`; draft jobs/projects hidden; **`my_wishlist()`** RPC (tombstones, no draft leak); `regrant_dsa_problems_client_columns()` helper |
+| 6 | `0121_resume_shares_and_referral_rules` / `093` | DB-17, 08 (non-payment), 15, 38 | share ownership + pinned token; signup reward disabled; daily referral cap; self-referral normalisation; random codes; `referral_leaderboard()` |
+| 7 | `0122_rate_limit_and_ai_budget` / `094` | (WEB-01/08 backend) | `rl_hit()`, `ai_budget_take()` + tables |
+| 8 | `website/supabase/migrations/0002_contact_limiter_hardening.sql` | DB-20, DB-07 | contact limiter hardening; contact status updates need `cms:edit` (needs website `0001` and, for the permission part, mobile 0119 already applied) |
 
-Immediately after step 6:
+Immediately after step 7 (`0122`):
 ```sql
 insert into public.app_secrets(name, secret_hash)
 values ('judge_rpc', encode(extensions.digest('<THE SECRET>','sha256'),'hex'))
@@ -64,7 +65,7 @@ Do the EAS steps (section 3) first, then `eas build`. Ship after Steps 1–2 are
 
 | Layer | How |
 |---|---|
-| Migrations | Each of 0117–0122 and website 0002 ends with a commented **ROLLBACK** block — run them in reverse (0122 → 0117). Rolling back 0120 re-exposes test cases/solutions/drafts; 0118 removes blocked-user enforcement. Hard failure → restore the pre-flight backup. |
+| Migrations | Each of 0117–0123 and website 0002 ends with a commented **ROLLBACK** block — run them in reverse of the step 1 order (website 0002 → 0122 → … → 0119 → 0123 → 0118 → 0117); 0123 must be undone before 0118, since 0118's rollback drops `is_active_user()`. Rolling back 0120 re-exposes test cases/solutions/drafts; 0118 removes blocked-user enforcement. Hard failure → restore the pre-flight backup. |
 | Admin lock-out (0119) | A super_admin cannot be locked out (bypass tested). If a role loses access wrongly, fix `role_permissions` rows (no migration) or run the 0119 rollback block. |
 | Website / admin | Vercel → promote the previous deployment. (Old website + new DB is broken for judge/submit — roll the DB back too, or keep the new site.) |
 | Edge function | `supabase functions delete admin-ban-user` (admin action then reports the ban step failed; DB block remains). |

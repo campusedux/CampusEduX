@@ -4,9 +4,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight, Clock, Lock, Download, Video } from "lucide-react";
 import { getLearningTree, getLearningTopicPage } from "@/lib/learning";
-import { Markdown, createTopicLinkState, slugId } from "@/components/learning/Markdown";
+import { createTopicLinkState } from "@/components/learning/Markdown";
+import { LessonBlock } from "@/components/learning/LessonBlock";
 import { buildTopicLinkIndex } from "@/lib/topicLinks";
 import { isTemplatedGenerativeAiBody } from "@/lib/contentQuality";
+import { lessonMetaDescription } from "@/lib/metaDescription";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { toOutline, findLesson } from "@/lib/courseOutline";
@@ -43,7 +45,11 @@ export async function generateMetadata({
   if (!page) return { title: "Topic not found", robots: { index: false, follow: false } };
   const { topic, grid } = page;
   const bodyText = page.contents.map((c) => c.body).join(" ").replace(/[#>*`_|\-]+/g, " ").trim();
-  const description = (topic.short_description || bodyText || `${topic.title} — ${grid.name} on CampusEduX.`).slice(0, 155);
+  const description = lessonMetaDescription(
+    topic.short_description,
+    page.contents.map((c) => c.body),
+    `${topic.title} — ${grid.name} on CampusEduX.`,
+  );
   const url = absoluteUrl(`/learning/${grid.slug}/${topic.slug}`);
   // Generative AI tutorial topics (migration 0069/041) are a mail-merge
   // template: the same filler paragraphs repeat verbatim regardless of the
@@ -189,16 +195,7 @@ export default async function TopicPage({
               <div className="max-w-none text-[16.5px]">
                 {contents.map((block) => (
                   <section key={block.id} className="mb-10">
-                    {block.heading ? (
-                      <h2 id={slugId(block.heading)} className="mb-3 scroll-mt-24 text-2xl font-bold tracking-tight text-ink">
-                        {block.heading}
-                      </h2>
-                    ) : null}
-                    {block.content_format === "plain" ? (
-                      <p className="whitespace-pre-line leading-8 text-ink-muted">{block.body}</p>
-                    ) : (
-                      <Markdown source={block.body} topicLinks={topicLinkIndex} linkState={topicLinkState} callouts />
-                    )}
+                    <LessonBlock block={block} topicLinks={topicLinkIndex} linkState={topicLinkState} />
                     {(safeHref(block.file_url) || safeHref(block.video_url)) && (
                       <div className="mt-4 flex flex-wrap gap-3">
                         {safeHref(block.file_url) ? (

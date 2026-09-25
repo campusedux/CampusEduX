@@ -36,6 +36,7 @@ export { ResourceCard } from "./ResourceCard";
 export type { ResourceCardData } from "./ResourceCard";
 export { Card } from "./Card";
 export { ProgressBar } from "./ProgressBar";
+export { ProgressRing } from "./ProgressRing";
 export { Tabs } from "./Tabs";
 export type { TabItem } from "./Tabs";
 export { Toaster, toast } from "./Toast";

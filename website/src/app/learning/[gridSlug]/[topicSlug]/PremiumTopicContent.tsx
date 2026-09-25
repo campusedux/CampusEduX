@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Lock } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
-import { Markdown, slugId } from "@/components/learning/Markdown";
 import { Button, EmptyState } from "@/components/ui";
 import type { LearningContentBlock } from "@/lib/learning.types";
 
 type Phase = "checking" | "locked" | "unlocked";
+
+// The lesson renderer is only needed once a premium member's content arrives
+// (after a client RPC), so it loads lazily instead of on every lesson page.
+const LessonBlock = dynamic(() => import("@/components/learning/LessonBlock").then((m) => m.LessonBlock));
 
 /**
  * The server renders this page with the anon Supabase client (so the HTML is
@@ -81,16 +85,7 @@ export function PremiumTopicContent({
         ) : (
           blocks.map((block) => (
             <section key={block.id} className="mb-8">
-              {block.heading ? (
-                <h2 id={slugId(block.heading)} className="mb-3 scroll-mt-24 text-2xl font-bold tracking-tight text-ink">
-                  {block.heading}
-                </h2>
-              ) : null}
-              {block.content_format === "plain" ? (
-                <p className="whitespace-pre-line leading-8 text-ink-muted">{block.body}</p>
-              ) : (
-                <Markdown source={block.body} callouts />
-              )}
+              <LessonBlock block={block} />
             </section>
           ))
         )}

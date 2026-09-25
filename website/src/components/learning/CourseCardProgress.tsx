@@ -4,20 +4,30 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { useLearningProgress } from "@/lib/learningProgress";
 
 /**
- * Per-course progress strip for a course card. Device-only progress; renders
- * nothing until the stored state is readable, or when the course isn't started.
+ * Per-course progress row for a course card: bar + "X% complete" / "Not
+ * started". Device-only progress. Until the stored state is readable, it
+ * renders an empty bar of the same height, so cards never shift.
  */
 export function CourseCardProgress({ gridSlug, totalLessons }: { gridSlug: string; totalLessons: number }) {
   const { ready, courseProgress } = useLearningProgress();
-  if (!ready) return null;
   const p = courseProgress(gridSlug, totalLessons);
-  if (!p.started) return null;
+  const done = ready && p.total > 0 && p.completed >= p.total;
+  const text = !ready ? " " : done ? "Completed" : p.completed > 0 ? `${p.percent}% complete` : p.started ? "Started" : "Not started";
   return (
-    <div className="mt-3">
-      <ProgressBar value={p.completed} max={p.total || 1} label={`${p.completed} of ${p.total} lessons done`} size="xs" />
-      <p className="mt-1.5 text-xs font-medium text-ink-muted">
-        {p.completed > 0 ? `${p.completed} of ${p.total} lessons done` : "In progress"}
-      </p>
+    <div className="mt-3 flex items-center gap-3 border-t border-line pt-3">
+      <ProgressBar
+        value={ready ? p.completed : 0}
+        max={p.total || 1}
+        label={ready ? `${p.completed} of ${p.total} lessons done` : "Course progress"}
+        size="xs"
+        tone={done ? "success" : "primary"}
+        className="flex-1"
+      />
+      <span
+        className={`min-w-[5.5rem] text-right text-xs font-semibold tabular-nums ${done ? "text-success" : p.completed > 0 ? "text-primary" : "text-ink-faint"}`}
+      >
+        {text}
+      </span>
     </div>
   );
 }
