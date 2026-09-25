@@ -23,11 +23,11 @@ const VERDICT_LABEL: Record<string, string> = {
   error: "Error",
 };
 const VERDICT_CLASS: Record<string, string> = {
-  accepted: "bg-emerald-50 text-emerald-700",
-  wrong_answer: "bg-red-50 text-red-700",
-  compile_error: "bg-red-50 text-red-700",
-  runtime_error: "bg-red-50 text-red-700",
-  time_limit_exceeded: "bg-amber-50 text-amber-700",
+  accepted: "bg-success/10 text-success",
+  wrong_answer: "bg-danger/10 text-danger",
+  compile_error: "bg-danger/10 text-danger",
+  runtime_error: "bg-danger/10 text-danger",
+  time_limit_exceeded: "bg-warning/10 text-amber-800 dark:text-amber-300",
   error: "bg-surface text-ink-muted",
 };
 

@@ -67,7 +67,7 @@ export function CodeBlock({ code, lang }: { code: string; lang: string }) {
         </ToolbarButton>
       </div>
 
-      <pre className="overflow-x-auto rounded-xl border border-line bg-[#0f172a] p-4 pt-9 text-[13px] leading-relaxed text-slate-100 sm:pt-4">
+      <pre tabIndex={0} aria-label={lang ? `${lang} code` : "Code"} className="overflow-x-auto rounded-xl border border-line bg-[#0f172a] p-4 pt-9 text-[13px] leading-relaxed text-slate-100 sm:pt-4">
         {lang ? (
           <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">{lang}</div>
         ) : null}
@@ -92,7 +92,7 @@ function ToolbarButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="inline-flex items-center gap-1 rounded-md bg-white/10 px-1.5 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      className="hit-44 inline-flex items-center gap-1 rounded-md bg-white/10 px-1.5 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
     >
       {children}
     </button>

@@ -210,14 +210,6 @@ export interface MockTestDetail {
   topic: { grid_slug: string; topic_slug: string; title: string } | null;
 }
 
-/** First readable topic of a grid, for "start reading" / grid-root redirect. */
-export function firstTopicOf(tree: LearningTree): { sectionSlug: string; topic: LearningTreeTopic } | null {
-  for (const section of tree.sections) {
-    if (section.topics.length) return { sectionSlug: section.slug, topic: section.topics[0] };
-  }
-  return null;
-}
-
 /** Flat reading order across the whole grid (matches the RPC's prev/next). */
 export function flattenTopics(tree: LearningTree): { section: LearningTreeSection; topic: LearningTreeTopic }[] {
   return tree.sections.flatMap((section) => section.topics.map((topic) => ({ section, topic })));

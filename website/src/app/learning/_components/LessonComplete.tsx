@@ -85,7 +85,7 @@ export function LessonComplete({ lesson, sectionSlugs, courseSlugs, next, varian
           onClick={done ? undo : complete}
           aria-pressed={done}
           className={cn(
-            "inline-flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-[0.8rem] font-semibold transition",
+            "inline-flex h-11 items-center gap-1.5 rounded-xl px-3.5 text-[0.8rem] font-semibold transition sm:h-9",
             done ? "bg-success/15 text-success hover:bg-success/20" : "border border-line bg-card text-ink hover:border-success/40 hover:text-success",
           )}
         >

@@ -25,12 +25,11 @@ export function HomeHero({ stats, courses }: { stats: HeroStat[]; courses: HeroC
         <div aria-hidden className="pointer-events-none absolute -bottom-32 right-10 h-72 w-72 rounded-full bg-accent-pink/10 blur-3xl" />
 
         <div className="relative grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
-          <div className="animate-fade-in-up">
+          {/* No entrance animation: this block holds the LCP headline, which should paint immediately. */}
+          <div>
             <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60 motion-reduce:animate-none" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-              </span>
+              {/* Static dot — an infinite "ping" here kept the main thread busy on mid-range phones. */}
+              <span aria-hidden className="h-2 w-2 rounded-full bg-primary ring-4 ring-primary/15" />
               Learn · Practice · Build · Get hired
             </span>
 

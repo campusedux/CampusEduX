@@ -57,13 +57,13 @@ export function PracticeProblemLockedNotice({
             {problem.difficulty}
           </span>
           <span className="rounded-full bg-surface px-2.5 py-1 font-medium text-ink-muted">{categoryName}</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 font-medium text-amber-800 dark:text-amber-300">
             <Lock className="h-3.5 w-3.5" aria-hidden /> Premium
           </span>
         </div>
       </header>
 
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 text-center">
+      <div className="rounded-2xl border border-warning/30 bg-warning/10 p-6 text-center">
         <Lock className="mx-auto h-8 w-8 text-amber-500" aria-hidden />
         <h2 className="mt-3 text-lg font-bold text-ink">This is a premium problem</h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">

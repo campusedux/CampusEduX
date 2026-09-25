@@ -85,7 +85,8 @@ const BOTTOM_LINKS: readonly FooterLink[] = [
   { href: "/sitemap.xml", label: "Sitemap", external: true },
 ];
 
-const linkCls = "text-sm text-ink-muted transition-colors hover:text-primary";
+// Phone: full-width 44px rows; sm+: compact text links.
+const linkCls = "block py-3 text-sm text-ink-muted transition-colors hover:text-primary sm:inline sm:py-0";
 const headingCls = "font-sans text-xs font-bold uppercase tracking-[0.14em] text-ink-faint";
 
 /**
@@ -94,7 +95,7 @@ const headingCls = "font-sans text-xs font-bold uppercase tracking-[0.14em] text
  */
 function FooterLinkList({ links }: { links: readonly FooterLink[] }) {
   return (
-    <ul className="space-y-2.5">
+    <ul className="sm:space-y-2.5">
       {links.map((l) => (
         <li key={l.href}>
           <Link href={l.href} className={linkCls}>
@@ -215,11 +216,11 @@ export default function Footer() {
                   </span>
                 )}
                 {l.external ? (
-                  <a href={l.href} className="transition-colors hover:text-primary">
+                  <a href={l.href} className="hit-44 transition-colors hover:text-primary">
                     {l.label}
                   </a>
                 ) : (
-                  <Link href={l.href} className="transition-colors hover:text-primary">
+                  <Link href={l.href} className="hit-44 transition-colors hover:text-primary">
                     {l.label}
                   </Link>
                 )}

@@ -35,7 +35,7 @@ export function MobileNav() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink transition hover:bg-surface lg:hidden"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-ink transition hover:bg-surface sm:h-9 sm:w-9 lg:hidden"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -57,7 +57,7 @@ export function MobileNav() {
                 <div className="truncate text-xs text-white/70">{profile?.email || "Not signed in"}</div>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close menu" className="rounded-lg p-1 hover:bg-white/10">
+            <button onClick={() => setOpen(false)} aria-label="Close menu" className="rounded-lg p-2.5 hover:bg-white/10">
               <X className="h-5 w-5" />
             </button>
           </div>

@@ -179,7 +179,7 @@ export default async function PremiumPage() {
       {plans.length > 1 && allFeatures.length > 0 && (
         <section className="mt-16" aria-labelledby="compare-title">
           <SectionHeader id="compare-title" eyebrow="Compare" title="Compare plans side by side" />
-          <div className="card overflow-x-auto">
+          <div className="card overflow-x-auto" tabIndex={0} role="region" aria-label="Plan comparison table">
             <table className="w-full min-w-[36rem] border-collapse text-sm">
               <caption className="sr-only">Premium plan comparison</caption>
               <thead>

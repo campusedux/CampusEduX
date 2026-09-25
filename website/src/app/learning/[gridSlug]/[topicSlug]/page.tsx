@@ -152,7 +152,7 @@ export default async function TopicPage({
                 </span>
               ) : null}
               {topic.is_premium ? (
-                <span className="inline-flex h-9 items-center gap-1 rounded-xl bg-warning/15 px-3 text-[0.8rem] font-semibold text-amber-700 dark:text-amber-300">
+                <span className="inline-flex h-9 items-center gap-1 rounded-xl bg-warning/15 px-3 text-[0.8rem] font-semibold text-amber-800 dark:text-amber-300">
                   <Lock className="h-3.5 w-3.5" aria-hidden /> Premium
                 </span>
               ) : null}

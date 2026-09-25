@@ -233,7 +233,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
                 name="q"
                 defaultValue={searchParams.q ?? ""}
                 placeholder="Search projects, e.g. e-commerce, ML, Android…"
-                className="h-12 w-full rounded-xl border border-line bg-surface pl-10 pr-3 text-[15px] text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:bg-card"
+                className="h-12 w-full rounded-xl border border-line bg-surface pl-10 pr-3 text-[15px] text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-4 focus:ring-primary/15 focus:bg-card"
               />
             </label>
             <button type="submit" className="btn-primary h-12 px-5">
@@ -251,7 +251,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
                   href={hrefWith({ category: c.id })}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex-shrink-0 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-sm font-semibold transition",
+                    "flex-shrink-0 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-sm font-semibold transition max-sm:py-2.5",
                     active ? "border-primary bg-primary text-white" : "border-line bg-card text-ink-muted hover:border-primary/40 hover:text-ink",
                   )}
                 >

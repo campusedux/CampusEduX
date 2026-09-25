@@ -64,7 +64,7 @@ export function AuthMenu() {
       <div className="flex shrink-0 items-center gap-1.5">
         <Link
           href={loginHrefFor(pathname)}
-          className="inline-flex h-9 items-center whitespace-nowrap rounded-xl px-3 text-[0.8rem] font-semibold text-ink transition hover:bg-surface max-sm:bg-primary max-sm:text-white max-sm:hover:bg-primary-600"
+          className="inline-flex h-11 items-center whitespace-nowrap rounded-xl px-4 text-[0.8rem] font-semibold text-ink transition hover:bg-surface max-sm:bg-primary max-sm:text-white max-sm:hover:bg-primary-600 sm:h-9 sm:px-3"
         >
           Log in
         </Link>
@@ -106,7 +106,7 @@ export function AuthMenu() {
             </div>
           </div>
           {profile.isPremium ? (
-            <p className="mx-1 mt-1.5 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-[0.7rem] font-semibold text-amber-700 dark:text-amber-300">
+            <p className="mx-1 mt-1.5 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-[0.7rem] font-semibold text-amber-800 dark:text-amber-300">
               <Crown className="h-3 w-3" aria-hidden /> Premium member
             </p>
           ) : (

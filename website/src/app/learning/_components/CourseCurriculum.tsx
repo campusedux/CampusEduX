@@ -80,7 +80,7 @@ export function CourseCurriculum({
           </span>
           {bookmarks.has(l.id) && <Bookmark className="h-3.5 w-3.5 flex-shrink-0 fill-primary text-primary" aria-label="Bookmarked" />}
           {l.isPremium && (
-            <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+            <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
               <Lock className="h-3 w-3" aria-hidden /> Premium
             </span>
           )}
@@ -105,7 +105,7 @@ export function CourseCurriculum({
           <button
             type="button"
             onClick={() => setOpen(open.size === outline.sections.length ? new Set() : new Set(outline.sections.map((s) => s.id)))}
-            className="text-sm font-semibold text-primary hover:text-primary-700"
+            className="hit-44 text-sm font-semibold text-primary hover:text-primary-700"
           >
             {open.size === outline.sections.length ? "Collapse all" : "Expand all"}
           </button>
@@ -121,7 +121,7 @@ export function CourseCurriculum({
             onChange={(e) => setQuery(e.target.value)}
             placeholder={`Search ${outline.total} lessons in this course…`}
             aria-label="Search lessons in this course"
-            className="h-11 w-full rounded-xl border border-line bg-card pl-10 pr-10 text-sm text-ink outline-none transition placeholder:text-ink-faint focus:border-primary"
+            className="h-11 w-full rounded-xl border border-line bg-card pl-10 pr-10 text-sm text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-4 focus:ring-primary/15"
           />
           {query && (
             <button

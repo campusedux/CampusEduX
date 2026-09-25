@@ -38,7 +38,7 @@ export function AccountLearningCard({ courses }: { courses: AccountCourse[] }) {
         </h2>
         <div className="flex items-center gap-2 text-xs font-semibold">
           {progress.streak.current > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-amber-700 dark:text-amber-300">
+            <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-amber-800 dark:text-amber-300">
               <Flame className="h-3.5 w-3.5" aria-hidden /> {progress.streak.current}-day streak
             </span>
           )}

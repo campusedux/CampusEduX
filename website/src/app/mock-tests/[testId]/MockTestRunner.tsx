@@ -187,7 +187,7 @@ export function MockTestRunner({
 
   if (phase.k === "premium") {
     return (
-      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-6 text-center">
+      <div className="mt-6 rounded-2xl border border-warning/30 bg-warning/10 p-6 text-center">
         <Lock className="mx-auto h-8 w-8 text-amber-500" aria-hidden />
         <h2 className="mt-3 text-lg font-bold text-ink">This is a premium test</h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
@@ -202,7 +202,7 @@ export function MockTestRunner({
 
   if (phase.k === "error") {
     return (
-      <div className="mt-6 rounded-2xl border border-red-200 bg-red-50/60 p-5 text-sm text-red-700" role="alert">
+      <div className="mt-6 rounded-2xl border border-danger/30 bg-danger/10 p-5 text-sm text-danger" role="alert">
         {phase.message}
         <div className="mt-3">
           <Button variant="ghost" onClick={() => setPhase({ k: "intro" })}>
@@ -244,7 +244,7 @@ export function MockTestRunner({
           Question {current + 1} / {questions.length}
         </span>
         {secondsLeft !== null ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-3 py-1 text-xs font-semibold text-danger">
             <Clock className="h-3.5 w-3.5" aria-hidden /> {fmt(secondsLeft)}
           </span>
         ) : null}
@@ -264,7 +264,7 @@ export function MockTestRunner({
                 active
                   ? "bg-primary text-white"
                   : done
-                    ? "bg-emerald-100 text-emerald-700"
+                    ? "bg-success/15 text-success"
                     : "border border-line bg-card text-ink-faint"
               }`}
             >

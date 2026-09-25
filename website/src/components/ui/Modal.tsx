@@ -56,7 +56,7 @@ export function Modal({
         {title !== undefined && (
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
-            <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-ink-muted hover:bg-surface">
+            <button onClick={onClose} aria-label="Close" className="rounded-lg p-2.5 text-ink-muted hover:bg-surface">
               <X className="h-5 w-5" />
             </button>
           </div>

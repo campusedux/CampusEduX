@@ -426,7 +426,7 @@ export function GlobalSearchTrigger() {
         onClick={() => setOpen(true)}
         aria-label="Search CampusEduX"
         aria-expanded={open}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink-muted transition hover:border-primary/40 hover:bg-surface hover:text-primary xl:hidden"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-line text-ink-muted transition hover:border-primary/40 hover:bg-surface hover:text-primary sm:h-9 sm:w-9 xl:hidden"
       >
         <Search className="h-5 w-5" aria-hidden />
       </button>

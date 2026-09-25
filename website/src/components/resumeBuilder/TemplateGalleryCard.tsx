@@ -56,7 +56,7 @@ export function TemplateGalleryCard({
           <button
             type="button"
             onClick={() => onPreview(template)}
-            className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-card text-xs font-semibold text-ink transition hover:bg-surface"
+            className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border sm:h-9 border-line bg-card text-xs font-semibold text-ink transition hover:bg-surface"
           >
             <Eye className="h-3.5 w-3.5" /> Preview
           </button>
@@ -64,7 +64,7 @@ export function TemplateGalleryCard({
             type="button"
             onClick={() => onUse(template.id)}
             disabled={pending}
-            className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-white transition hover:bg-primary-600 disabled:opacity-60"
+            className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary sm:h-9 text-xs font-semibold text-white transition hover:bg-primary-600 disabled:opacity-60"
           >
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Use template

@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 /** Literal class strings so Tailwind keeps them; tints read in both themes. */
 const TONE: Record<CustomProjectStatus, { cls: string; icon: typeof CircleDot }> = {
   new: { cls: "bg-primary-50 text-primary", icon: CircleDot },
-  in_development: { cls: "bg-accent-sky/15 text-accent-sky", icon: Code2 },
+  in_development: { cls: "bg-accent-sky/15 text-blue-700 dark:text-blue-300", icon: Code2 },
   testing: { cls: "bg-accent-violet/15 text-violet-700 dark:text-violet-300", icon: FlaskConical },
   ready: { cls: "bg-accent-teal/15 text-teal-700 dark:text-teal-300", icon: PackageCheck },
   delivered: { cls: "bg-success/15 text-success", icon: CheckCircle2 },

@@ -11,7 +11,7 @@ export function BrandMark({ className, compactBelow360 = false }: { className?: 
       <span
         className={cn(
           "font-display text-[1.05rem] font-bold tracking-tight text-ink",
-          compactBelow360 && "hidden min-[360px]:inline",
+          compactBelow360 && "hidden min-[380px]:inline",
         )}
       >
         Campus<span className="text-primary">EduX</span>

@@ -60,7 +60,7 @@ export function HomePersonal({ courses, jobs }: { courses: PersonalCourse[]; job
             </h2>
           </div>
           {streak.current > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1.5 text-sm font-semibold text-amber-700 dark:text-amber-300">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
               <Flame className="h-4 w-4" aria-hidden />
               {streak.current}-day streak
             </span>

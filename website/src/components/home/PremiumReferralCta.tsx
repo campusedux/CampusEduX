@@ -16,7 +16,7 @@ export function PremiumReferralCta() {
         <div className="relative overflow-hidden rounded-3xl border border-warning/30 bg-gradient-to-br from-warning/15 via-card to-accent-pink/10 p-6 sm:p-8">
           <span aria-hidden className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-warning/20 blur-2xl" />
           <div className="relative">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-amber-800 dark:text-amber-300">
               <Crown className="h-3.5 w-3.5" aria-hidden /> CampusEduX Premium
             </span>
             <h2 className="mt-4 font-display text-2xl font-bold tracking-tight text-ink sm:text-[1.75rem]">

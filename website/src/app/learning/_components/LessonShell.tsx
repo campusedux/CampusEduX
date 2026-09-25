@@ -36,7 +36,7 @@ export function LessonShell({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mb-5 inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-card px-3.5 text-sm font-semibold text-ink shadow-card lg:hidden"
+        className="mb-5 inline-flex h-11 items-center gap-2 rounded-xl border border-line bg-card px-3.5 text-sm font-semibold text-ink shadow-card lg:hidden"
       >
         <List className="h-4 w-4" aria-hidden />
         Course contents

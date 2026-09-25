@@ -52,7 +52,7 @@ export function ThemeToggle({ variant = "icon", className }: { variant?: "icon" 
               aria-checked={active}
               onClick={() => choose(p)}
               className={cn(
-                "flex h-9 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition",
+                "flex h-11 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition sm:h-9",
                 active ? "bg-card text-ink shadow-card" : "text-ink-muted hover:text-ink",
               )}
             >

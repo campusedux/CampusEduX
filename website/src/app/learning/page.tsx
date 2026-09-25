@@ -160,7 +160,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
                 name="q"
                 defaultValue={q}
                 placeholder="Search a topic, e.g. joins, loops, OOP…"
-                className="h-12 w-full rounded-xl border border-line bg-surface pl-10 pr-3 text-[15px] text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:bg-card"
+                className="h-12 w-full rounded-xl border border-line bg-surface pl-10 pr-3 text-[15px] text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-4 focus:ring-primary/15 focus:bg-card"
               />
             </label>
             <button type="submit" className="btn-primary h-12 px-5">

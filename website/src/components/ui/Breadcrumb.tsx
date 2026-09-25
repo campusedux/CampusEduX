@@ -16,14 +16,14 @@ export function Breadcrumb({ items, className }: { items: Crumb[]; className?: s
     : [{ label: "Home", href: "/" }, ...items];
 
   return (
-    <nav aria-label="Breadcrumb" className={cn("flex flex-wrap items-center gap-1 text-sm text-ink-faint", className)}>
+    <nav aria-label="Breadcrumb" className={cn("flex min-w-0 flex-wrap items-center gap-1 text-sm text-ink-faint", className)}>
       {trail.map((c, i) => {
         const last = i === trail.length - 1;
         return (
-          <span key={`${c.label}-${i}`} className="flex items-center gap-1">
+          <span key={`${c.label}-${i}`} className="flex min-w-0 max-w-full items-center gap-1">
             {i > 0 && <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />}
             {c.href && !last ? (
-              <Link href={c.href} className="transition-colors hover:text-ink">
+              <Link href={c.href} className="hit-44 transition-colors hover:text-ink">
                 {c.label}
               </Link>
             ) : (

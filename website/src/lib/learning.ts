@@ -48,7 +48,7 @@ export type {
   AdjacentProblem,
   MockTestDetail,
 } from "@/lib/learning.types";
-export { firstTopicOf, flattenTopics } from "@/lib/learning.types";
+export { flattenTopics } from "@/lib/learning.types";
 
 const PLATFORM = "website";
 

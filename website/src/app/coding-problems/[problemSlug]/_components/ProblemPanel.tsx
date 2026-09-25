@@ -7,9 +7,9 @@ import { ProblemTabs } from "./ProblemTabs";
 import { ProblemSolution } from "./ProblemSolution";
 
 const DIFF_CLASS: Record<string, string> = {
-  Easy: "bg-emerald-50 text-emerald-700",
-  Medium: "bg-amber-50 text-amber-700",
-  Hard: "bg-red-50 text-red-700",
+  Easy: "bg-success/10 text-success",
+  Medium: "bg-warning/10 text-amber-800 dark:text-amber-300",
+  Hard: "bg-danger/10 text-danger",
 };
 
 /** A breadcrumb crumb: a label, plus an href for every crumb except the last. */
@@ -167,7 +167,7 @@ export function ProblemPanel({
           </span>
         ))}
         {problem.is_premium ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 font-semibold text-amber-800 dark:text-amber-300">
             <Lock className="h-3.5 w-3.5" aria-hidden /> Premium
           </span>
         ) : null}

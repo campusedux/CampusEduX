@@ -32,7 +32,7 @@ export default async function AccountReferralPage() {
   const STATS = [
     { label: "Friends referred", value: String(code?.total_referrals ?? 0), icon: Users, tone: "bg-primary-50 text-primary" },
     { label: "Total earned", value: formatINR(code?.total_earned ?? 0), icon: IndianRupee, tone: "bg-success/15 text-success" },
-    { label: "Pending", value: String(pending), icon: Clock, tone: "bg-warning/15 text-amber-700 dark:text-amber-300" },
+    { label: "Pending", value: String(pending), icon: Clock, tone: "bg-warning/15 text-amber-800 dark:text-amber-300" },
   ];
 
   return (

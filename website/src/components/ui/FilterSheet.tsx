@@ -37,7 +37,7 @@ export function FilterSheet({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm font-semibold text-ink"
+          className="inline-flex h-11 items-center gap-2 rounded-xl border border-line bg-card px-4 text-sm font-semibold text-ink"
         >
           <SlidersHorizontal className="h-4 w-4" aria-hidden />
           {triggerLabel}

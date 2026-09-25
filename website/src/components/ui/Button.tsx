@@ -55,7 +55,7 @@ export function Button(props: AsButton | AsLink) {
   } = props;
 
   const classes = cn(
-    "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[.98] disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none motion-reduce:transform-none",
+    "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[.98] disabled:opacity-60 disabled:pointer-events-none motion-reduce:transform-none",
     VARIANT[variant],
     SIZE[size],
     fullWidth && "w-full",
