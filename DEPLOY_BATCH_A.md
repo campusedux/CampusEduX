@@ -2,6 +2,8 @@
 
 Branch: `fix/batch-a` (based on `wip/pre-batch-a`, which holds the previously uncommitted WIP). Nothing here has been applied to any live database, deployed, or merged. **All payment items are deliberately untouched** (PAY-\*, DB-01/02/06/29, MOB-01..04/19/22) — see "Deferred" at the end.
 
+> **`mobile-app/supabase/functions/razorpay-webhook/index.ts` is in this tree but is deliberately dormant.** It only takes effect if someone runs `supabase functions deploy razorpay-webhook`, which is not a step in this guide — do not run it as part of Batch A.
+
 Verified locally: PG17 harness (`mobile-app/supabase/tests/harness/`, 216-migration chain + website tree, **14 SQL test files all PASS**, plus `123_submit_requires_visible_test.sql` for the 0123 follow-up (PASS via `run_dba.sh`), all Batch A migration files re-apply **twice** with no error, every mobile/admin twin byte-identical); Deno tests for the new edge function actually executed (9 pass) plus a jest twin; `tsc`, lint, tests, `next build`, `expo export` web green for all three apps (counts at the bottom). **Not done here:** device/browser runs, real Storage upload/mime enforcement, anything against live Supabase.
 
 ---
