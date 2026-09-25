@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { judgeRpcSecret, resolveApiCaller } from "@/lib/apiAuth";
+import { JUDGE_BUCKET, judgeMax, judgeWindowSeconds, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { resolveLanguage } from "@/lib/compiler/languages";
-import { MAX_CODE_BYTES, byteLength, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/compiler/limits";
-import { checkRateLimit } from "@/lib/compiler/rateLimit";
+import { MAX_CODE_BYTES, byteLength } from "@/lib/compiler/limits";
 import { runCode } from "@/lib/compiler/run";
 import { composeSubmissionSource, judgeCase, MAX_JUDGE_CASES, type RunCase, type JudgeCaseResult } from "@/lib/codingProblems";
 
@@ -34,19 +34,23 @@ const bodySchema = z.object({
     .refine((v) => byteLength(v) <= MAX_CODE_BYTES, `Your code is too long (max ${MAX_CODE_BYTES.toLocaleString()} bytes).`),
 });
 
-function clientKey(req: Request): string {
-  const fwd = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
-  const ip = fwd || req.headers.get("x-real-ip") || "";
-  return ip ? `ip:${ip}` : `ua:${(req.headers.get("user-agent") ?? "unknown").slice(0, 100)}`;
-}
-
 export async function POST(req: Request) {
-  const rate = checkRateLimit(`judge:${clientKey(req)}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
-  if (!rate.ok) {
-    return NextResponse.json(
-      { ok: false, error: "You're running code very quickly. Please wait a moment." },
-      { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
-    );
+  // Auth required (cookie session or Bearer). The RPCs below run as that user.
+  const caller = await resolveApiCaller(req);
+  if (!caller) {
+    return NextResponse.json({ ok: false, error: "Sign in to run your code." }, { status: 401 });
+  }
+  const supabase = caller.supabase;
+
+  // One request = up to MAX_JUDGE_CASES sandbox runs, so the cap is on requests (see rateLimitDb.ts).
+  const limited = limitResponse(await rlHit(supabase, JUDGE_BUCKET, judgeMax(), judgeWindowSeconds()), {
+    message: "You're running code very quickly. Please wait a moment.",
+  });
+  if (limited) return limited;
+
+  const secret = judgeRpcSecret();
+  if (!secret) {
+    return NextResponse.json({ ok: false, error: "Judge is not configured." }, { status: 503 });
   }
 
   let json: unknown;
@@ -64,10 +68,7 @@ export async function POST(req: Request) {
   }
   const { slug, language, source } = parsed.data;
 
-  // Runs as the caller's session — the RPC returns null for a premium problem
-  // the caller can't open, or for a missing / unpublished / hidden problem.
-  const supabase = createAuthedServerSupabase();
-  const { data, error } = await supabase.rpc("coding_problem_run_cases", { p_slug: slug });
+  const { data, error } = await supabase.rpc("coding_problem_run_cases", { p_slug: slug, p_secret: secret });
   if (error) {
     return NextResponse.json({ ok: false, error: "Couldn't load this problem's tests." }, { status: 502 });
   }

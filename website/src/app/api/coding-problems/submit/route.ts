@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { judgeRpcSecret, resolveApiCaller } from "@/lib/apiAuth";
+import { JUDGE_BUCKET, judgeMax, judgeWindowSeconds, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { resolveLanguage } from "@/lib/compiler/languages";
-import { MAX_CODE_BYTES, byteLength, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/compiler/limits";
-import { checkRateLimit } from "@/lib/compiler/rateLimit";
+import { MAX_CODE_BYTES, byteLength } from "@/lib/compiler/limits";
 import { runCode } from "@/lib/compiler/run";
 import { composeSubmissionSource, judgeCase, MAX_JUDGE_CASES, type RunCase, type JudgeCaseResult } from "@/lib/codingProblems";
 
@@ -12,7 +12,7 @@ import { composeSubmissionSource, judgeCase, MAX_JUDGE_CASES, type RunCase, type
  * Learning topic-practice coding problem AND persist the attempt.
  *
  *   Browser → this route → coding_problem_run_cases() RPC → execution provider
- *     → per-case pass/fail → INSERT coding_submissions (owner-only RLS)
+ *     → per-case pass/fail → record_coding_submission() RPC (judge-secret gated)
  *       + UPSERT user_dsa_progress (solved / attempted, never downgraded)
  *
  * Mirrors /api/practice/submit exactly, for the topic-coding-problem home
@@ -51,20 +51,22 @@ type Verdict =
   | "error";
 
 export async function POST(req: Request) {
-  const supabase = createAuthedServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  // Auth required (cookie session or Bearer). A rejected Bearer is a 401 — no silent fallback.
+  const caller = await resolveApiCaller(req);
+  if (!caller) {
     return NextResponse.json({ ok: false, error: "Sign in to submit your solution." }, { status: 401 });
   }
+  const { supabase, user } = caller;
 
-  const rate = checkRateLimit(`coding-problems-submit:${user.id}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
-  if (!rate.ok) {
-    return NextResponse.json(
-      { ok: false, error: "You're submitting very quickly. Please wait a moment." },
-      { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
-    );
+  // One request = up to MAX_JUDGE_CASES sandbox runs, so the cap is on requests (see rateLimitDb.ts).
+  const limited = limitResponse(await rlHit(supabase, JUDGE_BUCKET, judgeMax(), judgeWindowSeconds()), {
+    message: "You're submitting very quickly. Please wait a moment.",
+  });
+  if (limited) return limited;
+
+  const secret = judgeRpcSecret();
+  if (!secret) {
+    return NextResponse.json({ ok: false, error: "Judge is not configured." }, { status: 503 });
   }
 
   let json: unknown;
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
   const { language, source } = parsed.data;
   const slug = parsed.data.slug.toLowerCase();
 
-  const { data: casesData, error: casesErr } = await supabase.rpc("coding_problem_run_cases", { p_slug: slug });
+  const { data: casesData, error: casesErr } = await supabase.rpc("coding_problem_run_cases", { p_slug: slug, p_secret: secret });
   if (casesErr) {
     return NextResponse.json({ ok: false, error: "Couldn't load this problem's tests." }, { status: 502 });
   }
@@ -159,22 +161,22 @@ export async function POST(req: Request) {
   // Persist the attempt (owner-only RLS). A write failure doesn't fail the run —
   // the user still sees their results.
   let saved = true;
-  const { data: inserted, error: insErr } = await supabase
-    .from("coding_submissions")
-    .insert({
-      user_id: user.id,
-      problem_id: problemId,
-      problem_slug: slug,
-      language,
-      source_code: source.slice(0, MAX_CODE_BYTES),
-      verdict,
-      passed,
-      total,
-      runtime_ms: maxTimeMs || null,
-      memory_kb: maxMemoryKb ?? null,
-    })
-    .select("id")
-    .maybeSingle();
+  // Recorded through record_coding_submission() (0120/092): clients can no longer INSERT
+  // coding_submissions directly, and the RPC needs the server-only judge secret, so a user cannot
+  // fake a row to unlock the solution.
+  const { data: insertedId, error: insErr } = await supabase.rpc("record_coding_submission", {
+    p_secret: secret,
+    p_problem_id: problemId,
+    p_slug: slug,
+    p_language: language,
+    p_source: source.slice(0, MAX_CODE_BYTES),
+    p_verdict: verdict,
+    p_passed: passed,
+    p_total: total,
+    p_runtime_ms: maxTimeMs || null,
+    p_memory_kb: maxMemoryKb ?? null,
+  });
+  const inserted = typeof insertedId === "string" ? { id: insertedId } : null;
   if (insErr) saved = false;
 
   if (allPassed) {
