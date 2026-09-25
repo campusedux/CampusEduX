@@ -7,9 +7,9 @@ import { ProblemTabs } from "./ProblemTabs";
 import { ProblemSolution } from "./ProblemSolution";
 
 const DIFF_CLASS: Record<string, string> = {
-  Easy: "bg-emerald-50 text-emerald-700",
-  Medium: "bg-amber-50 text-amber-700",
-  Hard: "bg-red-50 text-red-700",
+  Easy: "bg-success/10 text-success",
+  Medium: "bg-warning/10 text-amber-800 dark:text-amber-300",
+  Hard: "bg-danger/10 text-danger",
 };
 
 /** A breadcrumb crumb: a label, plus an href for every crumb except the last. */
@@ -78,7 +78,7 @@ export function ProblemPanel({
           {ex.input !== undefined ? (
             <div className="mt-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Input</div>
-              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-white px-2.5 py-2 font-mono text-[13px] text-ink-muted">
+              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-card px-2.5 py-2 font-mono text-[13px] text-ink-muted">
                 {ex.input || "(none)"}
               </pre>
             </div>
@@ -86,7 +86,7 @@ export function ProblemPanel({
           {ex.output !== undefined ? (
             <div className="mt-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Output</div>
-              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-white px-2.5 py-2 font-mono text-[13px] text-ink-muted">
+              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-card px-2.5 py-2 font-mono text-[13px] text-ink-muted">
                 {ex.output}
               </pre>
             </div>
@@ -167,7 +167,7 @@ export function ProblemPanel({
           </span>
         ))}
         {problem.is_premium ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 font-semibold text-amber-800 dark:text-amber-300">
             <Lock className="h-3.5 w-3.5" aria-hidden /> Premium
           </span>
         ) : null}
@@ -197,7 +197,7 @@ export function ProblemPanel({
           <h2 className="text-lg font-bold text-ink">Related Problems</h2>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {related.map((r) => (
-              <li key={r.slug} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+              <li key={r.slug} className="rounded-2xl border border-line bg-card p-4 shadow-card">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-ink">{r.title}</span>
                   {r.is_premium ? (

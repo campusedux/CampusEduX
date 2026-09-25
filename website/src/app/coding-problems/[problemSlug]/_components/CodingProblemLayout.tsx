@@ -37,7 +37,7 @@ export function CodingProblemLayout({ left, right }: { left: ReactNode; right: R
       className="flex flex-col gap-4 px-3 py-4 lg:grid lg:h-[calc(100dvh-4rem)] lg:gap-0 lg:overflow-hidden lg:p-0 lg:grid-cols-[var(--lw)_12px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]"
       style={{ "--lw": `${split.pct}%` } as React.CSSProperties}
     >
-      <div className="min-w-0 overflow-y-auto rounded-2xl border border-line bg-white lg:rounded-none lg:border-0 lg:border-r lg:border-line">
+      <div className="min-w-0 overflow-y-auto rounded-2xl border border-line bg-card lg:rounded-none lg:border-0 lg:border-r lg:border-line">
         {left}
       </div>
 

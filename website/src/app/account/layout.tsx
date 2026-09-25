@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { ensureLegalConsent } from "@/lib/legalConsent";
 import { AccountNav } from "@/components/account/AccountNav";
-import { Badge } from "@/components/ui";
+import { Avatar, Badge } from "@/components/ui";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
@@ -14,19 +14,24 @@ export default async function AccountLayout({ children }: { children: React.Reac
 
   return (
     <div className="page-shell">
-      <div className="grid gap-8 md:grid-cols-[210px_1fr]">
-        <aside>
-          <div className="mb-4">
-            <div className="font-bold text-ink">{user.fullName || user.email}</div>
-            {user.isPremium && (
-              <span className="mt-1 inline-block">
-                <Badge tone="premium">Premium</Badge>
-              </span>
-            )}
+      <div className="grid gap-6 md:grid-cols-[230px_minmax(0,1fr)] md:gap-10">
+        <aside className="md:sticky md:top-24 md:self-start">
+          <div className="card mb-4 hidden items-center gap-3 p-4 md:flex">
+            <Avatar src={user.avatarUrl} name={user.fullName || user.email} />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-ink">{user.fullName || user.email}</div>
+              {user.isPremium ? (
+                <span className="mt-1 inline-block">
+                  <Badge tone="premium">Premium</Badge>
+                </span>
+              ) : (
+                <div className="truncate text-xs text-ink-faint">{user.email}</div>
+              )}
+            </div>
           </div>
           <AccountNav />
         </aside>
-        <div>{children}</div>
+        <div className="min-w-0">{children}</div>
       </div>
     </div>
   );

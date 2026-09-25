@@ -4,8 +4,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
- * CTA button — mirrors `mobile-app/src/components/ui/Button.tsx`.
- * `primary` solid indigo · `secondary` indigo-tint · `ghost` bordered ·
+ * CTA button. `primary` solid indigo (soft glow) · `secondary` indigo-tint · `ghost` bordered ·
  * `danger` solid red · `text` link-style. Renders an `<a>` (next/link) when
  * `href` is set, otherwise a `<button>`.
  */
@@ -13,9 +12,9 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "text
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-white hover:bg-primary-600",
+  primary: "bg-primary text-white shadow-glow hover:bg-primary-600 hover:-translate-y-px",
   secondary: "bg-primary-50 text-primary hover:bg-primary-100",
-  ghost: "border border-line bg-white text-ink hover:bg-surface",
+  ghost: "border border-line bg-card text-ink hover:border-primary/30 hover:bg-surface",
   danger: "bg-danger text-white hover:bg-danger/90",
   text: "bg-transparent text-primary hover:text-primary-700 px-0",
 };
@@ -56,7 +55,7 @@ export function Button(props: AsButton | AsLink) {
   } = props;
 
   const classes = cn(
-    "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[.98] disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none motion-reduce:transform-none",
+    "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[.98] disabled:opacity-60 disabled:pointer-events-none motion-reduce:transform-none",
     VARIANT[variant],
     SIZE[size],
     fullWidth && "w-full",

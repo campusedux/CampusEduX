@@ -2,6 +2,8 @@ import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import { EmptyState, Button } from "@/components/ui";
+import { Heart } from "lucide-react";
+import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export default async function SavedJobsPage() {
   const user = await requireUser();
@@ -22,15 +24,15 @@ export default async function SavedJobsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-ink">Saved jobs</h1>
+      <AccountPageHeader title="Saved jobs" description="Roles you've bookmarked to come back to." />
       {jobs.length === 0 ? (
         <EmptyState
-          className="mt-6"
+          icon={Heart}
           title="No saved jobs yet"
           action={<Button href="/jobs" size="sm">Find roles</Button>}
         />
       ) : (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {jobs.map((j) => (
             <JobCard key={j.id} job={j} />
           ))}

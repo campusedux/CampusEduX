@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/nav/Header";
 import { BottomNav } from "@/components/nav/BottomNav";
@@ -8,11 +9,14 @@ import JsonLd from "@/components/JsonLd";
 import GoogleAnalytics from "@/components/analytics/GoogleAnalytics";
 import { BRAND } from "@/lib/brand";
 import { websiteJsonLd } from "@/lib/seo";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { Toaster } from "@/components/ui/Toast";
 
-// The mobile app loads no custom font — it renders in the platform system
-// font. The website matches that with a system sans stack defined in
-// tailwind.config.ts / globals.css, so there is no external font request and
-// nothing to add to the CSP.
+// Self-hosted at build time by next/font (served from our own origin, so the
+// CSP's `font-src 'self'` still holds). Plus Jakarta Sans = UI/body,
+// Bricolage Grotesque = display headings. Both are variable fonts.
+const fontSans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+const fontDisplay = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display", display: "swap" });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? BRAND.website;
 
@@ -25,6 +29,13 @@ const organizationJsonLd = {
 
 const description =
   "CampusEduX is a student platform for the project marketplace, jobs & internships, placement preparation, resume building and custom project development.";
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F6F7FC" },
+    { media: "(prefers-color-scheme: dark)", color: "#0A0C16" },
+  ],
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -64,8 +75,11 @@ const supabaseOrigin = (() => {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: THEME_INIT_SCRIPT adds `dark` to <html> before
+    // React hydrates, which is expected and must not warn.
+    <html lang="en" className={`${fontSans.variable} ${fontDisplay.variable}`} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {supabaseOrigin && (
           <>
             <link rel="preconnect" href={supabaseOrigin} crossOrigin="anonymous" />
@@ -93,6 +107,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Clears the fixed mobile bottom nav. */}
         <div className="h-16 md:hidden" aria-hidden />
         <BottomNav />
+        <Toaster />
       </body>
     </html>
   );

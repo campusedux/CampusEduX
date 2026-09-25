@@ -56,12 +56,16 @@ export function Drawer({
 
   return createPortal(
     <div
-      className={cn("fixed inset-0 z-[100]", open ? "pointer-events-auto" : "pointer-events-none")}
+      className={cn(
+        "fixed inset-0 z-[100]",
+        // Closed: invisible (after the slide-out finishes) so nothing inside is focusable.
+        open ? "pointer-events-auto visible" : "pointer-events-none invisible transition-[visibility] duration-200",
+      )}
       aria-hidden={!open}
     >
       <div
         className={cn(
-          "absolute inset-0 bg-ink/40 transition-opacity motion-reduce:transition-none",
+          "absolute inset-0 bg-scrim/60 backdrop-blur-[2px] transition-opacity motion-reduce:transition-none",
           open ? "opacity-100" : "opacity-0",
         )}
         onClick={onClose}
@@ -71,7 +75,7 @@ export function Drawer({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "absolute flex flex-col bg-white shadow-card-lg transition-transform duration-200 ease-out motion-reduce:transition-none",
+          "absolute flex flex-col bg-card shadow-card-lg transition-transform duration-200 ease-out motion-reduce:transition-none",
           panelPos,
           className,
         )}
@@ -79,7 +83,7 @@ export function Drawer({
         {title !== undefined && (
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <span className="font-bold text-ink">{title}</span>
-            <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-ink-muted hover:bg-surface">
+            <button onClick={onClose} aria-label="Close" className="rounded-lg p-2.5 text-ink-muted hover:bg-surface">
               <X className="h-5 w-5" />
             </button>
           </div>

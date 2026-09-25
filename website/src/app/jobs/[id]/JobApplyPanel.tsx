@@ -201,7 +201,7 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
 
       <div className="mt-6">
         {externalApply ? null : applied ? (
-          <div className="rounded-2xl border border-line bg-white p-4 shadow-card">
+          <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
             <div className="font-bold text-ink">Application submitted</div>
             <p className="mt-1 text-sm text-ink-muted">
               Status: {STATUS_LABEL[applied.status] ?? applied.status} · Applied {timeAgo(applied.created_at)}.
@@ -211,7 +211,7 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleApply} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+          <form onSubmit={handleApply} className="rounded-2xl border border-line bg-card p-4 shadow-card">
             <div className="font-bold text-ink">Apply with your resume</div>
 
             {resumes.length > 0 && (
@@ -225,7 +225,7 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
               <select
                 value={selectedResumeId}
                 onChange={(e) => setSelectedResumeId(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                className="mt-2 w-full rounded-lg border border-line bg-card px-3 py-2 text-sm"
               >
                 {resumes.map((r) => (
                   <option key={r.id} value={r.id}>

@@ -3,18 +3,24 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { FileText, Wrench, Gift, ArrowRight, Sparkles, Code2, ClipboardList, MessageSquareText } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import JobCard, { JobCardData } from "@/components/JobCard";
-import { SectionHeader, Rating, Reveal, Button, SearchBar } from "@/components/ui";
-import { LearningResources } from "@/components/home/LearningResources";
+import { SectionHeader, Reveal } from "@/components/ui";
+import { HomeHero } from "@/components/home/HomeHero";
+import { HomePersonal } from "@/components/home/HomePersonal";
+import { CustomProjectPromo } from "@/components/home/CustomProjectPromo";
 import { ModuleGrid } from "@/components/home/ModuleGrid";
-import { CustomProjectHero } from "@/components/home/CustomProjectHero";
-import { HeroVisual } from "@/components/home/HeroVisual";
+import { PopularCourses } from "@/components/home/PopularCourses";
+import { PlacementPrep } from "@/components/home/PlacementPrep";
+import { Testimonials, type TestimonialRow } from "@/components/home/Testimonials";
+import { PremiumReferralCta } from "@/components/home/PremiumReferralCta";
 import { BlogCard } from "@/components/blog/BlogCard";
 import { getLatestPosts } from "@/lib/blog";
 import type { BlogPostCard } from "@/lib/blog";
-import { BRAND } from "@/lib/brand";
+import { getLearningGrids } from "@/lib/learning";
+import { getPracticeCategories } from "@/lib/practice";
+import { getInterviewCategories } from "@/lib/interviewQuestions";
 import { inWindow } from "@/lib/home";
 import { getCachedHomeData } from "@/lib/cache";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image";
@@ -52,7 +58,6 @@ const getHomeData = cache(async () => {
   };
 });
 
-type TestimonialRow = { id: string; author_name: string; author_role: string | null; quote: string; rating: number };
 type FaqRow = { id: string; question: string; answer: string };
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -70,162 +75,99 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [{ trending, jobs, testimonials, faqs, banner }, latestPosts] = await Promise.all([
-    getHomeData(),
-    // Same cross-request-cached helper `/blog` uses for its Featured strip.
-    getLatestPosts(3),
-  ]);
+  const [{ trending, jobs, testimonials, faqs, banner }, latestPosts, grids, practiceCategories, interviewCategories] =
+    await Promise.all([
+      getHomeData(),
+      // Same cross-request-cached helper `/blog` uses for its Featured strip.
+      getLatestPosts(3),
+      getLearningGrids(),
+      getPracticeCategories(),
+      getInterviewCategories(),
+    ]);
   const posts = latestPosts as BlogPostCard[];
 
-  return (
-    <div className="pb-16 sm:pb-20">
-      <section className="container-page pt-8 sm:pt-12" aria-label="Custom project development">
-        <CustomProjectHero />
-      </section>
+  // Trust numbers — only real, live catalogue counts (a zero is hidden by the hero).
+  const lessonCount = grids.reduce((n, g) => n + (g.topic_count ?? 0), 0);
+  const problemCount = practiceCategories.reduce((n, c) => n + (c.problem_count ?? 0), 0);
+  const interviewTopicCount = interviewCategories.reduce((n, c) => n + (c.topic_count ?? 0), 0);
+  const stats = [
+    { value: grids.length, label: grids.length === 1 ? "course" : "courses" },
+    { value: lessonCount, label: "lessons" },
+    { value: problemCount, label: "coding problems" },
+    { value: interviewTopicCount, label: "interview topics" },
+  ];
+  const featuredFirst = [...grids].sort((a, b) => Number(b.is_featured) - Number(a.is_featured));
 
-      {/* Hero — an admin `banners` row for placement 'home' overrides the default copy. */}
-      <header className="container-page pb-8 pt-8 sm:pb-10 sm:pt-12">
-        {banner ? (
+  return (
+    <div className="pb-6">
+      {/* 1 · Hero — first for every visitor (server-rendered, crawlable, LCP). */}
+      <HomeHero
+        stats={stats}
+        courses={featuredFirst.slice(0, 3).map(({ slug, name, topic_count }) => ({ slug, name, topic_count }))}
+      />
+
+      {/* 2 · Signed-in students only: Welcome back / Continue learning / streak / jobs.
+          Client island — renders nothing for signed-out visitors, so the page stays ISR. */}
+      <HomePersonal
+        courses={grids.map(({ slug, name, topic_count, is_featured, is_premium }) => ({ slug, name, topic_count, is_featured, is_premium }))}
+        jobs={jobs.slice(0, 3)}
+      />
+
+      {/* Admin `banners` row (placement 'home') — shown as a promo card under the hero. */}
+      {banner && (
+        <section className="container-page pt-8 sm:pt-10" aria-label="Announcement">
           <Link
             href={safeHref(banner.target_url) ?? "/projects"}
-            className="group block overflow-hidden rounded-3xl border border-line bg-primary-50 shadow-card transition hover:shadow-card-lg"
+            className="card card-hover group grid items-center gap-6 overflow-hidden p-6 sm:grid-cols-2 sm:p-8"
           >
-            <div className="grid items-center gap-6 p-6 sm:grid-cols-2 sm:p-10">
-              <div>
-                <h1 className="text-2xl font-bold text-ink sm:text-3xl">{banner.title}</h1>
-                {banner.subtitle && <p className="mt-2 text-ink-muted">{banner.subtitle}</p>}
-                <span className="mt-4 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition group-hover:bg-primary-600">
-                  Explore
-                </span>
-              </div>
-              {safeHref(banner.image_url) && (
-                <div className="relative aspect-[16/10] overflow-hidden rounded-xl bg-primary-50">
-                  <Image
-                    src={safeHref(banner.image_url) ?? ""}
-                    alt=""
-                    fill
-                    priority
-                    placeholder="blur"
-                    blurDataURL={IMAGE_BLUR_DATA_URL}
-                    className="object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transform-none"
-                    sizes="(max-width:768px) 100vw, 50vw"
-                  />
-                </div>
-              )}
+            <div>
+              <h2 className="h-section">{banner.title}</h2>
+              {banner.subtitle && <p className="lede mt-2">{banner.subtitle}</p>}
+              <span className="btn-primary mt-5">
+                Explore <ArrowRight className="h-4 w-4" aria-hidden />
+              </span>
             </div>
+            {safeHref(banner.image_url) && (
+              <div className="relative aspect-[16/9] overflow-hidden rounded-2xl bg-primary-50">
+                <Image
+                  src={safeHref(banner.image_url) ?? ""}
+                  alt=""
+                  fill
+                  placeholder="blur"
+                  blurDataURL={IMAGE_BLUR_DATA_URL}
+                  className="object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transform-none"
+                  sizes="(max-width:640px) 100vw, 50vw"
+                />
+              </div>
+            )}
           </Link>
-        ) : (
-          <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-primary-50 via-white to-primary-50/50 px-6 py-10 sm:px-12 sm:py-14 lg:px-14 lg:py-16">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -right-10 top-1/2 hidden h-72 w-72 -translate-y-1/2 text-primary opacity-[0.12] lg:block"
-              style={{
-                backgroundImage: "radial-gradient(currentColor 1.6px, transparent 1.6px)",
-                backgroundSize: "18px 18px",
-                WebkitMaskImage: "radial-gradient(circle at center, #000, transparent 72%)",
-                maskImage: "radial-gradient(circle at center, #000, transparent 72%)",
-              }}
-            />
-            <div className="relative grid items-center gap-10 lg:grid-cols-[1.08fr_0.92fr] lg:gap-14">
-              <div>
-                <span className="eyebrow inline-flex rounded-full bg-primary/10 px-3 py-1">{BRAND.tagline}</span>
-                <h1 className="h-hero mt-5 max-w-xl">Everything a student needs for a career, in one place.</h1>
-                <p className="lede mt-4 max-w-lg">
-                  Buy or sell final-year projects, apply to jobs and internships, prepare for placements, build a
-                  resume, and get a custom project built — all on one account, shared with the CampusEduX app.
-                </p>
-                <div className="mt-7 flex flex-wrap gap-3">
-                  <Button href="/projects">Browse projects</Button>
-                  <Button href="/learning" variant="ghost">
-                    Explore learning
-                  </Button>
-                </div>
-                <div className="mt-6 max-w-md">
-                  <SearchBar action="/search" placeholder="Search projects, jobs, learning…" />
-                </div>
-              </div>
-              <div className="hidden lg:block">
-                <HeroVisual />
-              </div>
-            </div>
-          </div>
-        )}
-      </header>
-
-      <ModuleGrid />
-
-      {trending.length > 0 && (
-        <Reveal>
-          <section className="container-page pt-12 sm:pt-16">
-            <SectionHeader title="Trending projects" viewAllHref="/projects/trending" />
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {trending.map((p, i) => (
-                <ProjectCard key={p.id} project={p} rank={i < 3 ? i + 1 : undefined} />
-              ))}
-            </div>
-          </section>
-        </Reveal>
+        </section>
       )}
 
+      {/* 3 · Custom Project promo banner */}
+      <CustomProjectPromo />
+
+      {/* 4 · What you get */}
       <Reveal>
-        <LearningResources />
+        <ModuleGrid />
       </Reveal>
 
-      {/* Practice — quick links into the existing Practice section (coding problems,
-       * mock tests via Learning, interview questions). No new routes or data. */}
+      {/* 5 · Popular courses */}
       <Reveal>
-        <section className="container-page pt-12 sm:pt-16">
-          <SectionHeader title="Practice" viewAllHref="/practice" viewAllLabel="All practice" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              {
-                href: "/practice/problems",
-                title: "Coding Practice",
-                body: "Solve coding problems in Java, Python, C, C++ or JavaScript, with instant feedback.",
-                icon: Code2,
-                cta: "Start Coding",
-              },
-              {
-                href: "/learning",
-                title: "Mock Tests",
-                body: "Timed mock tests on Learning topics to check how exam-ready you are.",
-                icon: ClipboardList,
-                cta: "Take a Test",
-              },
-              {
-                href: "/practice/interview-questions",
-                title: "Interview Questions",
-                body: "Common interview questions by topic, with clear answers and key points to remember.",
-                icon: MessageSquareText,
-                cta: "Practice Interview Questions",
-              },
-            ].map((p) => {
-              const Icon = p.icon;
-              return (
-                <Link key={p.href} href={p.href} className="card card-hover group flex flex-col p-5">
-                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
-                    <Icon className="h-5 w-5 text-primary" aria-hidden />
-                  </span>
-                  <span className="mt-3 font-bold tracking-tight text-ink group-hover:text-primary">{p.title}</span>
-                  <span className="mt-1 flex-1 text-sm text-ink-muted">{p.body}</span>
-                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                    {p.cta}
-                    <ArrowRight
-                      className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none"
-                      aria-hidden
-                    />
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
+        <PopularCourses courses={grids} />
       </Reveal>
 
+      {/* 6 · Latest jobs */}
       {jobs.length > 0 && (
         <Reveal>
-          <section className="container-page pt-12 sm:pt-16">
-            <SectionHeader title="Latest jobs" viewAllHref="/jobs" />
+          <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-jobs-title">
+            <SectionHeader
+              id="home-jobs-title"
+              eyebrow="Careers"
+              title="Latest jobs & internships"
+              description="Fresh openings for students and freshers."
+              viewAllHref="/jobs"
+            />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {jobs.map((j) => (
                 <JobCard key={j.id} job={j} />
@@ -235,140 +177,86 @@ export default async function HomePage() {
         </Reveal>
       )}
 
+      {/* 7 · Projects marketplace preview */}
+      {trending.length > 0 && (
+        <Reveal>
+          <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-projects-title">
+            <SectionHeader
+              id="home-projects-title"
+              eyebrow="Marketplace"
+              title="Trending projects"
+              description="Final-year projects with source code, ready to learn from and present."
+              viewAllHref="/projects/trending"
+            />
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {trending.map((p, i) => (
+                <ProjectCard key={p.id} project={p} rank={i < 3 ? i + 1 : undefined} />
+              ))}
+            </div>
+          </section>
+        </Reveal>
+      )}
+
+      {/* 8 · Placement prep */}
+      <Reveal>
+        <PlacementPrep problemCount={problemCount} interviewTopicCount={interviewTopicCount} />
+      </Reveal>
+
+      {/* 9 · Testimonials / success stories */}
+      <Reveal>
+        <Testimonials items={testimonials} />
+      </Reveal>
+
       {posts.length > 0 && (
         <Reveal>
-          <section className="container-page pt-12 sm:pt-16">
-            <SectionHeader title="Latest from the blog" viewAllHref="/blog" viewAllLabel="All articles" />
+          <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-blog-title">
+            <SectionHeader id="home-blog-title" eyebrow="Blog" title="Latest from the blog" viewAllHref="/blog" viewAllLabel="All articles" />
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {posts.map((p, i) => (
-                <BlogCard key={p.id} post={p} priority={i < 3} />
+              {posts.map((p) => (
+                <BlogCard key={p.id} post={p} />
               ))}
             </div>
           </section>
         </Reveal>
       )}
 
-      {/* Static module overview — links into the dynamic sections above/below. */}
+      {/* 10 · Premium + Referral */}
       <Reveal>
-        <section className="container-page pt-12 sm:pt-16">
-          <SectionHeader title="More on CampusEduX" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { href: "/resume", title: "Resume Builder", body: "Guided sections, ATS scoring, PDF export.", icon: FileText },
-              { href: "/custom-projects", title: "Custom Projects", body: "Describe what you need — get it built and delivered.", icon: Wrench },
-              { href: "/referral", title: "Referral Program", body: "Invite a friend, earn wallet credit.", icon: Gift },
-            ].map((m) => {
-              const Icon = m.icon;
-              return (
-                <Link key={m.href} href={m.href} className="card card-hover group flex items-start gap-4 p-5">
-                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
-                    <Icon className="h-5 w-5 text-primary" aria-hidden />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="font-semibold tracking-tight text-ink group-hover:text-primary">{m.title}</span>
-                      <ArrowRight
-                        className="h-4 w-4 flex-shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transform-none"
-                        aria-hidden
-                      />
-                    </span>
-                    <span className="mt-1 block text-sm text-ink-muted">{m.body}</span>
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
+        <PremiumReferralCta />
       </Reveal>
-
-      {/* Premium promotion */}
-      <Reveal>
-        <section className="container-page pt-12 sm:pt-16">
-          <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary-50 via-white to-primary-50/40 px-6 py-10 sm:px-12 sm:py-12">
-            <div className="relative flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
-              <div className="max-w-xl">
-                <span className="eyebrow inline-flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                  CampusEduX Premium
-                </span>
-                <h2 className="h-section mt-2">Go further, faster with Premium.</h2>
-                <p className="lede mt-2">
-                  Priority access, extra placement material and faster support — everything already free stays free.
-                </p>
-              </div>
-              <Button href="/premium" size="lg" rightIcon={ArrowRight} className="flex-shrink-0">
-                See plans
-              </Button>
-            </div>
-          </div>
-        </section>
-      </Reveal>
-
-      {testimonials.length > 0 && (
-        <Reveal>
-          <section className="container-page pt-12 sm:pt-16">
-            <SectionHeader title="What students say" />
-            <div className="grid gap-5 md:grid-cols-3">
-              {testimonials.map((t) => (
-                <figure key={t.id} className="card p-5">
-                  {t.rating > 0 && <Rating value={t.rating} showCount={false} />}
-                  <blockquote className="mt-2 text-sm text-ink-muted">“{t.quote}”</blockquote>
-                  <figcaption className="mt-3 text-sm font-semibold text-ink">
-                    — {t.author_name}
-                    {t.author_role ? <span className="font-normal text-ink-muted">, {t.author_role}</span> : null}
-                  </figcaption>
-                </figure>
-              ))}
-            </div>
-          </section>
-        </Reveal>
-      )}
 
       {faqs.length > 0 && (
         <Reveal>
-          <section className="container-page pt-12 sm:pt-16">
-            <SectionHeader title="Frequently asked questions" viewAllHref="/faq" viewAllLabel="All FAQs" />
-            <div className="divide-y divide-line border-y border-line">
-              {faqs.map((f) => (
-                <details key={f.id} className="group py-4">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold text-ink">
-                    {f.question}
-                    <span className="text-ink-faint transition-transform group-open:rotate-45 motion-reduce:transform-none" aria-hidden>
-                      +
-                    </span>
-                  </summary>
-                  <p className="mt-2 text-sm text-ink-muted">{f.answer}</p>
-                </details>
-              ))}
+          <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-faq-title">
+            <div className="grid gap-8 lg:grid-cols-[1fr_1.6fr] lg:items-start lg:gap-14">
+              <SectionHeader
+                id="home-faq-title"
+                eyebrow="FAQ"
+                title="Questions, answered"
+                description="Still stuck? Our support team is a message away."
+                viewAllHref="/faq"
+                viewAllLabel="All FAQs"
+                className="lg:block"
+              />
+              <div className="card divide-y divide-line px-5 sm:px-6">
+                {faqs.map((f) => (
+                  <details key={f.id} className="group py-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold text-ink marker:hidden [&::-webkit-details-marker]:hidden">
+                      {f.question}
+                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-surface text-ink-muted transition-transform group-open:rotate-45 motion-reduce:transform-none">
+                        <Plus className="h-4 w-4" aria-hidden />
+                      </span>
+                    </summary>
+                    <p className="mt-2 pr-10 text-sm leading-relaxed text-ink-muted">{f.answer}</p>
+                  </details>
+                ))}
+              </div>
             </div>
           </section>
         </Reveal>
       )}
 
-      {/* Final CTA */}
-      <Reveal>
-        <section className="container-page pt-12 sm:pt-16">
-          <div className="rounded-3xl bg-primary px-6 py-10 text-center text-white sm:px-12 sm:py-14">
-            <h2 className="mx-auto max-w-2xl text-2xl font-bold tracking-tight sm:text-3xl">
-              Start with one account — the web and the app stay in sync.
-            </h2>
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/register"
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-white px-6 text-sm font-semibold text-primary transition hover:bg-white/90 active:scale-[.98] motion-reduce:active:scale-100"
-              >
-                Create your account
-              </Link>
-              <Link
-                href="/projects"
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-white/40 px-6 text-sm font-semibold text-white transition hover:bg-white/10 active:scale-[.98] motion-reduce:active:scale-100"
-              >
-                Browse the marketplace
-              </Link>
-            </div>
-          </div>
-        </section>
-      </Reveal>
+      {/* Final CTA — the site footer's call-to-action band directly follows. */}
     </div>
   );
 }

@@ -1,20 +1,26 @@
 import { safeHref } from "@/lib/safeUrl";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, ChevronRight, Lock, Download, Video } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { ArrowLeft, ArrowRight, Clock, Lock, Download, Video } from "lucide-react";
 import { getLearningTree, getLearningTopicPage } from "@/lib/learning";
-import { Markdown, createTopicLinkState } from "@/components/learning/Markdown";
+import { Markdown, createTopicLinkState, slugId } from "@/components/learning/Markdown";
 import { buildTopicLinkIndex } from "@/lib/topicLinks";
 import { isTemplatedGenerativeAiBody } from "@/lib/contentQuality";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
-import { DocsShell } from "../../_components/DocsShell";
-import { EmptyState } from "@/components/ui";
+import { toOutline, findLesson } from "@/lib/courseOutline";
+import { lessonToc, lessonReadingMinutes } from "@/lib/lessonToc";
+import { Breadcrumb, EmptyState } from "@/components/ui";
+import { ArticleToc } from "@/components/blog/ArticleToc";
+import { LessonShell } from "../../_components/LessonShell";
+import { ReadingProgress } from "../../_components/ReadingProgress";
+import { LessonComplete } from "../../_components/LessonComplete";
 import { LearningBookmarkButton } from "./LearningBookmarkButton";
 import { PremiumTopicContent } from "./PremiumTopicContent";
 import { TopicPractice } from "./_components/TopicPractice";
 import { TopicDiscovery } from "./_components/TopicDiscovery";
+import { RecordLessonVisit } from "./RecordLessonVisit";
 
 export const revalidate = 300;
 export const dynamicParams = true;
@@ -65,13 +71,39 @@ export default async function TopicPage({
     getLearningTree(params.gridSlug),
     getLearningTopicPage(params.gridSlug, params.topicSlug),
   ]);
-  if (!tree || !page) notFound();
+  if (!tree) notFound();
+  // The course exists but this lesson doesn't (renamed / removed by an admin,
+  // or an old "Continue learning" link): land on the course, not a 404.
+  if (!page) redirect(`/learning/${tree.grid.slug}`);
   const { topic, section, grid, locked, contents, prev, next } = page;
   // Internal-linking glossary for this page — built once from the already-
   // fetched grid tree (no extra query), shared across every content block's
   // <Markdown> call below so a given topic is only ever auto-linked once.
   const topicLinkIndex = buildTopicLinkIndex(tree, grid.slug, topic.slug);
   const topicLinkState = createTopicLinkState();
+
+  const outline = toOutline(tree);
+  const here = findLesson(outline, topic.slug);
+  const sectionSlugs = here ? here.section.lessons.map((l) => l.slug) : [topic.slug];
+  const nextSection = next ? findLesson(outline, next.slug)?.section.name : undefined;
+  const toc = locked ? [] : lessonToc(contents);
+  const minutes = !locked && contents.length > 0 ? lessonReadingMinutes(contents) : null;
+  const lessonRef = {
+    gridSlug: grid.slug,
+    gridName: grid.name,
+    topicSlug: topic.slug,
+    topicTitle: topic.title,
+    sectionName: section.name,
+  };
+  const completeCard = (
+    <LessonComplete
+      variant="card"
+      lesson={lessonRef}
+      sectionSlugs={sectionSlugs}
+      courseSlugs={outline.order}
+      next={next ? { slug: next.slug, title: next.title, sectionName: nextSection } : null}
+    />
+  );
 
   return (
     <>
@@ -82,124 +114,162 @@ export default async function TopicPage({
           { name: topic.title, path: `/learning/${grid.slug}/${topic.slug}` },
         ])}
       />
-      <DocsShell tree={tree} gridSlug={grid.slug}>
-        <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-ink-faint">
-          <Link href="/learning" className="hover:text-ink">
-            Learning
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          <Link href={`/learning/${grid.slug}`} className="hover:text-ink">
-            {grid.name}
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          <span className="text-ink-faint">{section.name}</span>
-        </nav>
+      <ReadingProgress targetId="lesson-article" />
+      <LessonShell
+        outline={outline}
+        currentSlug={topic.slug}
+        rail={toc.length >= 2 ? <ArticleToc items={toc} /> : undefined}
+      >
+        <RecordLessonVisit {...lessonRef} />
+        <Breadcrumb
+          className="mb-5"
+          items={[
+            { label: "Learning", href: "/learning" },
+            { label: grid.name, href: `/learning/${grid.slug}` },
+            { label: topic.title },
+          ]}
+        />
 
-        <article>
+        <article id="lesson-article" className="max-w-[46rem]">
           <header>
-            <h1 className="text-3xl font-bold text-ink">{topic.title}</h1>
-            {topic.short_description ? <p className="mt-3 text-ink-muted">{topic.short_description}</p> : null}
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <LearningBookmarkButton topicId={topic.id} slugPath={`/learning/${grid.slug}/${topic.slug}`} />
+            <p className="eyebrow">
+              {section.name}
+              {here ? (
+                <span className="font-medium normal-case tracking-normal text-ink-faint">
+                  {" "}
+                  · Lesson {here.lesson.number} of {outline.total}
+                </span>
+              ) : null}
+            </p>
+            <h1 className="mt-3 font-display text-[1.9rem] font-bold leading-[1.15] tracking-tight text-ink sm:text-[2.4rem]">
+              {topic.title}
+            </h1>
+            {topic.short_description ? <p className="lede mt-3">{topic.short_description}</p> : null}
+            <div className="mt-5 flex flex-wrap items-center gap-2.5">
+              {minutes ? (
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-surface px-3 text-[0.8rem] font-medium text-ink-muted">
+                  <Clock className="h-4 w-4" aria-hidden /> {minutes} min read
+                </span>
+              ) : null}
               {topic.is_premium ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                <span className="inline-flex h-9 items-center gap-1 rounded-xl bg-warning/15 px-3 text-[0.8rem] font-semibold text-amber-800 dark:text-amber-300">
                   <Lock className="h-3.5 w-3.5" aria-hidden /> Premium
                 </span>
               ) : null}
+              <LearningBookmarkButton topicId={topic.id} slugPath={`/learning/${grid.slug}/${topic.slug}`} />
+              {!locked && (
+                <LessonComplete
+                  variant="compact"
+                  lesson={lessonRef}
+                  sectionSlugs={sectionSlugs}
+                  courseSlugs={outline.order}
+                  next={next ? { slug: next.slug, title: next.title, sectionName: nextSection } : null}
+                />
+              )}
             </div>
           </header>
 
-          <hr className="my-6 border-line" />
+          <hr className="my-8 border-line" />
 
           {locked ? (
             /* Server render (anon client) always locks a premium topic — the body
                is never in the initial HTML. This island re-checks with the
-               visitor's real session and renders the content for a premium
-               member / admin. */
+               visitor's real session and renders the content (and the
+               "Mark as complete" card) for a premium member / admin. */
             <PremiumTopicContent
               gridSlug={grid.slug}
               topicSlug={topic.slug}
               loginNext={`/learning/${grid.slug}/${topic.slug}`}
+              unlockedFooter={completeCard}
             />
           ) : contents.length === 0 ? (
             <EmptyState title="No content yet" subtitle="This topic's content is on its way — check back soon." />
           ) : (
-            <div className="max-w-none">
-              {contents.map((block) => (
-                <section key={block.id} className="mb-8">
-                  {block.heading ? <h2 className="mb-3 text-xl font-bold text-ink">{block.heading}</h2> : null}
-                  {block.content_format === "plain" ? (
-                    <p className="whitespace-pre-line leading-7 text-ink-muted">{block.body}</p>
-                  ) : (
-                    <Markdown source={block.body} topicLinks={topicLinkIndex} linkState={topicLinkState} />
-                  )}
-                  {(safeHref(block.file_url) || safeHref(block.video_url)) && (
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      {safeHref(block.file_url) ? (
-                        <a
-                          href={safeHref(block.file_url) ?? undefined}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface"
-                        >
-                          <Download className="h-4 w-4" aria-hidden /> Attachment
-                        </a>
-                      ) : null}
-                      {safeHref(block.video_url) ? (
-                        <a
-                          href={safeHref(block.video_url) ?? undefined}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface"
-                        >
-                          <Video className="h-4 w-4" aria-hidden /> Watch video
-                        </a>
-                      ) : null}
-                    </div>
-                  )}
-                </section>
-              ))}
-            </div>
+            <>
+              <div className="max-w-none text-[16.5px]">
+                {contents.map((block) => (
+                  <section key={block.id} className="mb-10">
+                    {block.heading ? (
+                      <h2 id={slugId(block.heading)} className="mb-3 scroll-mt-24 text-2xl font-bold tracking-tight text-ink">
+                        {block.heading}
+                      </h2>
+                    ) : null}
+                    {block.content_format === "plain" ? (
+                      <p className="whitespace-pre-line leading-8 text-ink-muted">{block.body}</p>
+                    ) : (
+                      <Markdown source={block.body} topicLinks={topicLinkIndex} linkState={topicLinkState} callouts />
+                    )}
+                    {(safeHref(block.file_url) || safeHref(block.video_url)) && (
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        {safeHref(block.file_url) ? (
+                          <a
+                            href={safeHref(block.file_url) ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-ghost h-10 text-sm"
+                          >
+                            <Download className="h-4 w-4" aria-hidden /> Attachment
+                          </a>
+                        ) : null}
+                        {safeHref(block.video_url) ? (
+                          <a
+                            href={safeHref(block.video_url) ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-ghost h-10 text-sm"
+                          >
+                            <Video className="h-4 w-4" aria-hidden /> Watch video
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
+                  </section>
+                ))}
+              </div>
+              {completeCard}
+            </>
           )}
         </article>
 
-        {/* Topic-specific Mock Tests + Coding Problems (renders nothing when there are none) */}
-        <TopicPractice gridSlug={grid.slug} topicSlug={topic.slug} />
+        <div className="max-w-[46rem]">
+          {/* Topic-specific Mock Tests + Coding Problems (renders nothing when there are none) */}
+          <TopicPractice gridSlug={grid.slug} topicSlug={topic.slug} />
 
-        <nav className="mt-10 flex items-stretch justify-between gap-3 border-t border-line pt-6" aria-label="Topic navigation">
-          {prev ? (
-            <Link
-              href={`/learning/${grid.slug}/${prev.slug}`}
-              className="group flex flex-1 flex-col rounded-xl border border-line p-3 text-left hover:border-primary/30 hover:bg-surface"
-            >
-              <span className="flex items-center gap-1 text-xs text-ink-faint">
-                <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Previous
-              </span>
-              <span className="mt-0.5 text-sm font-semibold text-ink group-hover:text-primary">{prev.title}</span>
-            </Link>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {next ? (
-            <Link
-              href={`/learning/${grid.slug}/${next.slug}`}
-              className="group flex flex-1 flex-col items-end rounded-xl border border-line p-3 text-right hover:border-primary/30 hover:bg-surface"
-            >
-              <span className="flex items-center gap-1 text-xs text-ink-faint">
-                Next <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-              </span>
-              <span className="mt-0.5 text-sm font-semibold text-ink group-hover:text-primary">{next.title}</span>
-            </Link>
-          ) : (
-            <span className="flex-1" />
-          )}
-        </nav>
+          <nav className="mt-10 grid gap-3 border-t border-line pt-6 sm:grid-cols-2" aria-label="Lesson navigation">
+            {prev ? (
+              <Link
+                href={`/learning/${grid.slug}/${prev.slug}`}
+                className="card card-hover group flex flex-col p-4 text-left"
+              >
+                <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                  <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Previous
+                </span>
+                <span className="mt-1 text-sm font-semibold text-ink group-hover:text-primary">{prev.title}</span>
+              </Link>
+            ) : (
+              <span className="hidden sm:block" />
+            )}
+            {next ? (
+              <Link
+                href={`/learning/${grid.slug}/${next.slug}`}
+                className="card card-hover group flex flex-col items-end p-4 text-right"
+              >
+                <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                  Next <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </span>
+                <span className="mt-1 text-sm font-semibold text-ink group-hover:text-primary">{next.title}</span>
+              </Link>
+            ) : (
+              <span />
+            )}
+          </nav>
+        </div>
 
         {/* Internal-linking / discovery — Other Tutorials, Related Projects,
             Related Jobs, Latest Jobs, Other Learning Topics. Renders nothing
             when it has no real content for this topic. */}
         <TopicDiscovery gridSlug={grid.slug} gridName={grid.name} />
-      </DocsShell>
+      </LessonShell>
     </>
   );
 }

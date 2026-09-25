@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import ProfileForm from "./ProfileForm";
+import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export default async function ProfilePage() {
   const user = await requireUser();
@@ -14,8 +15,8 @@ export default async function ProfilePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-ink">Profile</h1>
-      <div className="mt-6 max-w-lg">
+      <AccountPageHeader title="Profile" description="Your details, course and links — shared with the CampusEduX app." />
+      <div className="card max-w-2xl p-5 sm:p-7">
         <ProfileForm
           initial={user}
           catalog={{

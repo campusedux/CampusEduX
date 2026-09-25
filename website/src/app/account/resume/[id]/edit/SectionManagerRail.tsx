@@ -160,7 +160,7 @@ export default function SectionManagerRail({
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} aria-hidden />
-            <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-line bg-white p-1 shadow-card-lg">
+            <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-line bg-card p-1 shadow-card-lg">
               <div className="flex items-center justify-between px-2 py-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
                 Add a section
                 <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close">
@@ -196,7 +196,7 @@ function IconBtn({ label, onClick, disabled, children }: { label: string; onClic
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="rounded p-1 text-ink-faint hover:bg-white hover:text-ink disabled:opacity-30"
+      className="rounded p-1 text-ink-faint hover:bg-card hover:text-ink disabled:opacity-30"
     >
       {children}
     </button>

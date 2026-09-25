@@ -45,6 +45,8 @@ export default function CompilerPage() {
           { name: "Online Compiler", path: "/compiler" },
         ])}
       />
+      {/* The IDE card has no visible page title; this keeps one <h1> per page for assistive tech. */}
+      <h1 className="sr-only">Online Compiler</h1>
       <Suspense fallback={<CompilerFallback />}>
         <CompilerWorkspace requireAuth={compilerAuthRequired()} />
       </Suspense>

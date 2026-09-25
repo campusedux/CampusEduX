@@ -54,7 +54,7 @@ export default function VersionHistory({ resumeId, initialVersions }: { resumeId
 
   return (
     <div className="mt-6 space-y-6">
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-line bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-line bg-card p-4">
         <div className="flex-1">
           <Input
             placeholder="Optional label (e.g. Before applying to Acme)"
@@ -72,7 +72,7 @@ export default function VersionHistory({ resumeId, initialVersions }: { resumeId
       {versions.length === 0 ? (
         <p className="text-sm text-ink-faint">No versions saved yet.</p>
       ) : (
-        <div className="divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="divide-y divide-line rounded-2xl border border-line bg-card">
           {versions.map((v) => (
             <div key={v.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-2">

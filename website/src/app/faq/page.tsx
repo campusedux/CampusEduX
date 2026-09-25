@@ -47,7 +47,7 @@ export default async function FaqPage() {
         Object.entries(grouped).map(([category, items]) => (
           <section key={category} className="mt-10">
             <h2 className="text-lg font-bold text-ink">{category}</h2>
-            <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-white">
+            <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-card">
               {items.map((f) => (
                 <details key={f.id} className="px-4 py-4">
                   <summary className="cursor-pointer list-none font-semibold text-ink">{f.question}</summary>

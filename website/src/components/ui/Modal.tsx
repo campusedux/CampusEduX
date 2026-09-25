@@ -15,6 +15,7 @@ export function Modal({
   title,
   children,
   footer,
+  ariaLabel,
   className,
 }: {
   open: boolean;
@@ -22,6 +23,8 @@ export function Modal({
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Accessible name when there's no visible `title`. */
+  ariaLabel?: string;
   className?: string;
 }) {
   useEffect(() => {
@@ -40,20 +43,20 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-end justify-center p-0 sm:items-center sm:p-6">
-      <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 animate-fade-in bg-scrim/60 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={title ?? ariaLabel}
         className={cn(
-          "relative w-full max-w-lg rounded-t-2xl bg-white shadow-card-lg sm:rounded-2xl",
+          "relative w-full max-w-lg animate-slide-up rounded-t-3xl border border-line bg-card shadow-card-lg sm:animate-scale-in sm:rounded-3xl",
           className,
         )}
       >
         {title !== undefined && (
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <h2 className="font-bold text-ink">{title}</h2>
-            <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-ink-muted hover:bg-surface">
+            <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
+            <button onClick={onClose} aria-label="Close" className="rounded-lg p-2.5 text-ink-muted hover:bg-surface">
               <X className="h-5 w-5" />
             </button>
           </div>

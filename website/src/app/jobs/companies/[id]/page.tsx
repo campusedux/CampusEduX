@@ -2,10 +2,10 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Image from "next/image";
-import { Building2, Star } from "lucide-react";
+import { Briefcase, Building2, Star } from "lucide-react";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import JsonLd from "@/components/JsonLd";
-import { EmptyState } from "@/components/ui";
+import { Breadcrumb, EmptyState } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { getCachedCompanyDetail, getCachedCompanyIds } from "@/lib/cache";
 
@@ -45,34 +45,44 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
           { name: company.name, path: `/jobs/companies/${company.id}` },
         ])}
       />
-      <div className="flex items-start gap-4">
-        <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary-50">
+      <Breadcrumb
+        className="mb-5"
+        items={[
+          { label: "Jobs", href: "/jobs" },
+          { label: "Companies", href: "/jobs/companies" },
+          { label: company.name },
+        ]}
+      />
+      <header className="card flex flex-col gap-5 p-6 sm:flex-row sm:items-start sm:p-8">
+        <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-line bg-surface">
           {company.logo_url ? (
-            <Image src={company.logo_url} alt={company.name} width={56} height={56} className="h-full w-full object-cover" />
+            <Image src={company.logo_url} alt={company.name} width={64} height={64} className="h-full w-full object-cover" />
           ) : (
-            <Building2 className="h-6 w-6 text-primary" aria-hidden />
+            <Building2 className="h-7 w-7 text-ink-faint" aria-hidden />
           )}
         </span>
-        <div>
-          <h1 className="text-3xl font-bold text-ink">{company.name}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-ink-muted">
+        <div className="min-w-0 flex-1">
+          <h1 className="font-display text-[1.75rem] font-bold tracking-tight text-ink sm:text-[2.2rem]">{company.name}</h1>
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-sm text-ink-muted">
             {company.employee_count && <span>{company.employee_count}</span>}
             {company.rating > 0 && (
               <span className="inline-flex items-center gap-1">
                 <Star className="h-4 w-4 fill-warning text-warning" aria-hidden /> {company.rating.toFixed(1)}
               </span>
             )}
+            <span>
+              {jobs.length} open role{jobs.length === 1 ? "" : "s"}
+            </span>
           </div>
+          <p className="mt-4 max-w-3xl leading-relaxed text-ink-muted">{company.about || "No company description provided yet."}</p>
         </div>
-      </div>
+      </header>
 
-      <p className="mt-4 max-w-2xl text-ink-muted">{company.about || "No company description provided yet."}</p>
-
-      <h2 className="mt-10 text-xl font-bold text-ink">Open roles</h2>
+      <h2 className="h-section mt-10">Open roles</h2>
       {jobs.length === 0 ? (
-        <EmptyState className="mt-4" title="No open roles right now" />
+        <EmptyState className="mt-4" icon={Briefcase} title="No open roles right now" subtitle="Check back soon, or browse all jobs." />
       ) : (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {jobs.map((j) => (
             <JobCard key={j.id} job={j} />
           ))}

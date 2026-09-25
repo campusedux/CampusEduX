@@ -1,49 +1,42 @@
 import Link from "next/link";
 import { BRAND } from "@/lib/brand";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { MobileNav } from "./MobileNav";
 import { HeaderLinks } from "./HeaderLinks";
 import { GlobalSearchField, GlobalSearchTrigger } from "@/components/search/GlobalSearch";
 import { NotificationBell } from "./NotificationBell";
 import { AuthMenu } from "./AuthMenu";
+import { BrandMark } from "./BrandMark";
 
 /**
- * Site header — a three-zone grid that adapts by breakpoint.
- * - `lg+`: wordmark (left) · full centred module nav with an active underline
- *   (centre) · search field + notifications + auth avatar (right).
- * - `md`–`lg`: wordmark · condensed centred nav strip · search icon +
- *   notifications + auth + hamburger drawer (for the long tail + account).
+ * Site header — a frosted, sticky three-zone flex row (brand · nav · actions);
+ * the nav takes the leftover width, so it can never overlap the wordmark.
+ * - `xl+`: wordmark · pill nav · search field + theme + notifications + auth.
+ * - `lg`: same, with the search icon (overlay) instead of the inline field.
+ * - `md`–`lg`: wordmark · search icon + theme + notifications + auth +
+ *   hamburger drawer (every destination + account).
  * - `< md`: wordmark · search icon + notifications + auth + hamburger; a fixed
- *   bottom tab bar (`<BottomNav>`) covers primary navigation on phones.
+ *   bottom tab bar (`<BottomNav>`) covers primary navigation on phones, and the
+ *   theme control lives in the drawer.
  */
-export function Header(){
+export function Header() {
   return (
-    <header className="sticky top-0 z-50 border-b border-line bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/75">
-      <div className="container-page grid h-16 grid-cols-[auto_1fr_auto] items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
-        {/* Left — brand */}
-        <Link
-          href="/"
-          className="flex items-center gap-2.5 rounded-lg transition-opacity hover:opacity-90"
-          aria-label={`${BRAND.name} home`}
-        >
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary text-base font-black text-white shadow-[0_4px_12px_-3px_rgba(79,57,246,0.5)]">
-            C
-          </span>
-          <span className="hidden text-[15px] font-bold tracking-tight text-ink min-[360px]:inline">
-            Campus<span className="text-primary">EduX</span>
-          </span>
+    <header className="sticky top-0 z-50 border-b border-line/70 bg-card/80 backdrop-blur-xl supports-[backdrop-filter]:bg-card/70">
+      <div className="container-page flex h-16 items-center gap-3">
+        <Link href="/" className="flex h-11 shrink-0 items-center rounded-xl transition-opacity hover:opacity-90" aria-label={`${BRAND.name} home`}>
+          <BrandMark compactBelow360 />
         </Link>
 
-        {/* Centre — primary nav (md+) */}
-        <div className="flex min-w-0 justify-center">
+        <div className="flex min-w-0 flex-1 justify-center">
           <HeaderLinks />
         </div>
 
-        {/* Right — actions */}
-        <div className="flex items-center justify-end gap-1.5 sm:gap-2">
-          <div className="hidden lg:block">
+        <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+          <div className="hidden xl:block">
             <GlobalSearchField variant="header" />
           </div>
           <GlobalSearchTrigger />
+          <ThemeToggle className="hidden md:inline-flex" />
           <NotificationBell />
           <AuthMenu />
           <MobileNav />

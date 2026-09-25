@@ -21,7 +21,7 @@ export default function CompletionChecklist({
   const done = items.filter((i) => i.done).length;
 
   return (
-    <div className="rounded-xl border border-line bg-white p-3">
+    <div className="rounded-xl border border-line bg-card p-3">
       <div className="flex items-center justify-between text-xs font-semibold text-ink">
         <span>Completion</span>
         <span className="tabular-nums text-ink-muted">

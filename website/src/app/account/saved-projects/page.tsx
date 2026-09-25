@@ -4,6 +4,8 @@ import ProjectCard from "@/components/ProjectCard";
 import { toWishlistEntries } from "@/lib/wishlist";
 import { RemoveSavedButton } from "./RemoveSavedButton";
 import { EmptyState, Button } from "@/components/ui";
+import { Bookmark } from "lucide-react";
+import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export const metadata = { robots: { index: false, follow: false }, title: "Saved projects" };
 
@@ -18,16 +20,16 @@ export default async function SavedProjectsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-ink">Saved projects</h1>
+      <AccountPageHeader title="Saved projects" description="Projects you've saved from the marketplace." />
       {entries.length === 0 ? (
         <EmptyState
-          className="mt-6"
+          icon={Bookmark}
           title="No saved projects yet"
           subtitle="Tap the heart on any project to keep it here."
           action={<Button href="/projects" size="sm">Browse the marketplace</Button>}
         />
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {entries.map((e) =>
             e.kind === "project" ? (
               <ProjectCard key={e.project.id} project={e.project} />

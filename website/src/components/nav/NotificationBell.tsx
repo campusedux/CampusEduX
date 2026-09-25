@@ -18,7 +18,7 @@ export function NotificationBell() {
     <Link
       href={signedIn ? "/account/notifications" : "/login?next=%2Faccount%2Fnotifications"}
       aria-label={signedIn ? "Notifications" : "Sign in to see notifications"}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink-muted transition hover:border-primary/40 hover:bg-surface hover:text-primary"
+      className="hidden h-9 w-9 items-center justify-center rounded-full border border-line sm:inline-flex text-ink-muted transition hover:border-primary/40 hover:bg-surface hover:text-primary"
     >
       <Bell className="h-5 w-5" aria-hidden />
     </Link>
