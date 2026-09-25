@@ -67,7 +67,7 @@ export function LearningBookmarkButton({ topicId, slugPath }: { topicId: string;
   if (phase === "loading") return <div className="h-9 w-32 animate-pulse rounded-xl bg-line/70" />;
   if (phase === "anon") {
     return (
-      <Button href={`/login?next=${encodeURIComponent(slugPath)}`} variant="ghost" size="sm" leftIcon={Bookmark}>
+      <Button href={`/login?next=${encodeURIComponent(slugPath)}`} variant="ghost" size="sm" leftIcon={Bookmark} className="max-sm:h-11">
         Sign in to bookmark
       </Button>
     );
@@ -78,6 +78,7 @@ export function LearningBookmarkButton({ topicId, slugPath }: { topicId: string;
       <Button
         variant={bookmarked ? "secondary" : "ghost"}
         size="sm"
+        className="max-sm:h-11"
         onClick={toggle}
         loading={pending}
         leftIcon={bookmarked ? BookmarkCheck : Bookmark}

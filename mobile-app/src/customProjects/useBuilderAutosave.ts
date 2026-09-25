@@ -19,6 +19,9 @@ export function useBuilderAutosave() {
     if (!userId || !config.projectType) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
+      // Never write a draft for an account that is no longer the signed-in one
+      // (user switched / logged out during the debounce window).
+      if (useAuthStore.getState().user?.id !== userId) return;
       customProjectsService.saveDraft(userId, config).catch(() => undefined);
     }, 800);
     return () => {

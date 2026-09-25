@@ -1,9 +1,8 @@
 "use client";
 
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, Eye, Loader2, PencilRuler } from "lucide-react";
+import { AlertTriangle, Check, Download, Eye, Loader2, PencilRuler } from "lucide-react";
 import { Select } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import {
@@ -152,14 +151,15 @@ export default function ResumeEditor({
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-line pb-4">
-        <div>
-          <Link href="/resume" className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to your résumés
-          </Link>
-          <h1 className="mt-1 text-xl font-bold text-ink">{personalDetails.fullName ? `${personalDetails.fullName}'s Resume` : resume.title}</h1>
+        <div className="min-w-0">
+          <h1 className="font-display text-[1.6rem] font-bold tracking-tight text-ink">
+            {personalDetails.fullName ? `${personalDetails.fullName}'s Resume` : resume.title}
+          </h1>
+          <div className="mt-1">
+            <SaveStatusBadge status={status} />
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <SaveStatusBadge status={status} />
+        <div className="flex flex-wrap items-center gap-2">
           {templates.length > 0 && (
             <label className="flex items-center gap-1.5 text-xs text-ink-muted">
               <PencilRuler className="h-3.5 w-3.5" />
@@ -173,20 +173,11 @@ export default function ResumeEditor({
             </label>
           )}
           <DesignPanel design={design} onChange={setDesign} />
-          <Link href={`/account/resume/${resume.id}/ats`} className="text-sm font-semibold text-primary hover:underline">
-            ATS Score
-          </Link>
-          <Link href={`/account/resume/${resume.id}/jd-match`} className="text-sm font-semibold text-primary hover:underline">
-            Job Match
-          </Link>
-          <Link href={`/account/resume/${resume.id}/versions`} className="text-sm font-semibold text-primary hover:underline">
-            History
-          </Link>
-          <a href={`/api/resume/export/pdf?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
-            PDF
+          <a href={`/api/resume/export/pdf?resumeId=${resume.id}`} className="btn-ghost h-9 px-3 text-xs">
+            <Download className="h-3.5 w-3.5" aria-hidden /> PDF
           </a>
-          <a href={`/api/resume/export/docx?resumeId=${resume.id}`} className="text-sm font-semibold text-primary hover:underline">
-            DOCX
+          <a href={`/api/resume/export/docx?resumeId=${resume.id}`} className="btn-ghost h-9 px-3 text-xs">
+            <Download className="h-3.5 w-3.5" aria-hidden /> DOCX
           </a>
           <ImportFromCampusEduxPanel
             ref={importRef}

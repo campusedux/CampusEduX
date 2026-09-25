@@ -39,6 +39,8 @@ export interface CompilerPanelProps {
   onSubmit?: () => void;
   onReset: () => void;
   busy: boolean;
+  /** Signed-out visitor: Run / Run Tests / Submit are disabled with a hint. */
+  signInRequired?: boolean;
   canClearOutput: boolean;
   output: ReactNode;
 }
@@ -69,6 +71,7 @@ export function CompilerPanel(props: CompilerPanelProps) {
     onSubmit,
     onReset,
     busy,
+    signInRequired,
     canClearOutput,
     output,
   } = props;
@@ -97,7 +100,7 @@ export function CompilerPanel(props: CompilerPanelProps) {
   });
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-[#0b1120] shadow-card lg:h-full lg:rounded-none lg:border-0">
+    <div className="theme-light flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-[#0b1120] shadow-card lg:h-full lg:rounded-none lg:border-0">
       <div className="shrink-0">
         <CompilerToolbar
           languages={languages}
@@ -110,6 +113,7 @@ export function CompilerPanel(props: CompilerPanelProps) {
           onRunTests={onRunTests}
           onSubmit={onSubmit}
           busy={busy}
+          signInRequired={signInRequired}
         />
       </div>
 

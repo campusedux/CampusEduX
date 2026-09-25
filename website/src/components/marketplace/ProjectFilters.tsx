@@ -84,10 +84,10 @@ export function ProjectFilters({
       </fieldset>
 
       <div className="flex gap-2 pt-1">
-        <button type="submit" className="btn-primary h-10 flex-1 px-4 text-sm">
+        <button type="submit" className="btn-primary h-11 flex-1 px-4 text-sm">
           Apply
         </button>
-        <a href="/projects" className="btn-ghost h-10 px-4 text-sm">
+        <a href="/projects" className="btn-ghost h-11 px-4 text-sm">
           Reset
         </a>
       </div>

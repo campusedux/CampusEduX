@@ -1,6 +1,8 @@
 module.exports = {
   preset: 'jest-expo',
-  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  // supabase/functions/**/*.test.ts are Deno tests (run with `deno test`); the pure handlers are
+  // re-tested under jest from tests/unit/edge.
+  testPathIgnorePatterns: ['/node_modules/', '/dist/', '<rootDir>/supabase/functions/'],
   // `@expo/vector-icons` -> `expo-font` native module blows up under plain
   // react-test-renderer; swap it for a <Text> stand-in. See the mock file.
   moduleNameMapper: {

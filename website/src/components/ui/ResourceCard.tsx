@@ -45,9 +45,11 @@ export function ResourceCard({ resource, className }: { resource: ResourceCardDa
           </h3>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <span
-              className="inline-flex items-center rounded-lg px-2 py-0.5 text-[0.68rem] font-medium"
-              style={{ backgroundColor: `${accent}1a`, color: accent }}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[0.68rem] font-medium text-ink"
+              style={{ backgroundColor: `${accent}1a` }}
             >
+              {/* Admin-chosen accent can be any colour — keep it to the dot, text stays ink for contrast. */}
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
               {resource.typeLabel}
             </span>
             <TagPill>

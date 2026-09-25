@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { notify, notifyThen } from "@/lib/notify";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, Input, Button, AuthHeader } from "@/components/ui";
 import { authService } from "@/services/auth.service";
+import { describeAuthError } from "@/auth/authErrors";
+import { abandonPasswordRecovery } from "@/auth/recovery";
+import { performLogoutCleanup } from "@/lib/logoutCleanup";
 import { useAuthStore } from "@/store/authStore";
 import { goBackSafely } from "@/navigation/safeNavigation";
 import type { AuthStackParamList } from "@/types";
@@ -20,6 +23,15 @@ export function ResetPasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
+
+  // Leaving without saving a password (back / unmount) ends the recovery
+  // session; a no-op after a successful save (the flag is already cleared).
+  useEffect(
+    () => () => {
+      void abandonPasswordRecovery();
+    },
+    []
+  );
 
   const onSubmit = async () => {
     if (password.length < 6) {
@@ -38,13 +50,14 @@ export function ResetPasswordScreen() {
       // password (and the auth listener stops holding them on this screen).
       await authService.logout();
       setRecoveringPassword(false);
+      await performLogoutCleanup();
       notifyThen(
         "Password updated",
         "You can now log in with your new password.",
         () => navigation.reset({ index: 0, routes: [{ name: "Login" }] })
       );
     } catch (err: any) {
-      notify("Something went wrong", err.message ?? "Please try again.");
+      notify("Something went wrong", describeAuthError(err, "Please try again.").message);
     } finally {
       setSubmitting(false);
     }

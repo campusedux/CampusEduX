@@ -1,3 +1,4 @@
+import { performLogoutCleanup } from "@/lib/logoutCleanup";
 import React from "react";
 import { View, Text, Image, Pressable, ScrollView } from "react-native";
 import { DrawerContentComponentProps } from "@react-navigation/drawer";
@@ -45,7 +46,6 @@ const MENU_ITEMS: MenuItem[] = [
  */
 export function DrawerContent({ navigation, state }: DrawerContentComponentProps) {
   const user = useAuthStore((s) => s.user);
-  const reset = useAuthStore((s) => s.reset);
   const activeRoute = state.routeNames[state.index];
   // Colours only. Light mode keeps the original classes/values exactly; Dark/AMOLED override via tokens.
   const { colors, isDark } = useSchemeColors();
@@ -63,7 +63,7 @@ export function DrawerContent({ navigation, state }: DrawerContentComponentProps
         }
         // RootNavigator swaps back to the auth stack the moment the store
         // clears — no imperative navigation reset needed.
-        reset();
+        await performLogoutCleanup();
       },
       "Logout"
     );

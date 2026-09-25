@@ -11,6 +11,8 @@ import {
   Settings,
 } from 'lucide-react';
 import { requireModule } from '@/lib/auth';
+import type { AdminRole, ModuleKey, PermAction } from '@/lib/permissions';
+import { MONEY_RPC_ROLES, evaluateGate } from '@/lib/permission-gate';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/primitives';
 import { formatINRCompact, formatNumber } from '@/lib/utils';
@@ -19,15 +21,22 @@ import { getKpis } from '@/lib/dashboard/metrics';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Quick Actions · CampusEduX Admin' };
 
-const TILES = [
-  { label: 'Add Project', href: '/projects/new', icon: FolderPlus, module: 'projects' as const },
-  { label: 'Add Job', href: '/jobs/new', icon: BriefcaseBusiness, module: 'jobs' as const },
-  { label: 'Add User', href: '/students/new', icon: UserPlus, module: 'students' as const },
+const TILES: {
+  label: string;
+  href: string;
+  icon: typeof FolderPlus;
+  module: ModuleKey;
+  action?: PermAction;
+  roles?: readonly AdminRole[];
+}[] = [
+  { label: 'Add Project', href: '/projects/new', icon: FolderPlus, module: 'projects' as const, action: 'add' as const },
+  { label: 'Add Job', href: '/jobs/new', icon: BriefcaseBusiness, module: 'jobs' as const, action: 'add' as const },
+  { label: 'Add User', href: '/students/new', icon: UserPlus, module: 'students' as const, action: 'add' as const },
   { label: 'Manage Orders', href: '/orders', icon: ShoppingCart, module: 'orders' as const },
   { label: 'Manage Users', href: '/students', icon: Users, module: 'students' as const },
   { label: 'Manage Categories', href: '/settings/categories', icon: Tags, module: 'settings' as const },
   { label: 'Coupons & Offers', href: '/orders/coupons', icon: TicketPercent, module: 'orders' as const },
-  { label: 'Send Notification', href: '/cms/notifications', icon: Send, module: 'cms' as const },
+  { label: 'Send Notification', href: '/cms/notifications', icon: Send, module: 'cms' as const, action: 'add' as const, roles: MONEY_RPC_ROLES },
   { label: 'Site Settings', href: '/settings', icon: Settings, module: 'settings' as const },
 ];
 
@@ -35,7 +44,13 @@ export default async function QuickActionsPage() {
   const admin = await requireModule('dashboard');
   const kpis = await getKpis();
 
-  const tiles = TILES.filter((t) => admin.perms[t.module]?.view);
+  // UI gating only (server enforces): "Add …" tiles need :add; broadcast needs the RPC role guard too.
+  const tiles = TILES.filter((t) => {
+    return evaluateGate(admin.perms, admin.role, {
+      can: { module: t.module, action: t.action ?? 'view' },
+      roles: t.roles,
+    }).allowed;
+  });
 
   return (
     <div className="space-y-6">

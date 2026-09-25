@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { getOptionalUser } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/compiler/rateLimit";
+import { resolveApiCaller } from "@/lib/apiAuth";
+import { RESUME_MAX_BYTES, RESUME_MAX_MB } from "@/lib/resume";
+import { limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { detectFileType, extractResumeText } from "@/lib/resumeBuilder/fileExtraction";
 import { parseResumeText } from "@/lib/resumeBuilder/parser";
 
@@ -30,42 +30,19 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
-const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 const RATE_LIMIT_MAX = 10;
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-
-function clientKey(req: Request): string {
-  const fwd = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
-  const ip = fwd || req.headers.get("x-real-ip") || "";
-  return ip ? `ip:${ip}` : `ua:${(req.headers.get("user-agent") ?? "unknown").slice(0, 100)}`;
-}
-
-async function resolveUserId(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice("Bearer ".length).trim();
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anonKey) return null;
-    const bearerClient = createClient(url, anonKey, { auth: { persistSession: false } });
-    const { data, error } = await bearerClient.auth.getUser(token);
-    return error || !data.user ? null : data.user.id;
-  }
-  const user = await getOptionalUser();
-  return user?.id ?? null;
-}
+const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 
 export async function POST(req: Request) {
-  const userId = await resolveUserId(req);
-  if (!userId) return corsJson({ error: "Please sign in again." }, 401);
+  const caller = await resolveApiCaller(req);
+  if (!caller) return corsJson({ error: "Please sign in again." }, 401);
 
-  const rate = checkRateLimit(`resume-parse:${userId}:${clientKey(req)}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
-  if (!rate.ok) {
-    return NextResponse.json(
-      { error: "You've uploaded a few resumes already — please wait a bit before trying again." },
-      { status: 429, headers: { ...CORS_HEADERS, "Retry-After": String(rate.retryAfter) } },
-    );
-  }
+  const limited = limitResponse(await rlHit(caller.supabase, "resume-parse", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS), {
+    message: "You've uploaded a few resumes already — please wait a bit before trying again.",
+    withOk: false,
+    headers: CORS_HEADERS,
+  });
+  if (limited) return limited;
 
   let formData: FormData;
   try {
@@ -77,7 +54,7 @@ export async function POST(req: Request) {
   const file = formData.get("file");
   if (!(file instanceof File)) return corsJson({ error: "No file uploaded." }, 400);
   if (file.size === 0) return corsJson({ error: "That file is empty." }, 400);
-  if (file.size > MAX_FILE_BYTES) return corsJson({ error: "That file is too large (max 8 MB)." }, 400);
+  if (file.size > RESUME_MAX_BYTES) return corsJson({ error: `That file is too large (max ${RESUME_MAX_MB} MB).` }, 400);
 
   const fileType = detectFileType(file.name, file.type);
   if (!fileType) return corsJson({ error: "Please upload a PDF or DOCX file." }, 400);

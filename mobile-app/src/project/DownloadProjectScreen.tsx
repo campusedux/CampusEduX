@@ -45,6 +45,9 @@ export function DownloadProjectScreen() {
       </View>
 
       <Text className="text-gray-400 text-sm mb-3">Downloads</Text>
+      {files.length === 0 && (
+        <Text className="text-gray-500 text-sm mb-3">No downloadable files are available for this project yet. Please contact support.</Text>
+      )}
       {files.map((file) => {
         const isDownloading = downloadingKey === file.fileName;
         return (
@@ -53,7 +56,7 @@ export function DownloadProjectScreen() {
               <Ionicons name="document-outline" size={20} color="#4F39F6" />
               <View className="ml-3 flex-1">
                 <Text className="font-medium text-gray-900" numberOfLines={1}>{file.label}</Text>
-                <Text className="text-gray-400 text-xs">{file.sizeMB.toFixed(1)} MB</Text>
+                {file.sizeMB > 0 && <Text className="text-gray-400 text-xs">{file.sizeMB.toFixed(1)} MB</Text>}
               </View>
             </View>
             <Pressable onPress={() => handleDownload(file)} disabled={isDownloading} className="w-9 h-9 items-center justify-center">

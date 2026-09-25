@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { listResumeVersionsAction } from "@/lib/actions/resumeBuilder";
@@ -16,11 +15,8 @@ export default async function ResumeVersionsPage({ params }: { params: { id: str
   const versions = await listResumeVersionsAction(resume.id);
 
   return (
-    <div className="container-prose py-12">
-      <Link href={`/account/resume/${resume.id}/edit`} className="text-sm text-ink-muted hover:text-ink">
-        &larr; Back to the editor
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold text-ink">Version history — &ldquo;{resume.title}&rdquo;</h1>
+    <div className="max-w-3xl">
+      <h1 className="font-display text-[1.6rem] font-bold tracking-tight text-ink">Version history — &ldquo;{resume.title}&rdquo;</h1>
       <p className="mt-1 text-sm text-ink-muted">
         A checkpoint is saved automatically before every download, and whenever you save one manually below. Restoring a
         version snapshots your current content first, so restoring is itself undoable.

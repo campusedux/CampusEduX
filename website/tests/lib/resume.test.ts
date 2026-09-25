@@ -44,7 +44,7 @@ describe("resumeStoragePath", () => {
 });
 
 describe("RESUME_MAX_BYTES", () => {
-  it("is a 10 MB cap", () => {
-    expect(RESUME_MAX_BYTES).toBe(10 * 1024 * 1024);
+  it("is a 5 MB cap (matches the resumes bucket, see uploadLimits.test.ts)", () => {
+    expect(RESUME_MAX_BYTES).toBe(5 * 1024 * 1024);
   });
 });

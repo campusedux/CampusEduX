@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Onboarding1Screen } from "@/auth/Onboarding1Screen";
@@ -24,7 +25,7 @@ export function AuthNavigator() {
   const hasCompletedOnboarding = useAuthStore((s) => s.hasCompletedOnboarding);
 
   return (
-    <Stack.Navigator
+    <Stack.Navigator screenLayout={boundaryScreenLayout}
       screenOptions={{ headerShown: false }}
       initialRouteName={hasCompletedOnboarding ? "Login" : "Onboarding1"}
     >

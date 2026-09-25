@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import { onlyActiveJobs } from "@/lib/jobsActive";
 import { arrayMatchVariants } from "@/lib/searchModel";
 import { JOB_LIST_FIELDS, PROJECT_LIST_FIELDS } from "@/lib/marketplace";
 import { gridTechProfile, mergeUniqueById, rankTutorials } from "@/lib/learningDiscovery";
@@ -47,7 +48,7 @@ export type {
   AdjacentProblem,
   MockTestDetail,
 } from "@/lib/learning.types";
-export { firstTopicOf, flattenTopics } from "@/lib/learning.types";
+export { flattenTopics } from "@/lib/learning.types";
 
 const PLATFORM = "website";
 
@@ -165,15 +166,11 @@ export const getTopicDiscovery = unstable_cache(
           .overlaps("tech_stack", variants)
           .order("sales_count", { ascending: false })
           .limit(DISCOVERY_CARD_LIMIT),
-        supabase
-          .from("jobs")
-          .select(JOB_LIST_FIELDS)
+        onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS))
           .overlaps("skills", variants)
           .order("posted_at", { ascending: false })
           .limit(DISCOVERY_CARD_LIMIT),
-        supabase
-          .from("jobs")
-          .select(JOB_LIST_FIELDS)
+        onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS))
           .order("posted_at", { ascending: false })
           .limit(DISCOVERY_CARD_LIMIT + 3),
       ]);

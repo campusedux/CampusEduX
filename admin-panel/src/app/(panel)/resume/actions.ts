@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import type { UploadedFile } from '@/components/ui/UploadDropzone';
@@ -20,6 +21,8 @@ const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 // --- templates -------------------------------------------------------
 export async function createTemplate(_p: Result, fd: FormData): Promise<Result> {
   await requirePermission('resume', 'add');
+  const urlErr = urlFieldError(fd, { preview_image_url: 'Preview image URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const name = s(fd, 'name');
   if (!name) return { ok: false, error: 'Title is required.' };
@@ -44,6 +47,8 @@ export async function createTemplate(_p: Result, fd: FormData): Promise<Result> 
 
 export async function updateTemplate(id: string, _p: Result, fd: FormData): Promise<Result> {
   await requirePermission('resume', 'edit');
+  const urlErr = urlFieldError(fd, { preview_image_url: 'Preview image URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const { error } = await supabase
     .from('resume_templates')

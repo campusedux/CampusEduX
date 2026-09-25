@@ -32,6 +32,17 @@ interface SettingsState {
   setPreferences: (partial: Partial<AppPreferences>) => void;
   setNotifications: (partial: Partial<NotificationPreferences>) => void;
   hydrateFromServer: (preferences: AppPreferences, notifications: NotificationPreferences) => void;
+  /** Sign-out: drop account-bound settings, keep device-level display prefs. */
+  resetForSignOut: () => void;
+}
+
+/** Display prefs that belong to the device, not the account. */
+const DEVICE_LEVEL_PREF_KEYS = ["theme", "accentColor", "useAmoledDark", "reduceAnimations", "languageCode"] as const;
+
+export function preferencesAfterSignOut(current: AppPreferences): AppPreferences {
+  const kept: Partial<AppPreferences> = {};
+  for (const key of DEVICE_LEVEL_PREF_KEYS) (kept as Record<string, unknown>)[key] = current[key];
+  return { ...DEFAULT_PREFERENCES, ...kept };
 }
 
 /**
@@ -49,6 +60,12 @@ export const useSettingsStore = create<SettingsState>()(
       setPreferences: (partial) => set((state) => ({ preferences: { ...state.preferences, ...partial } })),
       setNotifications: (partial) => set((state) => ({ notifications: { ...state.notifications, ...partial } })),
       hydrateFromServer: (preferences, notifications) => set({ preferences, notifications, hasHydratedFromServer: true }),
+      resetForSignOut: () =>
+        set((state) => ({
+          preferences: preferencesAfterSignOut(state.preferences),
+          notifications: DEFAULT_NOTIFICATIONS,
+          hasHydratedFromServer: false,
+        })),
     }),
     {
       name: "campusedux-settings",

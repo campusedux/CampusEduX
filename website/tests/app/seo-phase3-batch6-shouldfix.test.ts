@@ -61,7 +61,7 @@ describe("Phase 3 Batch 6: sitemap.ts category entries carry a real lastModified
               }
               return { data: [] };
             },
-            eq: () => ({ limit: async () => ({ data: [] }) }),
+            eq: () => ({ limit: async () => ({ data: [] }), or: () => ({ limit: async () => ({ data: [] }) }) }),
             is: () => ({ not: () => ({ limit: async () => ({ data: [] }) }) }),
           }),
         }),

@@ -1,3 +1,4 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { walletService } from "@/services/wallet.service";
@@ -10,12 +11,12 @@ export const walletQueryKeys = {
 
 export const useWalletSummary = () => {
   const userId = useAuthStore((s) => s.user?.id);
-  return useQuery({ queryKey: walletQueryKeys.summary, queryFn: () => walletService.getWalletSummary(userId as string), enabled: !!userId });
+  return useQuery({ queryKey: userScopedKey(walletQueryKeys.summary, userId), queryFn: () => walletService.getWalletSummary(userId as string), enabled: !!userId });
 };
 
 export const useWalletTransactions = () => {
   const userId = useAuthStore((s) => s.user?.id);
-  return useQuery({ queryKey: walletQueryKeys.transactions, queryFn: () => walletService.getAllTransactions(userId as string), enabled: !!userId });
+  return useQuery({ queryKey: userScopedKey(walletQueryKeys.transactions, userId), queryFn: () => walletService.getAllTransactions(userId as string), enabled: !!userId });
 };
 
 type TopUpResult = { status: "success" } | { status: "failed"; message: string } | { status: "cancelled" };

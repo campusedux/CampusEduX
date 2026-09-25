@@ -1,3 +1,4 @@
+import { performLogoutCleanup } from "@/lib/logoutCleanup";
 import React from "react";
 import { View, Text, Pressable, Linking } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -6,14 +7,12 @@ import { Screen, Button } from "@/components/ui";
 import { notify, confirmAction } from "@/lib/notify";
 import { LEGAL } from "@/constants/legal";
 import { useDeleteAccount } from "@/hooks/useSettings";
-import { useAuthStore } from "@/store/authStore";
 import { authService } from "@/services/auth.service";
 import { LegalDocumentBody } from "./LegalDocumentBody";
 
 export function DeleteAccountInfoScreen() {
   const navigation = useNavigation<any>();
   const deleteAccount = useDeleteAccount();
-  const reset = useAuthStore((s) => s.reset);
 
   const handleDelete = () => {
     confirmAction(
@@ -23,7 +22,7 @@ export function DeleteAccountInfoScreen() {
         try {
           await deleteAccount.mutateAsync();
           await authService.logout().catch(() => undefined);
-          reset();
+          await performLogoutCleanup();
         } catch (error: any) {
           notify(
             "Couldn't delete account",

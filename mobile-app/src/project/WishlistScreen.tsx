@@ -44,6 +44,35 @@ export function WishlistScreen() {
 
 function WishlistCard({ project, navigation }: { project: Project; navigation: Nav }) {
   const toggleWishlist = useToggleWishlist(project.id);
+  if (project.available === false) {
+    // Unpublished / removed project: greyed, not tappable, but it can still be removed.
+    return (
+      <View
+        testID="wishlist-unavailable"
+        accessibilityState={{ disabled: true }}
+        className="bg-white rounded-2xl border border-gray-100 flex-row items-center p-4 mb-3"
+        style={{ opacity: 0.6 }}
+      >
+        <View className="items-center justify-center rounded-xl mr-3" style={{ width: 48, height: 48, backgroundColor: "#F3F4F6" }}>
+          <Ionicons name="cube-outline" size={22} color="#9CA3AF" />
+        </View>
+        <View className="flex-1">
+          <Text className="font-semibold text-gray-500">No longer available</Text>
+          <Text className="text-gray-400 text-xs mt-0.5">This project isn&apos;t listed any more.</Text>
+        </View>
+        <Pressable
+          testID="wishlist-remove"
+          accessibilityRole="button"
+          accessibilityLabel="Remove from wishlist"
+          onPress={() => toggleWishlist.mutate(true)}
+          hitSlop={10}
+          className="p-2"
+        >
+          <Ionicons name="trash-outline" size={20} color="#6B7280" />
+        </Pressable>
+      </View>
+    );
+  }
   return (
     <ProjectCard
       project={project}

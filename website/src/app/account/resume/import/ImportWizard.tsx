@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { Upload, Trash2, Plus } from "lucide-react";
 import { Field, Input, Textarea, Button } from "@/components/ui";
 import { createResumeFromImportAction } from "@/lib/actions/resumeBuilder";
+import { RESUME_MAX_MB } from "@/lib/resume";
 import type { ParsedResumeResult } from "@/lib/resumeBuilder/parser";
 import type { ResumeEducationEntry } from "@/lib/resumeBuilder/types";
 
-const MAX_FILE_MB = 8;
+const MAX_FILE_MB = RESUME_MAX_MB;
 
 type ReviewState = {
   fullName: string;
@@ -137,7 +138,7 @@ export default function ImportWizard() {
 
   if (!review) {
     return (
-      <div className="mt-6 space-y-4 rounded-2xl border border-line bg-white p-6">
+      <div className="mt-6 space-y-4 rounded-2xl border border-line bg-card p-6">
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-line px-6 py-10 text-center hover:border-primary/40">
           <Upload className="h-6 w-6 text-ink-faint" />
           <span className="text-sm font-medium text-ink">{file ? file.name : "Choose a PDF or DOCX file"}</span>
@@ -155,7 +156,7 @@ export default function ImportWizard() {
 
   return (
     <div className="mt-6 space-y-6">
-      <div className="rounded-2xl border border-line bg-white p-6">
+      <div className="rounded-2xl border border-line bg-card p-6">
         <h2 className="text-lg font-bold text-ink">Review before importing</h2>
         <p className="mt-1 text-sm text-ink-muted">Edit anything that looks wrong — nothing is saved until you import.</p>
 
@@ -184,7 +185,7 @@ export default function ImportWizard() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-line bg-white p-6">
+      <div className="rounded-2xl border border-line bg-card p-6">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-ink">Education</h3>
           <button type="button" onClick={addEducation} className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -212,7 +213,7 @@ export default function ImportWizard() {
         )}
       </div>
 
-      <div className="rounded-2xl border border-line bg-white p-6">
+      <div className="rounded-2xl border border-line bg-card p-6">
         <h3 className="font-bold text-ink">Skills</h3>
         <p className="mt-1 text-xs text-ink-muted">Comma-separated. You can re-categorize technical vs. soft skills after importing.</p>
         <Textarea
@@ -224,7 +225,7 @@ export default function ImportWizard() {
       </div>
 
       {sectionKeys.map((key) => (
-        <div key={key} className="rounded-2xl border border-line bg-white p-6">
+        <div key={key} className="rounded-2xl border border-line bg-card p-6">
           <h3 className="font-bold text-ink">{SECTION_LABELS[key] ?? key}</h3>
           <Textarea rows={6} className="mt-2" value={review.sections[key]} onChange={(e) => updateSection(key, e.target.value)} />
         </div>

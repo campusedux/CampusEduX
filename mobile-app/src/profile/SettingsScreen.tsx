@@ -1,3 +1,4 @@
+import { performLogoutCleanup } from "@/lib/logoutCleanup";
 import React, { useState } from "react";
 import { View, Text, Pressable, Switch, Modal, TextInput } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -14,7 +15,6 @@ export function SettingsScreen() {
   const preferences = useSettingsStore((s) => s.preferences);
   const updatePreferences = useUpdatePreferences();
   const deleteAccount = useDeleteAccount();
-  const reset = useAuthStore((s) => s.reset);
   const user = useAuthStore((s) => s.user);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -46,7 +46,7 @@ export function SettingsScreen() {
         try {
           await deleteAccount.mutateAsync();
           await authService.logout().catch(() => undefined);
-          reset();
+          await performLogoutCleanup();
         } catch (error: any) {
           notify("Couldn't delete account", error.message ?? "Please try again or contact support.");
         }

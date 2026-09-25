@@ -30,7 +30,7 @@ export function Switch({
         "relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full border p-0.5 transition motion-reduce:transition-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         "disabled:cursor-not-allowed disabled:opacity-60",
-        checked ? "border-primary bg-primary" : "border-line bg-white",
+        checked ? "border-primary bg-primary" : "border-line bg-card",
         className,
       )}
     >

@@ -106,9 +106,15 @@ export async function getCustomRequest(id: string) {
     safe(
       supabase
         .from('custom_project_request_features')
-        .select('feature_id, feature_name, feature_price, category')
+        .select('feature_id, feature_name, feature_price, category, is_included')
         .eq('request_id', id),
-      [] as { feature_id: string; feature_name: string; feature_price: number; category: string }[],
+      [] as {
+        feature_id: string;
+        feature_name: string;
+        feature_price: number;
+        category: string;
+        is_included: boolean;
+      }[],
     ),
     safe(
       supabase
@@ -196,6 +202,8 @@ export interface FeatureRow {
   icon: string | null;
   image_url: string | null;
   dependencies: string[] | null;
+  /** "<type>:<level>" combos where this feature is included (free, read-only). */
+  included_in_levels: string[] | null;
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -216,7 +224,7 @@ export interface FeatureListOpts {
 
 const FEATURE_SELECT =
   'id, name, description, category, project_types, project_levels, level, price, icon, image_url, ' +
-  'dependencies, is_active, sort_order, created_at, updated_at';
+  'dependencies, included_in_levels, is_active, sort_order, created_at, updated_at';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyFeatureFilters(query: any, o: FeatureListOpts) {

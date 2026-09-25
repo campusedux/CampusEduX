@@ -82,13 +82,6 @@ function mapReferralRow(row: any): ReferralEntry {
   };
 }
 
-function periodStartDate(period: LeaderboardPeriod): string | null {
-  const now = new Date();
-  if (period === "this_month") return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  if (period === "this_year") return new Date(now.getFullYear(), 0, 1).toISOString();
-  return null;
-}
-
 export const referralService = {
   /**
    * The admin-configured referral reward rule, or null when reward_settings
@@ -245,16 +238,12 @@ export const referralService = {
   },
 
   async getLeaderboard(period: LeaderboardPeriod, currentUserId: string): Promise<LeaderboardEntry[]> {
+    // DB-15: the `referrals` table is readable only by the two parties, so the
+    // board is served by the aggregated `referral_leaderboard` RPC (top 50 +
+    // the caller's own row; other users' ids/emails/avatars are never exposed).
     let data: any[] | null = null;
     try {
-      const startDate = periodStartDate(period);
-      let query = supabase
-        .from("referrals")
-        .select("referrer_id, reward_amount, created_at, referrer:profiles!referrals_referrer_id_fkey(full_name, email, avatar_url)")
-        .eq("status", "successful");
-      if (startDate) query = query.gte("created_at", startDate);
-
-      const res = await query;
+      const res = await supabase.rpc("referral_leaderboard", { p_period: period });
       if (res.error) throw new Error(res.error.message);
       data = res.data;
     } catch (error) {
@@ -266,35 +255,15 @@ export const referralService = {
     }
     // No successful referrals yet this period is a real, honest empty state —
     // never substitute unrelated sample leaderboard entries for it.
-    const rows = data ?? [];
-    if (rows.length === 0) return [];
-
-    const byReferrer = new Map<string, { name: string; email: string; avatarUrl: string | null; referrals: number; earned: number }>();
-    rows.forEach((row: any) => {
-      const existing = byReferrer.get(row.referrer_id) ?? {
-        name: row.referrer?.full_name || "CampusEduX Member",
-        email: row.referrer?.email || "",
-        avatarUrl: row.referrer?.avatar_url ?? null,
-        referrals: 0,
-        earned: 0,
-      };
-      existing.referrals += 1;
-      existing.earned += row.reward_amount ?? 0;
-      byReferrer.set(row.referrer_id, existing);
-    });
-
-    return Array.from(byReferrer.entries())
-      .map(([userId, stats]) => ({
-        rank: 0,
-        userId,
-        userName: stats.name,
-        userEmail: stats.email,
-        avatarUrl: stats.avatarUrl,
-        totalReferrals: stats.referrals,
-        totalEarned: stats.earned,
-        isCurrentUser: userId === currentUserId,
-      }))
-      .sort((a, b) => b.totalEarned - a.totalEarned)
-      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+    return (data ?? []).map((row: any) => ({
+      rank: Number(row.rank),
+      userId: row.user_id ?? "",
+      userName: row.display_name || "CampusEduX Member",
+      userEmail: "",
+      avatarUrl: null,
+      totalReferrals: Number(row.total_referrals ?? 0),
+      totalEarned: Number(row.total_earned ?? 0),
+      isCurrentUser: Boolean(row.is_current_user) || (!!row.user_id && row.user_id === currentUserId),
+    }));
   },
 };

@@ -1,87 +1,124 @@
 import React from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, Pressable, ScrollView, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, Button } from "@/components/ui";
+import { Screen } from "@/components/ui";
 import { useBuilderAutosave } from "../useBuilderAutosave";
+import { useBuilderEstimate } from "../useBuilderEstimate";
+import { PriceFooterBar } from "./PriceFooterBar";
+import { ProjectSummaryPanel } from "./ProjectSummaryPanel";
+import { StepHeader } from "./StepHeader";
+import { useIsWide } from "./layout";
 
-export const TOTAL_STEPS = 8;
-
-/** `Step N of 8` label + a thin progress bar. */
-export function StepHeader({ step }: { step: number }) {
-  const pct = Math.round((step / TOTAL_STEPS) * 100);
-  return (
-    <View className="mb-4">
-      <Text className="text-gray-400 text-xs font-semibold mb-2">
-        Step {step} of {TOTAL_STEPS}
-      </Text>
-      <View className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-        <View className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: "#4F39F6" }} />
-      </View>
-    </View>
-  );
-}
+// Sticky positioning only exists on web; native ignores the (empty) object.
+const STICKY: object = Platform.select({ web: { position: "sticky", top: 16, alignSelf: "flex-start" }, default: {} }) as object;
 
 interface WizardScreenProps {
   step: number;
   title: string;
-  subtitle?: string;
+  /** One line on WHY this step matters. */
+  helper: string;
   onBack?: () => void;
   onNext: () => void;
-  nextLabel?: string;
+  /** Says what comes next, e.g. "Continue to uploads". */
+  nextLabel: string;
   nextDisabled?: boolean;
   nextLoading?: boolean;
+  /** Shown as text next to a disabled button so the reason is never hidden. */
+  disabledReason?: string;
+  /** Sticky "Your project so far" summary — steps 2–6. */
+  showSummary?: boolean;
+  /** Live price in the footer — steps 2–7. */
+  showPrice?: boolean;
   children: React.ReactNode;
-  /** Rendered just above the Next button (e.g. a running estimate line). */
-  footerExtra?: React.ReactNode;
 }
 
 /**
- * Common frame for every builder step: back chevron + step progress, a
- * scrollable body, and a sticky footer with the primary action. The wizard
- * keeps all entered data in `useBuilderStore`, so moving Back/Next never loses
- * anything (spec §37).
+ * Common frame for every builder step: back + step header, a scrollable body
+ * (single column on mobile; body + sticky summary on wide screens) and a sticky
+ * footer with the live price and the primary action. The wizard keeps all
+ * entered data in `useBuilderStore`, so Back/Next never loses anything.
  */
 export function WizardScreen({
   step,
   title,
-  subtitle,
+  helper,
   onBack,
   onNext,
-  nextLabel = "Continue",
+  nextLabel,
   nextDisabled,
   nextLoading,
+  disabledReason,
+  showSummary = step >= 2 && step <= 6,
+  showPrice = step >= 2 && step <= 7,
   children,
-  footerExtra,
 }: WizardScreenProps) {
   useBuilderAutosave();
+  const wide = useIsWide();
+  const { estimate, isLoading } = useBuilderEstimate();
+
+  const body = (
+    <>
+      <Text className="text-2xl font-bold text-gray-900" accessibilityRole="header">
+        {title}
+      </Text>
+      <Text className="text-gray-500 mt-1 mb-4">{helper}</Text>
+      {children}
+    </>
+  );
+
   return (
-    <Screen className="px-6">
-      <View className="flex-row items-center mt-2 mb-3">
-        {onBack ? (
-          <Pressable onPress={onBack} hitSlop={10} className="mr-3">
-            <Ionicons name="arrow-back" size={22} color="#111827" />
-          </Pressable>
-        ) : null}
-        <Text className="text-lg font-bold text-gray-900">Custom Project Builder</Text>
-      </View>
+    <Screen>
+      {/* minHeight:0 lets the ScrollView shrink to the space above the footer, so the page scrolls from its true top on web. */}
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <View className="px-4 pt-2">
+          <View className="flex-row items-center mb-3">
+            {onBack ? (
+              <Pressable
+                onPress={onBack}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                hitSlop={8}
+                className="mr-2 items-center justify-center"
+                style={{ width: 44, height: 44 }}
+              >
+                <Ionicons name="arrow-back" size={22} color="#111827" />
+              </Pressable>
+            ) : null}
+            <Text className="text-lg font-bold text-gray-900">Custom Project Builder</Text>
+          </View>
+          <StepHeader step={step} />
+        </View>
 
-      <StepHeader step={step} />
+        <ScrollView
+          style={{ flex: 1, minHeight: 0 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {wide && showSummary ? (
+            <View className="flex-row" style={{ gap: 24 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>{body}</View>
+              <View style={[{ width: 320 }, STICKY]}>
+                <ProjectSummaryPanel variant="panel" />
+              </View>
+            </View>
+          ) : (
+            <>
+              {!wide && showSummary ? <ProjectSummaryPanel variant="card" /> : null}
+              {body}
+            </>
+          )}
+        </ScrollView>
 
-      <Text className="text-xl font-bold text-gray-900">{title}</Text>
-      {subtitle ? <Text className="text-gray-500 mt-1 mb-1">{subtitle}</Text> : null}
-
-      <ScrollView
-        className="flex-1 -mx-6 px-6 mt-3"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {children}
-        <View className="h-6" />
-      </ScrollView>
-
-      <View className="pt-3 pb-5">
-        {footerExtra}
-        <Button label={nextLabel} onPress={onNext} disabled={nextDisabled} loading={nextLoading} />
+        <PriceFooterBar
+          estimate={showPrice ? estimate : undefined}
+          loading={isLoading}
+          label={nextLabel}
+          onPress={onNext}
+          disabled={nextDisabled}
+          submitting={nextLoading}
+          disabledReason={disabledReason}
+        />
       </View>
     </Screen>
   );
@@ -101,8 +138,11 @@ export function OptionRow({ title, subtitle, meta, selected, onPress, icon }: Op
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${title}${meta ? `, ${meta}` : ""}`}
       className="flex-row items-center rounded-2xl border px-4 py-4 mb-3"
-      style={{ borderColor: selected ? "#4F39F6" : "#E5E7EB", backgroundColor: selected ? "#EEF0FF" : "#FFFFFF" }}
+      style={{ minHeight: 44, borderColor: selected ? "#4F39F6" : "#E5E7EB", backgroundColor: selected ? "#EEF0FF" : "#FFFFFF" }}
     >
       {icon ? (
         <View
@@ -114,7 +154,7 @@ export function OptionRow({ title, subtitle, meta, selected, onPress, icon }: Op
       ) : null}
       <View className="flex-1">
         <Text className={`font-semibold ${selected ? "text-primary" : "text-gray-900"}`}>{title}</Text>
-        {subtitle ? <Text className="text-gray-400 text-sm mt-0.5">{subtitle}</Text> : null}
+        {subtitle ? <Text className="text-gray-500 text-sm mt-0.5">{subtitle}</Text> : null}
       </View>
       {meta ? (
         <Text className={`font-semibold mr-2 ${selected ? "text-primary" : "text-gray-700"}`}>{meta}</Text>
@@ -128,7 +168,17 @@ export function OptionRow({ title, subtitle, meta, selected, onPress, icon }: Op
   );
 }
 
-/** ₹ amount with a thousands separator, matching the rest of the app. */
-export function rupees(n: number): string {
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+/** White card with a bold heading, used to group content on every step. */
+export function SectionCard({ title, right, children }: { title?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <View className="rounded-2xl border border-gray-100 bg-white p-4 mb-4">
+      {title || right ? (
+        <View className="flex-row items-center justify-between mb-2">
+          {typeof title === "string" ? <Text className="font-bold text-gray-900">{title}</Text> : title}
+          {right}
+        </View>
+      ) : null}
+      {children}
+    </View>
+  );
 }

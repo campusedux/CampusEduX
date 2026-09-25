@@ -27,7 +27,7 @@ export default function ProjectPicker({ resumeId, projects }: { resumeId: string
       {projects.map((project) => {
         const added = addedIds.has(project.id);
         return (
-          <div key={project.id} className="flex items-start justify-between gap-4 rounded-2xl border border-line bg-white p-4">
+          <div key={project.id} className="flex items-start justify-between gap-4 rounded-2xl border border-line bg-card p-4">
             <div>
               <div className="font-semibold text-ink">{project.title}</div>
               {project.technologyPreference && <div className="text-xs text-ink-muted">{project.technologyPreference}</div>}

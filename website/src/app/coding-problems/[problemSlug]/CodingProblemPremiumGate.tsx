@@ -12,9 +12,9 @@ import { CodingProblemBody } from "./CodingProblemBody";
 type Phase = "locked" | "unlocked";
 
 const DIFF_CLASS: Record<string, string> = {
-  Easy: "bg-emerald-50 text-emerald-700",
-  Medium: "bg-amber-50 text-amber-700",
-  Hard: "bg-red-50 text-red-700",
+  Easy: "bg-success/10 text-success",
+  Medium: "bg-warning/10 text-amber-800 dark:text-amber-300",
+  Hard: "bg-danger/10 text-danger",
 };
 
 /**
@@ -68,13 +68,13 @@ export function CodingProblemLockedNotice({
               {problem.supported_languages.join(" · ")}
             </span>
           ) : null}
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 font-medium text-amber-800 dark:text-amber-300">
             <Lock className="h-3.5 w-3.5" aria-hidden /> Premium
           </span>
         </div>
       </header>
 
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 text-center">
+      <div className="rounded-2xl border border-warning/30 bg-warning/10 p-6 text-center">
         <Lock className="mx-auto h-8 w-8 text-amber-500" aria-hidden />
         <h2 className="mt-3 text-lg font-bold text-ink">This is a premium problem</h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">

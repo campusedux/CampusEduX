@@ -4,6 +4,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { notify } from "@/lib/notify";
+import { assertResumeSize } from "@/lib/resumeFile";
 import { Screen, Button, LoadingState } from "@/components/ui";
 import { useParseUploadedResume, useCreateResumeFromParsed } from "@/hooks/useResume";
 import type { ParsedResumeUpload } from "@/services/resume.service";
@@ -21,6 +22,7 @@ export function ResumeUploadImportScreen() {
     if (res.canceled || !res.assets?.[0]) return;
     const f = res.assets[0];
     try {
+      assertResumeSize(f.size); // same 5MB limit as every other résumé upload (and /api/resume/parse)
       const parsed = await parse.mutateAsync({ uri: f.uri, name: f.name, mimeType: f.mimeType });
       setReview(parsed);
     } catch (e: any) {

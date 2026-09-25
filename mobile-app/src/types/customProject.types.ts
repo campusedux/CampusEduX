@@ -43,6 +43,11 @@ export const CUSTOM_PROJECT_TOKENS: Record<CustomProjectType, number> = {
   business: 6000,
 };
 
+/** Token to display for a project type (0 until a type is chosen). Server-authoritative — see CUSTOM_PROJECT_TOKENS. */
+export function tokenForType(projectType: CustomProjectType | null): number {
+  return projectType ? CUSTOM_PROJECT_TOKENS[projectType] : 0;
+}
+
 /** Progress % per status (spec §27). Mirrors custom_project_progress_for() in SQL. */
 export const CUSTOM_PROJECT_PROGRESS: Record<CustomProjectStatus, number> = {
   new: 20,
@@ -101,6 +106,12 @@ export interface CustomFeature {
   dependencies?: string[];
   /** Mutually-exclusive feature ids (migration 0090). Symmetric — checked both ways. */
   conflicts?: string[];
+  /**
+   * "<project_type>:<project_level>" combos for which this feature comes free
+   * with the project (migration 0115). Included features are read-only and are
+   * never charged, whatever `price` says.
+   */
+  includedInLevels?: string[];
   icon?: string | null;
   imageUrl?: string | null;
 }
@@ -137,11 +148,18 @@ export interface CustomProjectBuilderConfig {
 
 export interface CustomProjectEstimate {
   basePrice: number;
-  platformCharge: number;
-  featureTotal: number;
-  estimatedTotal: number;
-  tokenAmount: number;
-  selectedFeatures: CustomFeature[];
+  /** Free with this type + level — read-only, never charged. */
+  includedFeatures: CustomFeature[];
+  /** Selected paid add-ons; each `price` is the amount actually charged. */
+  addOns: CustomFeature[];
+  addOnsTotal: number;
+  platformCharges: number;
+  /** Base + add-ons + platform charges. */
+  total: number;
+  /** Amount paid now, per project type. */
+  token: number;
+  /** total − token (never below 0); DISPLAY only — balance payment isn't built yet. */
+  balanceAfterToken: number;
 }
 
 // --- server records --------------------------------------------------
@@ -177,6 +195,8 @@ export interface CustomProjectRequestFeature {
   featureName: string;
   featurePrice: number;
   category: string;
+  /** Came with the project (price 0) rather than being a paid add-on. */
+  isIncluded: boolean;
 }
 
 export interface CustomProjectReferenceFile {

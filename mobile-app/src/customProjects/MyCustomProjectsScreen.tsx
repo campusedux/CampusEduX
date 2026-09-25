@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState, EmptyState, Button, PressableScale } from "@/components/ui";
 import { CARD_SHADOW } from "@/constants/theme";
 import { useMyCustomProjects } from "@/hooks/useCustomProjects";
-import { rupees } from "./components/wizard";
+import { rupees } from "./components/format";
 import {
   CUSTOM_PROJECT_PROGRESS,
   CUSTOM_STATUS_LABELS,

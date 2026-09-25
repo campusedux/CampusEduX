@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { judgeRpcSecret, resolveApiCaller } from "@/lib/apiAuth";
+import { JUDGE_BUCKET, judgeMax, judgeWindowSeconds, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { resolveLanguage } from "@/lib/compiler/languages";
-import { MAX_CODE_BYTES, byteLength, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/compiler/limits";
-import { checkRateLimit } from "@/lib/compiler/rateLimit";
+import { MAX_CODE_BYTES, byteLength } from "@/lib/compiler/limits";
 import { runCode } from "@/lib/compiler/run";
 import { judgeCase, MAX_JUDGE_CASES, type RunCase, type JudgeCaseResult } from "@/lib/codingProblems";
 
@@ -36,50 +35,23 @@ const bodySchema = z.object({
     .refine((v) => byteLength(v) <= MAX_CODE_BYTES, `Your code is too long (max ${MAX_CODE_BYTES.toLocaleString()} bytes).`),
 });
 
-function clientKey(req: Request): string {
-  const fwd = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
-  const ip = fwd || req.headers.get("x-real-ip") || "";
-  return ip ? `ip:${ip}` : `ua:${(req.headers.get("user-agent") ?? "unknown").slice(0, 100)}`;
-}
-
-/**
- * Mobile sends `Authorization: Bearer <supabase JWT>`; the website keeps using its
- * cookie session. A Bearer token that Supabase Auth rejects is treated as "no token".
- */
-function bearerClient(req: Request) {
-  const header = req.headers.get("authorization");
-  if (!header?.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length).trim();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!token || !url || !anonKey) return null;
-  const client = createClient(url, anonKey, {
-    auth: { persistSession: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-  return { client, token };
-}
-
 export async function POST(req: Request) {
-  // A valid Bearer token (mobile) is rate-limited per user instead of per IP, and the
-  // problem RPC then runs as that user (same premium/RLS rules as the cookie session).
-  let bearerSupabase: NonNullable<ReturnType<typeof bearerClient>>["client"] | null = null;
-  let bearerUserId: string | null = null;
-  const bearer = bearerClient(req);
-  if (bearer) {
-    const { data, error } = await bearer.client.auth.getUser(bearer.token);
-    if (!error && data.user) {
-      bearerSupabase = bearer.client;
-      bearerUserId = data.user.id;
-    }
+  // Auth required (cookie session or Bearer). The RPCs below run as that user.
+  const caller = await resolveApiCaller(req);
+  if (!caller) {
+    return NextResponse.json({ ok: false, error: "Sign in to run your code." }, { status: 401 });
   }
+  const supabase = caller.supabase;
 
-  const rate = checkRateLimit(`practice-judge:${bearerUserId ? `user:${bearerUserId}` : clientKey(req)}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
-  if (!rate.ok) {
-    return NextResponse.json(
-      { ok: false, error: "You're running code very quickly. Please wait a moment." },
-      { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
-    );
+  // One request = up to MAX_JUDGE_CASES sandbox runs, so the cap is on requests (see rateLimitDb.ts).
+  const limited = limitResponse(await rlHit(supabase, JUDGE_BUCKET, judgeMax(), judgeWindowSeconds()), {
+    message: "You're running code very quickly. Please wait a moment.",
+  });
+  if (limited) return limited;
+
+  const secret = judgeRpcSecret();
+  if (!secret) {
+    return NextResponse.json({ ok: false, error: "Judge is not configured." }, { status: 503 });
   }
 
   let json: unknown;
@@ -97,8 +69,7 @@ export async function POST(req: Request) {
   }
   const { slug, language, source } = parsed.data;
 
-  const supabase = bearerSupabase ?? createAuthedServerSupabase();
-  const { data, error } = await supabase.rpc("practice_problem_run_cases", { p_slug: slug });
+  const { data, error } = await supabase.rpc("practice_problem_run_cases", { p_slug: slug, p_secret: secret });
   if (error) {
     return NextResponse.json({ ok: false, error: "Couldn't load this problem's tests." }, { status: 502 });
   }

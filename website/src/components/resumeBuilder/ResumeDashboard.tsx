@@ -39,7 +39,7 @@ export function ResumeDashboard({
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {resumes.map((r) => (
-            <div key={r.id} className="flex flex-col rounded-2xl border border-line bg-white p-4 shadow-card">
+            <div key={r.id} className="flex flex-col rounded-2xl border border-line bg-card p-4 shadow-card">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -99,7 +99,7 @@ export function ResumeDashboard({
       {downloads.length === 0 ? (
         <EmptyState className="mt-3" title="No downloads yet" />
       ) : (
-        <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="mt-3 divide-y divide-line rounded-2xl border border-line bg-card">
           {downloads.map((d) => (
             <div key={d.id} className="flex justify-between px-4 py-3 text-sm">
               <span className="text-ink">{d.resume_title}</span>

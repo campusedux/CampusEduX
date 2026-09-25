@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { notify } from "@/lib/notify";
-import { findConflict, resolveDependencies } from "@/services/customProjects.service";
+import { findConflict, isFeatureIncluded, resolveDependencies } from "@/services/customProjects.service";
 import type {
   CustomFeature,
   CustomPlatform,
@@ -30,6 +30,9 @@ interface BuilderState {
   config: CustomProjectBuilderConfig;
   /** Whether the store has been seeded from a saved draft this session. */
   hydratedFromDraft: boolean;
+  /** Local preview URIs for uploaded files (path -> uri). Session-only; never saved to the draft. */
+  previews: Record<string, string>;
+  setPreview: (path: string, uri: string) => void;
   patch: (fields: Partial<CustomProjectBuilderConfig>) => void;
   setType: (t: CustomProjectType) => void;
   setLevel: (l: CustomProjectLevel) => void;
@@ -40,7 +43,7 @@ interface BuilderState {
    * website/src/app/custom-projects/features/BuilderFeatures.tsx does.
    */
   toggleFeature: (id: string, features: CustomFeature[]) => void;
-  /** Drop any selected feature ids that are no longer valid for the tier. */
+  /** Drop selected feature ids that are no longer a valid paid add-on for the tier (incl. ones now included). */
   pruneFeatures: (validIds: string[]) => void;
   addRequirement: (text: string) => void;
   removeRequirement: (index: number) => void;
@@ -53,6 +56,9 @@ interface BuilderState {
 export const useBuilderStore = create<BuilderState>((set) => ({
   config: EMPTY_BUILDER_CONFIG,
   hydratedFromDraft: false,
+  previews: {},
+
+  setPreview: (path, uri) => set((s) => ({ previews: { ...s.previews, [path]: uri } })),
 
   patch: (fields) => set((s) => ({ config: { ...s.config, ...fields } })),
 
@@ -84,7 +90,14 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         return s;
       }
 
-      const { featureIds: withDeps, added } = resolveDependencies(s.config.featureIds, id, features);
+      // A dependency that is already INCLUDED for this tier is satisfied for free —
+      // never add it to the paid selection.
+      const { projectType, projectLevel } = s.config;
+      const resolved = resolveDependencies(s.config.featureIds, id, features);
+      const added = resolved.added.filter((a) => !isFeatureIncluded(a, projectType, projectLevel));
+      const withDeps = resolved.featureIds.filter(
+        (fid) => !resolved.added.some((a) => a.id === fid && !added.includes(a))
+      );
       const next = withDeps.includes(id) ? withDeps : [...withDeps, id];
       if (added.length > 0 && feature) {
         notify(
@@ -144,5 +157,5 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       hydratedFromDraft: true,
     })),
 
-  reset: () => set(() => ({ config: EMPTY_BUILDER_CONFIG, hydratedFromDraft: false })),
+  reset: () => set(() => ({ config: EMPTY_BUILDER_CONFIG, hydratedFromDraft: false, previews: {} })),
 }));

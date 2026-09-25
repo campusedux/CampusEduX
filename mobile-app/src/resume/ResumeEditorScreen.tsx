@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, Pressable, ScrollView, Modal, Alert } from "react-native";
+import { confirmAction, notify } from "@/lib/notify";
+import { View, Text, Pressable, ScrollView, Modal } from "react-native";
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -105,24 +106,23 @@ export function ResumeEditorScreen() {
   };
 
   const confirmDelete = (id: string, heading: string) =>
-    Alert.alert("Delete section?", `"${heading}" will be removed.`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => apply(deleteBlock(content, id)) },
-    ]);
+    confirmAction("Delete section?", `"${heading}" will be removed.`, () => apply(deleteBlock(content, id)), "Delete");
 
   const clearDemo = () =>
-    Alert.alert("Clear demo content?", "Every section resets to empty. This can't be undone.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Clear",
-        style: "destructive",
-        onPress: async () => {
+    confirmAction(
+      "Clear demo content?",
+      "Every section resets to empty. This can't be undone.",
+      async () => {
+        try {
           await clearContent.mutateAsync();
           await refetch();
           dirty.current = false;
-        },
+        } catch (error: any) {
+          notify("Couldn't clear content", error?.message ?? "Please try again.");
+        }
       },
-    ]);
+      "Clear"
+    );
 
   return (
     <Screen edges={["top", "bottom"]} className="px-5">

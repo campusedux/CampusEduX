@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
-import { CompanyCard, type CompanyCardData, EmptyState } from "@/components/ui";
+import { Building2 } from "lucide-react";
+import { Breadcrumb, CompanyCard, type CompanyCardData, EmptyState } from "@/components/ui";
 import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 const DESCRIPTION =
@@ -41,9 +42,16 @@ export default async function CompaniesPage() {
   const companies = await getCompanies();
   return (
     <div className="page-shell">
-      <h1 className="text-3xl font-bold text-ink">Companies</h1>
+      <Breadcrumb className="mb-5" items={[{ label: "Jobs", href: "/jobs" }, { label: "Companies" }]} />
+      <p className="eyebrow">Careers</p>
+      <h1 className="h-hero mt-2">Companies hiring</h1>
       {companies.length === 0 ? (
-        <EmptyState className="mt-8" title="No companies listed yet" />
+        <EmptyState
+          className="mt-8"
+          icon={Building2}
+          title="No companies listed yet"
+          subtitle="Employers appear here as soon as their first opening is published."
+        />
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {companies.map((c) => (

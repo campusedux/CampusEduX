@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -63,7 +64,7 @@ export function BottomTabNavigator() {
   const barIsDark = (focusedRoute: string) => isDark && (DARK_MODE_SCOPE === "all" || focusedRoute === "Prep");
 
   return (
-    <Tab.Navigator
+    <Tab.Navigator screenLayout={boundaryScreenLayout}
       screenOptions={({ route, navigation }) => {
         let focused: string = route.name;
         try {

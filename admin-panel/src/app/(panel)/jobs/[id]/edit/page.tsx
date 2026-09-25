@@ -43,6 +43,11 @@ export default async function EditJobPage({ params }: { params: { id: string } }
           skills: job.skills,
           experience: job.experience,
           status: job.status,
+          ...(job as unknown as Pick<
+            import('../../JobForm').JobFormInitial,
+            | 'apply_url' | 'application_deadline' | 'requisition_id' | 'category' | 'qualification'
+            | 'work_mode' | 'experience_level' | 'shift' | 'benefits' | 'summary' | 'responsibilities' | 'candidate_note'
+          >),
           target_type: (job as { target_type?: string | null }).target_type ?? null,
           target_course_id: (job as { target_course_id?: string | null }).target_course_id ?? null,
           target_branch_ids: (job as { target_branch_ids?: string[] | null }).target_branch_ids ?? null,

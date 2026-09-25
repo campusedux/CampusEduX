@@ -5,8 +5,7 @@ import { cn } from "@/lib/cn";
 import { Button } from "./Button";
 
 /**
- * Error state — mirrors `mobile-app/src/components/ui/StateViews.tsx`
- * `ErrorState`. Never render a raw DB/network error string here — pass a
+ * Error state. Never render a raw DB/network error string here — pass a
  * user-friendly message.
  */
 export function ErrorState({
@@ -23,16 +22,18 @@ export function ErrorState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-2xl border border-line bg-surface px-6 py-12 text-center",
+        "flex flex-col items-center justify-center rounded-2xl border border-line bg-card px-6 py-12 text-center",
         className,
       )}
       role="alert"
     >
-      <AlertCircle className="h-9 w-9 text-danger" aria-hidden />
-      <p className="mt-3 font-semibold text-ink">{title}</p>
+      <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-danger/10">
+        <AlertCircle className="h-7 w-7 text-danger" aria-hidden />
+      </span>
+      <p className="mt-4 font-display text-lg font-semibold text-ink">{title}</p>
       <p className="mt-1 max-w-sm text-sm text-ink-muted">{message}</p>
       {onRetry && (
-        <Button variant="secondary" size="sm" className="mt-4" onClick={onRetry}>
+        <Button variant="secondary" size="sm" className="mt-5" onClick={onRetry}>
           Try again
         </Button>
       )}

@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR, timeAgo } from "@/lib/format";
 import { Badge, EmptyState, Button } from "@/components/ui";
+import { ShoppingBag } from "lucide-react";
+import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export default async function PurchasesPage() {
   const user = await requireUser();
@@ -20,18 +22,18 @@ export default async function PurchasesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-ink">Your purchases</h1>
-      <p className="mt-1 text-sm text-ink-muted">
-        Source code and documentation for a purchased project download from the CampusEduX app, tied to this account.
-      </p>
+      <AccountPageHeader
+        title="Your purchases"
+        description="Source code and documentation for a purchased project download from the CampusEduX app, tied to this account."
+      />
       {!purchases || purchases.length === 0 ? (
         <EmptyState
-          className="mt-6"
+          icon={ShoppingBag}
           title="No purchases yet"
           action={<Button href="/projects" size="sm">Browse the marketplace</Button>}
         />
       ) : (
-        <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="card divide-y divide-line overflow-hidden">
           {purchases.map((p) => {
             const project = Array.isArray(p.project) ? p.project[0] : p.project;
             return (

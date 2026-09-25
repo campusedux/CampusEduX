@@ -57,7 +57,7 @@ export default async function Page() {
               title={draft.title}
             />
 
-            <section className="rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
+            <section className="rounded-2xl border border-line bg-card p-5 shadow-card sm:p-6">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Selected features</p>
               <p className="mt-1.5 text-sm text-ink">
                 {included.length} included feature{included.length === 1 ? "" : "s"}

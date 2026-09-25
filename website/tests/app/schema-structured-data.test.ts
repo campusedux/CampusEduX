@@ -22,7 +22,6 @@ vi.mock("@/lib/learning", () => ({
   getLearningGridBrief: vi.fn(),
   getLearningGridSlugs: vi.fn(async () => []),
   getGridScopedTests: vi.fn(async () => ({ courseTest: null, chapterTestBySectionId: {} })),
-  firstTopicOf: vi.fn(() => null),
   getLearningGrids: vi.fn(async () => []),
   searchLearning: vi.fn(async () => []),
 }));

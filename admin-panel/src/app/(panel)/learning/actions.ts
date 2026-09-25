@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import { isValidSlug, slugify, GRID_TYPES, parseTags } from '@/lib/learning/constants';
@@ -121,6 +122,8 @@ function gridType(fd: FormData): GridType {
 
 export async function createGrid(_p: IdResult, fd: FormData): Promise<IdResult> {
   await requirePermission(MODULE, 'add');
+  const urlErr = urlFieldError(fd, { icon_url: 'Icon URL', cover_image_url: 'Cover image URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const base = gridBase(fd);
   if (!base.name) return { ok: false, error: 'Grid name is required.' };
@@ -148,6 +151,8 @@ export async function createGrid(_p: IdResult, fd: FormData): Promise<IdResult> 
 
 export async function updateGrid(id: string, _p: Result, fd: FormData): Promise<Result> {
   await requirePermission(MODULE, 'edit');
+  const urlErr = urlFieldError(fd, { icon_url: 'Icon URL', cover_image_url: 'Cover image URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const base = gridBase(fd);
   if (!base.name) return { ok: false, error: 'Grid name is required.' };
@@ -323,6 +328,8 @@ async function topicPayload(fd: FormData) {
 /** Create a topic inside a section (Grid → Section → Topic → Content). */
 export async function createTopic(sectionId: string, gridId: string, _p: IdResult, fd: FormData): Promise<IdResult> {
   await requirePermission(MODULE, 'add');
+  const urlErr = urlFieldError(fd, { icon_url: 'Icon URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const payload = await topicPayload(fd);
   if (!payload.title) return { ok: false, error: 'Topic title is required.' };
@@ -351,6 +358,8 @@ export async function createTopic(sectionId: string, gridId: string, _p: IdResul
  *  company-type grids and any admin who skips sections). */
 export async function createGridTopic(gridId: string, _p: IdResult, fd: FormData): Promise<IdResult> {
   await requirePermission(MODULE, 'add');
+  const urlErr = urlFieldError(fd, { icon_url: 'Icon URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const payload = await topicPayload(fd);
   if (!payload.title) return { ok: false, error: 'Topic title is required.' };
@@ -384,6 +393,8 @@ export async function updateTopic(
   fd: FormData,
 ): Promise<Result> {
   await requirePermission(MODULE, 'edit');
+  const urlErr = urlFieldError(fd, { icon_url: 'Icon URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const payload = await topicPayload(fd);
   if (!payload.title) return { ok: false, error: 'Topic title is required.' };
@@ -487,6 +498,8 @@ async function contentPayload(fd: FormData) {
 
 export async function createContent(topicId: string, path: string, _p: Result, fd: FormData): Promise<Result> {
   await requirePermission(MODULE, 'add');
+  const urlErr = urlFieldError(fd, { file_url: 'File URL', external_url: 'External URL', video_url: 'Video URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const payload = await contentPayload(fd);
   if (payload.slug && !isValidSlug(payload.slug)) {
@@ -508,6 +521,8 @@ export async function createContent(topicId: string, path: string, _p: Result, f
 
 export async function updateContent(id: string, path: string, _p: Result, fd: FormData): Promise<Result> {
   await requirePermission(MODULE, 'edit');
+  const urlErr = urlFieldError(fd, { file_url: 'File URL', external_url: 'External URL', video_url: 'Video URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const payload = await contentPayload(fd);
   if (payload.slug && !isValidSlug(payload.slug)) {

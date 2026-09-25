@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import type { UploadedFile } from '@/components/ui/UploadDropzone';
@@ -14,6 +15,8 @@ const arr = (fd: FormData, k: string) => fd.getAll(k).map(String).filter(Boolean
 // --- banners ------------------------------------------------------
 export async function createBanner(placement: string, _p: Result, fd: FormData): Promise<Result> {
   await requirePermission('cms', 'add');
+  const urlErr = urlFieldError(fd, { image_url: 'Banner image URL', target_url: 'Target URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const title = s(fd, 'title');
   if (!title) return { ok: false, error: 'Title is required.' };
@@ -42,6 +45,8 @@ export async function createBanner(placement: string, _p: Result, fd: FormData):
 
 export async function updateBanner(id: string, placement: string, _p: Result, fd: FormData): Promise<Result> {
   await requirePermission('cms', 'edit');
+  const urlErr = urlFieldError(fd, { image_url: 'Banner image URL', target_url: 'Target URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const { error } = await supabase
     .from('banners')
@@ -203,6 +208,8 @@ export async function setContactStatus(id: string, status: 'new' | 'read' | 'arc
 // --- push notifications ----------------------------------
 export async function sendPushNotification(_p: Result, fd: FormData): Promise<Result> {
   await requirePermission('cms', 'add');
+  const urlErr = urlFieldError(fd, { image_url: 'Image URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const title = s(fd, 'title');
   const body = s(fd, 'body');

@@ -38,7 +38,7 @@ function GoogleIcon() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-12 sm:px-6">
-      <div className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+      <div className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
         <Link href="/" className="flex items-center gap-2" aria-label="CampusEduX home">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-base font-black text-white">
             C
@@ -150,7 +150,7 @@ function LoginForm() {
         onClick={handleGoogleSignIn}
         disabled={busy}
         aria-busy={googleLoading}
-        className="btn-ghost mt-6 w-full bg-white"
+        className="btn-ghost mt-6 w-full bg-card"
       >
         {googleLoading ? (
           <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" />

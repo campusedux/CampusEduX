@@ -22,7 +22,7 @@ export default async function StudentOverviewPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { created?: string; saved?: string; status?: string };
+  searchParams: { created?: string; saved?: string; status?: string; warn?: string };
 }) {
   const [student, summary] = await Promise.all([getStudent(params.id), getStudentSummary(params.id)]);
   if (!student) return null; // layout already handled notFound

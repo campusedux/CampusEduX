@@ -1,6 +1,20 @@
 import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
+import { isSessionInvalidError } from "@/auth/authErrors";
 import type { LoginPayload, RegisterPayload, UserProfile } from "@/types";
+
+/** Raised when the current session no longer maps to a live account (deleted / revoked / bad JWT). */
+export class SessionInvalidError extends Error {
+  constructor(message = "Your session is no longer valid. Please log in again.") {
+    super(message);
+    this.name = "SessionInvalidError";
+  }
+}
+
+/** Error that keeps Supabase's `code`/`status` (and the resolved email) so screens can map it. */
+function authError(error: { message: string; code?: string; status?: number }, email?: string) {
+  return Object.assign(new Error(error.message), { code: error.code, status: error.status, email });
+}
 
 const isEmail = (value: string) => /\S+@\S+\.\S+/.test(value);
 
@@ -72,7 +86,7 @@ export const authService = {
       email,
       password,
     });
-    if (error) throw new Error(error.message);
+    if (error) throw authError(error, email);
 
     const profile = await authService.getProfile(
       data.user.id,
@@ -165,16 +179,27 @@ export const authService = {
       },
     });
 
-    if (error) throw new Error(error.message);
+    if (error) throw authError(error, payload.email);
     return data;
   },
 
+  /** Re-sends the sign-up confirmation email (Register success / "Email not confirmed" on Login). */
+  async resendVerificationEmail(email: string) {
+    const { error } = await supabase.auth.resend({ type: "signup", email: email.trim() });
+    if (error) throw authError(error, email);
+  },
+
+  /**
+   * Sends a one-time code to an EXISTING account only. `shouldCreateUser:false`
+   * stops the forgot-password flow from silently creating auth users for
+   * typo'd / unregistered addresses.
+   */
   async sendOTP(identifier: string) {
     const { error } = isEmail(identifier)
-      ? await supabase.auth.signInWithOtp({ email: identifier })
-      : await supabase.auth.signInWithOtp({ phone: identifier });
+      ? await supabase.auth.signInWithOtp({ email: identifier, options: { shouldCreateUser: false } })
+      : await supabase.auth.signInWithOtp({ phone: identifier, options: { shouldCreateUser: false } });
 
-    if (error) throw new Error(error.message);
+    if (error) throw authError(error);
   },
 
   async verifyOTP(identifier: string, token: string) {
@@ -182,7 +207,7 @@ export const authService = {
       ? await supabase.auth.verifyOtp({ email: identifier, token, type: "email" })
       : await supabase.auth.verifyOtp({ phone: identifier, token, type: "sms" });
 
-    if (error) throw new Error(error.message);
+    if (error) throw authError(error);
     return data;
   },
 
@@ -207,6 +232,7 @@ export const authService = {
       .maybeSingle();
 
     if (error) {
+      if (isSessionInvalidError(error)) throw new SessionInvalidError();
       throw new Error(
         `Unable to load profile. ${describeQueryError(error, "profiles")}`
       );
@@ -217,7 +243,16 @@ export const authService = {
     }
 
     // A valid Auth user can exist before its profile row is created.
-    // Create the missing row from Auth metadata instead of blocking login.
+    // Create the missing row from Auth metadata instead of blocking login —
+    // but ONLY if the auth user still exists: a deleted account's JWT stays
+    // valid until expiry and must not resurrect a ghost profile row.
+    const { data: authData, error: authLookupError } = await supabase.auth.getUser();
+    if (authLookupError && isSessionInvalidError(authLookupError)) throw new SessionInvalidError();
+    if (authLookupError) {
+      throw new Error(`Unable to verify your account. ${authLookupError.message}`);
+    }
+    if (!authData?.user || authData.user.id !== userId) throw new SessionInvalidError();
+
     const fullName =
       typeof metadata?.full_name === "string" ? metadata.full_name : "";
     const mobileNumber =

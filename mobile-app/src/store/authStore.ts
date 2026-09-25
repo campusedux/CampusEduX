@@ -4,6 +4,10 @@ import type { UserProfile } from "@/types";
 interface AuthStoreState {
   user: UserProfile | null;
   isAuthenticated: boolean;
+  /**
+   * Cold-start "restoring session" flag ONLY (consumed by RootNavigator to show
+   * the splash). Never set it for login/register: it unmounts the navigator.
+   */
   isLoading: boolean;
   hasCompletedOnboarding: boolean;
   hasCompletedProfileSetup: boolean;

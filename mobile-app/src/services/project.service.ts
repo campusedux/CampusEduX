@@ -1,3 +1,4 @@
+import { compactRows } from "@/lib/safeRows";
 import { supabase } from "@/lib/supabase";
 import { rankByAcademicRelevance, type AcademicProfile } from "@/lib/personalization";
 import type { Project, ProjectDetail, ProjectFilters, Review, RatingBreakdown, PurchasedProject, DownloadRecord } from "@/types";
@@ -236,17 +237,37 @@ export const projectService = {
     return !!data;
   },
 
-  async getWishlist(userId: string): Promise<Project[]> {
+  async getWishlist(_userId: string): Promise<Project[]> {
     return orSample(
       "getWishlist",
       async () => {
-        const { data, error } = await supabase
-          .from("wishlists")
-          .select("project:projects(*, category:categories(name))")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false });
+        // my_wishlist() (migration 0120/092): RLS no longer lets a wishlist join read unpublished
+        // projects, so the RPC returns card data for available ones and a detail-free tombstone
+        // (available=false) for the rest. Scoped to auth.uid() server-side.
+        const { data, error } = await supabase.rpc("my_wishlist");
         if (error) throw new Error(error.message);
-        return (data ?? []).map((row: any) => mapProjectRow(row.project));
+        return (Array.isArray(data) ? data : [])
+          .filter((row: any) => row && typeof row.project_id === "string")
+          .map((row: any): Project =>
+            row.available === false || !row.title
+              ? {
+                  id: row.project_id,
+                  title: "No longer available",
+                  categoryId: "",
+                  categoryName: "",
+                  techStack: [],
+                  price: 0,
+                  rating: 0,
+                  reviewCount: 0,
+                  thumbnailUrl: null,
+                  isPremium: false,
+                  isBestSeller: false,
+                  salesCount: 0,
+                  createdAt: row.wishlisted_at ?? "",
+                  available: false,
+                }
+              : { ...mapProjectRow({ ...row, id: row.project_id }), available: true }
+          );
       },
       // per-user read: no sample, ever
     );
@@ -273,7 +294,7 @@ export const projectService = {
           .eq("status", "success")
           .order("created_at", { ascending: false });
         if (error) throw new Error(error.message);
-        return (data ?? []).map((row: any) => ({
+        return compactRows(data as any[], "project").map((row: any) => ({
           orderId: row.id,
           project: mapProjectRow(row.project),
           purchasedAt: row.created_at,
@@ -340,15 +361,33 @@ export const projectService = {
       const { data } = await supabase.storage.from("project-files").createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
       return data?.signedUrl ?? "";
     };
-    const [sourceCodeUrl, documentationUrl, installationGuideUrl] = await Promise.all([
+    const [sourceCodeUrl, documentationUrl, installationGuideUrl, installationSizeMB] = await Promise.all([
       bucket(`${projectId}/source-code.zip`),
       bucket(`${projectId}/documentation.pdf`),
       bucket(`${projectId}/installation-guide.pdf`),
+      // Real size of the installation guide, when the admin recorded it.
+      (async () => {
+        try {
+          const { data } = await supabase
+            .from("project_files")
+            .select("file_name, size_mb")
+            .eq("project_id", projectId)
+            .eq("file_name", "installation-guide.pdf")
+            .maybeSingle();
+          const size = Number((data as any)?.size_mb);
+          return Number.isFinite(size) && size > 0 ? size : 0;
+        } catch {
+          return 0;
+        }
+      })(),
     ]);
-    return [
+    const files = [
       { label: "Source Code (ZIP)", fileName: "source-code.zip", sizeMB: detail.sourceCodeSizeMB, url: sourceCodeUrl },
       { label: "Documentation (PDF)", fileName: "documentation.pdf", sizeMB: detail.documentationSizeMB, url: documentationUrl },
-      { label: "Installation Guide (PDF)", fileName: "installation-guide.pdf", sizeMB: 1.2, url: installationGuideUrl },
+      { label: "Installation Guide (PDF)", fileName: "installation-guide.pdf", sizeMB: installationSizeMB, url: installationGuideUrl },
     ];
+    // createSignedUrl fails for objects that don't exist (or RLS denial) and
+    // `bucket()` maps that to "" — never offer a download with no URL.
+    return files.filter((f) => f.url !== "");
   },
 };

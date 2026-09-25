@@ -1,3 +1,5 @@
+import { PermissionGate } from '@/components/auth/PermissionGate';
+import { MONEY_RPC_ROLES } from '@/lib/permission-gate';
 import Link from 'next/link';
 import { ArrowLeft, Wallet, CheckCircle2, Clock } from 'lucide-react';
 import { requireModule } from '@/lib/auth';
@@ -30,7 +32,9 @@ export default async function PlatformWalletPage() {
         <StatCard label="Pending withdrawals" value={formatINRCompact(w.pending)} icon={Clock} tone="warning" />
       </div>
 
-      {admin.perms.referrals.edit ? <WalletAdjustPanel /> : null}
+      <PermissionGate can={{ module: 'referrals', action: 'edit' }} roles={MONEY_RPC_ROLES} mode="disable" block>
+        <WalletAdjustPanel />
+      </PermissionGate>
 
       <Card>
         <CardHeader title="Recent transactions" />

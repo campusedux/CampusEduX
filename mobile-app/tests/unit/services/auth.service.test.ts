@@ -108,12 +108,12 @@ describe("authService.register", () => {
 describe("authService OTP", () => {
   it("sendOTP uses the email channel for an email identifier", async () => {
     await authService.sendOTP("demo@campusedux.app");
-    expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({ email: "demo@campusedux.app" });
+    expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({ email: "demo@campusedux.app", options: { shouldCreateUser: false } });
   });
 
   it("sendOTP uses the phone channel for a non-email identifier", async () => {
     await authService.sendOTP("9999999999");
-    expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({ phone: "9999999999" });
+    expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({ phone: "9999999999", options: { shouldCreateUser: false } });
   });
 
   it("sendOTP throws on a Supabase error", async () => {
@@ -155,6 +155,7 @@ describe("authService.getProfile", () => {
   });
 
   it("creates the profile row from auth metadata when it is missing", async () => {
+    setAuthResult("getUser", { data: { user: { id: profileRow.id } }, error: null });
     setTableResult("profiles", [
       { data: [] }, // initial lookup: no row
       { data: [{ id: profileRow.id, email: "new@x.com", full_name: "New Student", mobile_number: "1", is_premium: false }] }, // insert().select().single()
@@ -168,6 +169,7 @@ describe("authService.getProfile", () => {
   });
 
   it("re-reads the row when a concurrent insert already created it (23505)", async () => {
+    setAuthResult("getUser", { data: { user: { id: profileRow.id } }, error: null });
     setTableResult("profiles", [
       { data: [] }, // initial lookup
       { error: { code: "23505", message: "duplicate key value" } }, // our insert loses the race

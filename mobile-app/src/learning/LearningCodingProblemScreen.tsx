@@ -99,11 +99,14 @@ export function LearningCodingProblemScreen() {
           </View>
 
           {data.locked ? (
-            // Existing locked view — unchanged.
-            <View className="border border-amber-200 bg-amber-50 rounded-2xl p-5 items-center mt-1 mb-5" style={{ marginTop: SPACE[5] }}>
-              <Ionicons name="lock-closed" size={26} color="#B45309" />
-              <Text className="text-amber-900 font-semibold mt-2 mb-1">Premium problem</Text>
-              <Text className="text-amber-800 text-sm text-center mb-4">Upgrade to CampusEduX Premium to read this problem.</Text>
+            // Locked view — same layout, now on the theme's warning-callout tokens (light values match the old amber box).
+            <View
+              accessibilityRole="alert"
+              style={{ borderWidth: 1, borderColor: colors.callout.warning.border, backgroundColor: colors.callout.warning.bg, borderRadius: RADII.xl, padding: SPACE[5], alignItems: "center", marginTop: SPACE[5], marginBottom: SPACE[5] }}
+            >
+              <Ionicons name="lock-closed" size={26} color={colors.callout.warning.label} />
+              <Text style={[type.title, { color: colors.callout.warning.label, marginTop: SPACE[2], marginBottom: SPACE[1] }]}>Premium problem</Text>
+              <Text style={[type.small, { color: colors.callout.warning.label, textAlign: "center", marginBottom: SPACE[4] }]}>Upgrade to CampusEduX Premium to read this problem.</Text>
               <Button label="See Premium Plans" onPress={() => navigation.getParent()?.navigate("Premium", { screen: "PremiumPlans" })} className="w-full" />
             </View>
           ) : (

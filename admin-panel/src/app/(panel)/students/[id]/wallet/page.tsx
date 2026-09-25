@@ -1,3 +1,5 @@
+import { PermissionGate } from '@/components/auth/PermissionGate';
+import { MONEY_RPC_ROLES } from '@/lib/permission-gate';
 import { requireModule } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, Badge, EmptyState } from '@/components/ui/primitives';
@@ -53,12 +55,21 @@ export default async function StudentWalletPage({
         <StatCard label="Total debited" value={formatINR(debited)} icon={ArrowDownRight} tone="danger" />
       </div>
 
-      {admin.perms.students.edit ? (
+      {/* UI gating only; the action needs students:edit and the RPC needs referrals:edit + super_admin/admin. */}
+      <PermissionGate
+        can={[
+          { module: 'students', action: 'edit' },
+          { module: 'referrals', action: 'edit' },
+        ]}
+        roles={MONEY_RPC_ROLES}
+        mode="disable"
+        block
+      >
         <Card>
           <CardHeader title="Adjust balance" description="Writes a real wallet_transactions row via the admin_adjust_wallet function." />
           <WalletAdjustForm action={adjustStudentWallet.bind(null, params.id)} />
         </Card>
-      ) : null}
+      </PermissionGate>
 
       <Card>
         <CardHeader title="Transaction history" />

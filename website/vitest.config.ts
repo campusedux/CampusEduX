@@ -19,6 +19,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // next/font is a compile-time marker only Next's SWC can evaluate.
+      "next/font/google": fileURLToPath(new URL("./tests/stubs/next-font-google.ts", import.meta.url)),
     },
   },
   esbuild: {

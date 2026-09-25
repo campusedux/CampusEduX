@@ -1,3 +1,4 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { referralService } from "@/services/referral.service";
 import { useAuthStore } from "@/store/authStore";
@@ -13,7 +14,7 @@ export const referralQueryKeys = {
 export const useReferralOverview = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: referralQueryKeys.overview,
+    queryKey: userScopedKey(referralQueryKeys.overview, userId),
     queryFn: () => referralService.getOverview(userId as string),
     enabled: !!userId,
   });
@@ -22,7 +23,7 @@ export const useReferralOverview = () => {
 export const useReferralHistory = (filter: "all" | ReferralStatus = "all") => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: referralQueryKeys.history(filter),
+    queryKey: userScopedKey(referralQueryKeys.history(filter), userId),
     queryFn: () => referralService.getReferralHistory(userId as string, filter),
     enabled: !!userId,
   });
@@ -31,7 +32,7 @@ export const useReferralHistory = (filter: "all" | ReferralStatus = "all") => {
 export const useEarningsSummary = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: referralQueryKeys.earnings,
+    queryKey: userScopedKey(referralQueryKeys.earnings, userId),
     queryFn: () => referralService.getEarningsSummary(userId as string),
     enabled: !!userId,
   });
@@ -40,7 +41,7 @@ export const useEarningsSummary = () => {
 export const useLeaderboard = (period: LeaderboardPeriod) => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: referralQueryKeys.leaderboard(period),
+    queryKey: userScopedKey(referralQueryKeys.leaderboard(period), userId),
     queryFn: () => referralService.getLeaderboard(period, userId as string),
     enabled: !!userId,
   });

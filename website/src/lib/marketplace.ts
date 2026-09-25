@@ -25,6 +25,14 @@ export type JobSort = keyof typeof JOB_SORTS;
 
 export const JOB_TYPES = ["Full Time", "Part Time", "Internship", "Contract"] as const;
 
+/** `jobs.experience_level` values (migration 0114 check constraint). */
+export const JOB_EXPERIENCE_LEVELS = ["Fresher", "Experienced"] as const;
+export type JobExperienceLevel = (typeof JOB_EXPERIENCE_LEVELS)[number];
+
+export function jobExperience(value: string | undefined): JobExperienceLevel | undefined {
+  return JOB_EXPERIENCE_LEVELS.find((l) => l.toLowerCase() === value?.toLowerCase());
+}
+
 export function parsePage(value: string | undefined): number {
   const n = Number(value);
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;

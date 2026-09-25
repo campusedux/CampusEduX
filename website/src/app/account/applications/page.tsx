@@ -3,6 +3,8 @@ import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { timeAgo } from "@/lib/format";
 import { Badge, EmptyState, Button } from "@/components/ui";
+import { Briefcase } from "lucide-react";
+import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 const STATUS_TONE: Record<string, "primary" | "success" | "danger" | "neutral"> = {
   in_review: "primary",
@@ -32,15 +34,15 @@ export default async function ApplicationsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-ink">Your applications</h1>
+      <AccountPageHeader title="Your applications" description="Jobs you've applied to through CampusEduX, with their latest status." />
       {!applications || applications.length === 0 ? (
         <EmptyState
-          className="mt-6"
+          icon={Briefcase}
           title="No applications yet"
           action={<Button href="/jobs" size="sm">Browse open roles</Button>}
         />
       ) : (
-        <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="card divide-y divide-line overflow-hidden">
           {applications.map((a) => {
             const job = Array.isArray(a.job) ? a.job[0] : a.job;
             return (

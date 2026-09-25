@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, ChevronRight, Crown } from "lucide-react";
 import { Drawer } from "@/components/ui";
+import { Avatar } from "@/components/ui/Avatar";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useSessionProfile } from "@/lib/useSessionProfile";
 import { loginHrefFor } from "@/lib/nav";
 import { DRAWER_LINKS } from "./navConfig";
@@ -33,46 +35,34 @@ export function MobileNav() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink transition hover:bg-surface lg:hidden"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-ink transition hover:bg-surface sm:h-9 sm:w-9 lg:hidden"
       >
         <Menu className="h-5 w-5" />
       </button>
 
       <Drawer open={open} onClose={() => setOpen(false)} side="left">
         {/* Gradient profile header */}
-        <div className="bg-gradient-to-br from-primary to-[#3A28C8] px-5 pb-6 pt-12 text-white">
-          <div className="flex items-start justify-between">
+        <div className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-accent-violet px-5 pb-6 pt-12 text-white">
+          <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
+          <div className="relative flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 border-white/40 bg-white/20">
-                {profile?.avatarUrl ? (
-                  // Raw <img>: the avatar host (Google / GitHub / Supabase) is
-                  // not in next.config `remotePatterns` on purpose. 56px, in a
-                  // fixed-size parent (no CLS), below the fold in the drawer.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={profile.avatarUrl}
-                    alt=""
-                    width={56}
-                    height={56}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="text-lg font-bold">{(profile?.fullName || "G").charAt(0).toUpperCase()}</span>
-                )}
-              </span>
+              <Avatar
+                src={profile?.avatarUrl}
+                name={profile?.fullName || profile?.email || "G"}
+                size="lg"
+                className="border-2 border-white/40"
+              />
               <div className="min-w-0">
                 <div className="truncate text-base font-bold">{profile?.fullName || "Guest"}</div>
                 <div className="truncate text-xs text-white/70">{profile?.email || "Not signed in"}</div>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close menu" className="rounded-lg p-1 hover:bg-white/10">
+            <button onClick={() => setOpen(false)} aria-label="Close menu" className="rounded-lg p-2.5 hover:bg-white/10">
               <X className="h-5 w-5" />
             </button>
           </div>
           {profile?.isPremium && (
-            <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-warning px-3 py-1 text-xs font-semibold text-[#78350F]">
+            <span className="relative mt-3 inline-flex items-center gap-1 rounded-full bg-warning px-3 py-1 text-xs font-semibold text-amber-950">
               <Crown className="h-3 w-3" aria-hidden />
               Premium Member
             </span>
@@ -108,6 +98,13 @@ export function MobileNav() {
               </Link>
             );
           })}
+
+          <div className="my-2 h-px bg-line" />
+
+          <div className="px-3 pb-3 pt-1">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Appearance</p>
+            <ThemeToggle variant="segmented" />
+          </div>
 
           <div className="my-2 h-px bg-line" />
 

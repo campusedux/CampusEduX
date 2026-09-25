@@ -46,7 +46,7 @@ function Row<T extends string>({
             onClick={() => onChange(value === opt ? undefined : opt)}
             className={cn(
               "rounded-lg border px-2.5 py-1 text-xs font-medium transition",
-              value === opt ? "border-primary bg-primary text-white" : "border-line bg-white text-ink-muted hover:border-primary/40",
+              value === opt ? "border-primary bg-primary text-white" : "border-line bg-card text-ink-muted hover:border-primary/40",
             )}
           >
             {labels[opt]}

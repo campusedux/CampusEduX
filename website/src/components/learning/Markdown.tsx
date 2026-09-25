@@ -3,6 +3,8 @@ import Link from "next/link";
 import { CodeBlock } from "./CodeBlock";
 import { slugId } from "@/lib/blogText";
 import { createTopicLinkState, type TopicLinkEntry, type TopicLinkState } from "@/lib/topicLinks";
+import { detectCallout, detectParagraphCallout, detectQuickRevision } from "@/lib/callouts";
+import { Callout, QuickRevision } from "./Callout";
 
 export { slugId } from "@/lib/blogText";
 export { createTopicLinkState } from "@/lib/topicLinks";
@@ -33,6 +35,7 @@ export function Markdown({
   headingLevelOffset = 1,
   topicLinks,
   linkState,
+  callouts = false,
 }: {
   source: string;
   className?: string;
@@ -61,9 +64,15 @@ export function Markdown({
    * (per-call) state when omitted.
    */
   linkState?: TopicLinkState;
+  /**
+   * Render blockquotes that open with a known label (Tip / Note / Warning /
+   * Definition / …, see `@/lib/callouts`) as styled callouts. Opt-in — only
+   * Learning lessons pass it; blog / problem statements are unchanged.
+   */
+  callouts?: boolean;
 }) {
   const linkCtx = buildLinkCtx(topicLinks, linkState);
-  return <div className={className}>{renderBlocks(source ?? "", headingLevelOffset, linkCtx)}</div>;
+  return <div className={className}>{renderBlocks(source ?? "", headingLevelOffset, linkCtx, callouts)}</div>;
 }
 
 // --- topic auto-linking ----------------------------------------------------
@@ -179,7 +188,12 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
 }
 
 // --- blocks --------------------------------------------------------------
-function renderBlocks(src: string, headingLevelOffset = 1, linkCtx: LinkCtx | null = null): ReactNode[] {
+function renderBlocks(
+  src: string,
+  headingLevelOffset = 1,
+  linkCtx: LinkCtx | null = null,
+  callouts = false,
+): ReactNode[] {
   const lines = src.replace(/\r\n/g, "\n").split("\n");
   const out: ReactNode[] = [];
   let i = 0;
@@ -240,6 +254,16 @@ function renderBlocks(src: string, headingLevelOffset = 1, linkCtx: LinkCtx | nu
         buf.push(lines[i].replace(/^>\s?/, ""));
         i += 1;
       }
+      const callout = callouts ? detectCallout(buf.join(" ")) : null;
+      if (callout) {
+        out.push(
+          <Callout key={`b${k++}`} variant={callout.variant} label={callout.label}>
+            {/* No topic auto-links here — plain blockquotes never had them either. */}
+            {renderInline(callout.body, `b${k}`)}
+          </Callout>,
+        );
+        continue;
+      }
       out.push(
         <blockquote key={`b${k++}`} className="my-4 border-l-4 border-primary/30 bg-primary-50/40 py-2 pl-4 pr-3 text-ink-muted">
           {renderInline(buf.join(" "), `b${k}`)}
@@ -272,7 +296,7 @@ function renderBlocks(src: string, headingLevelOffset = 1, linkCtx: LinkCtx | nu
             </thead>
             <tbody>
               {rows.map((r, ri) => (
-                <tr key={ri} className="odd:bg-white even:bg-surface/60">
+                <tr key={ri} className="odd:bg-card even:bg-surface/60">
                   {r.map((c, ci) => (
                     <td key={ci} className="border-b border-line px-3 py-2 text-ink-muted last:border-r-0">
                       {renderInline(c, `td${ri}-${ci}`)}
@@ -330,6 +354,23 @@ function renderBlocks(src: string, headingLevelOffset = 1, linkCtx: LinkCtx | nu
     ) {
       buf.push(lines[i]);
       i += 1;
+    }
+    const revision = callouts ? detectQuickRevision(buf) : null;
+    if (revision) {
+      out.push(
+        <QuickRevision key={`b${k++}`} lines={revision.map((r, ri) => ({ label: r.label, body: renderInline(r.body, `b${k}-r${ri}`) }))} />,
+      );
+      continue;
+    }
+    const paraCallout = callouts ? detectParagraphCallout(buf.join(" ")) : null;
+    if (paraCallout) {
+      out.push(
+        <Callout key={`b${k++}`} variant={paraCallout.variant} label={paraCallout.label} subtle={paraCallout.subtle}>
+          {/* Was a paragraph → keeps the paragraph's topic auto-linking. */}
+          {applyTopicLinks(renderInline(paraCallout.body, `b${k}`), linkCtx, `b${k}`)}
+        </Callout>,
+      );
+      continue;
     }
     out.push(
       <p key={`b${k++}`} className="my-3 leading-7 text-ink-muted">

@@ -23,6 +23,7 @@ export function CompilerToolbar({
   onRunTests,
   onSubmit,
   busy,
+  signInRequired = false,
 }: {
   languages: LanguageDef[];
   languageId: string;
@@ -34,7 +35,10 @@ export function CompilerToolbar({
   onRunTests: () => void;
   onSubmit?: () => void;
   busy: boolean;
+  signInRequired?: boolean;
 }) {
+  const off = busy || signInRequired;
+  const hint = signInRequired ? "Sign in to run code" : undefined;
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#0f172a]/95 px-3 py-2.5 backdrop-blur">
       {/* Language */}
@@ -67,17 +71,17 @@ export function CompilerToolbar({
         </button>
 
         <ToolbarButton icon={RotateCcw} label="Reset" onClick={onReset} disabled={busy} />
-        <ToolbarButton icon={busy ? undefined : Play} label="Run" onClick={onRun} disabled={busy} loading={busy} />
+        <span title={hint} className="inline-flex"><ToolbarButton icon={busy ? undefined : Play} label="Run" onClick={onRun} disabled={off} loading={busy} /></span>
 
         {onSubmit ? (
-          <ToolbarButton icon={busy ? undefined : ListChecks} label="Run Tests" onClick={onRunTests} disabled={busy} loading={busy} />
+          <span title={hint} className="inline-flex"><ToolbarButton icon={busy ? undefined : ListChecks} label="Run Tests" onClick={onRunTests} disabled={off} loading={busy} /></span>
         ) : (
           <button
             type="button"
             onClick={onRunTests}
-            disabled={busy}
-            title="Run all test cases"
-            aria-label="Run all test cases"
+            disabled={off}
+            title={hint ?? "Run all test cases"}
+            aria-label={hint ?? "Run all test cases"}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-600 active:scale-[.98] disabled:pointer-events-none disabled:opacity-60 motion-reduce:transform-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ListChecks className="h-4 w-4" aria-hidden />}
@@ -89,9 +93,9 @@ export function CompilerToolbar({
           <button
             type="button"
             onClick={onSubmit}
-            disabled={busy}
-            title="Submit — run every test case and save the attempt"
-            aria-label="Submit solution"
+            disabled={off}
+            title={hint ?? "Submit — run every test case and save the attempt"}
+            aria-label={hint ?? "Submit solution"}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-600 active:scale-[.98] disabled:pointer-events-none disabled:opacity-60 motion-reduce:transform-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}

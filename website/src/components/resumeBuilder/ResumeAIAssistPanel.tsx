@@ -83,7 +83,7 @@ export default function ResumeAIAssistPanel({
             key={action.label}
             type="button"
             onClick={() => requestSuggestion(action.instruction)}
-            className="flex items-center gap-1 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink hover:border-primary/40 hover:bg-primary-50"
+            className="flex items-center gap-1 rounded-lg border border-line bg-card px-2.5 py-1 text-xs font-medium text-ink hover:border-primary/40 hover:bg-primary-50"
           >
             <Sparkles className="h-3 w-3 text-primary" /> {action.label}
           </button>

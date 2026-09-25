@@ -105,9 +105,9 @@ export default async function InterviewTopicPage({
               ) : null}
 
               {q.important_point ? (
-                <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Important Point</p>
-                  <p className="mt-1 text-sm leading-relaxed text-amber-900">{q.important_point}</p>
+                <div className="mt-3 rounded-xl bg-warning/10 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">Important Point</p>
+                  <p className="mt-1 text-sm leading-relaxed text-ink">{q.important_point}</p>
                 </div>
               ) : null}
             </article>

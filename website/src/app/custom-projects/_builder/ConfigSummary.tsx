@@ -34,7 +34,7 @@ export function ConfigSummary({
   editLabel?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
+    <div className="rounded-2xl border border-line bg-card p-5 shadow-card sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary">{eyebrow}</p>

@@ -39,7 +39,7 @@ export async function ProgressSummary({ gridSlug }: { gridSlug: string }) {
   const totalProblems = topics.reduce((n, t) => n + t.coding_total, 0);
 
   return (
-    <div className="mt-4 rounded-2xl border border-line bg-white p-5 shadow-card">
+    <div className="mt-4 rounded-2xl border border-line bg-card p-5 shadow-card">
       <h2 className="text-sm font-semibold text-ink">Your progress</h2>
       <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-ink-muted">
         <span>
@@ -54,7 +54,7 @@ export async function ProgressSummary({ gridSlug }: { gridSlug: string }) {
 
       {weak.length > 0 ? (
         <div className="mt-3 border-t border-line pt-3">
-          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> Weak topics — worth another look
           </p>
           <ul className="mt-2 flex flex-wrap gap-2">
@@ -62,7 +62,7 @@ export async function ProgressSummary({ gridSlug }: { gridSlug: string }) {
               <li key={t.topic_id}>
                 <Link
                   href={`/learning/${gridSlug}/${t.topic_slug}`}
-                  className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                  className="rounded-full bg-warning/10 px-3 py-1 text-xs font-medium text-amber-800 dark:text-amber-300 hover:bg-warning/20"
                 >
                   {t.topic_title}
                 </Link>
@@ -71,7 +71,7 @@ export async function ProgressSummary({ gridSlug }: { gridSlug: string }) {
           </ul>
         </div>
       ) : (
-        <p className="mt-3 flex items-center gap-1.5 border-t border-line pt-3 text-xs font-medium text-emerald-700">
+        <p className="mt-3 flex items-center gap-1.5 border-t border-line pt-3 text-xs font-medium text-success">
           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> No weak topics right now — nice work.
         </p>
       )}

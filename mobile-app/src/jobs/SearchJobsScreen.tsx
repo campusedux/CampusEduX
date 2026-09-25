@@ -4,10 +4,11 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState, EmptyState } from "@/components/ui";
-import { JobCard } from "@/components/cards";
-import { useAllJobs, useToggleSavedJob, useSavedJobs } from "@/hooks/useJobs";
+import { useAllJobs, useSavedJobs } from "@/hooks/useJobs";
 import { useJobFilterStore } from "@/store/jobFilterStore";
-import type { JobStackParamList, Job } from "@/types";
+import { DEFAULT_JOB_FILTERS } from "@/types";
+import type { JobStackParamList } from "@/types";
+import { JobListingItem } from "./components/JobListingCard";
 
 type Nav = NativeStackNavigationProp<JobStackParamList, "SearchJobs">;
 type Rte = RouteProp<JobStackParamList, "SearchJobs">;
@@ -22,7 +23,7 @@ export function SearchJobsScreen() {
     return () => clearTimeout(t);
   }, [rawQuery]);
 
-  const { filters } = useJobFilterStore();
+  const { filters, setFilters } = useJobFilterStore();
   // `query` is composed in here, never written to useJobFilterStore, so
   // "Reset" in the filter modal can't silently wipe this text box.
   const effectiveFilters = { ...filters, query };
@@ -32,6 +33,12 @@ export function SearchJobsScreen() {
 
   const { data: saved } = useSavedJobs();
   const savedIds = new Set((saved ?? []).map((j) => j.id));
+
+  const activeChips = [
+    filters.category ? { key: "category", label: filters.category, clear: { category: null } } : null,
+    filters.experienceLevel ? { key: "exp", label: filters.experienceLevel, clear: { experienceLevel: null } } : null,
+    filters.workMode ? { key: "mode", label: filters.workMode, clear: { workMode: null } } : null,
+  ].filter((c): c is NonNullable<typeof c> => c !== null);
 
   return (
     <Screen className="px-6">
@@ -60,6 +67,24 @@ export function SearchJobsScreen() {
         </Pressable>
       </View>
 
+      {activeChips.length > 0 && (
+        <View className="flex-row flex-wrap mb-3" style={{ gap: 8 }}>
+          {activeChips.map((c) => (
+            <Pressable
+              key={c.key}
+              onPress={() => setFilters({ ...filters, ...c.clear })}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${c.label} filter`}
+              className="flex-row items-center rounded-full px-3 py-1.5"
+              style={{ backgroundColor: "#EEF2FF" }}
+            >
+              <Text style={{ color: "#4F46E5", fontWeight: "600", fontSize: 13 }}>{c.label}</Text>
+              <Ionicons name="close" size={14} color="#4F46E5" style={{ marginLeft: 6 }} />
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       {!isLoading && !isError && jobs.length > 0 && (
         <Text className="text-gray-400 text-sm mb-3">{jobs.length} jobs found</Text>
       )}
@@ -70,9 +95,17 @@ export function SearchJobsScreen() {
         <ErrorState message="Couldn't load jobs." onRetry={refetch} />
       ) : jobs.length === 0 ? (
         <EmptyState
-          icon="search-outline"
-          title="No jobs found"
-          subtitle={query ? `Nothing matched "${query}"` : "Try a different filter."}
+          icon={filters.category && !query ? "briefcase-outline" : "search-outline"}
+          title={filters.category && !query ? `No openings in ${filters.category} yet` : "No jobs found"}
+          subtitle={
+            query
+              ? `Nothing matched "${query}"`
+              : filters.category
+                ? "New roles are added regularly — check back soon or browse all jobs."
+                : "Try a different filter."
+          }
+          actionLabel={filters.category ? "Browse all jobs" : undefined}
+          onAction={filters.category ? () => setFilters({ ...DEFAULT_JOB_FILTERS, sortBy: "latest" }) : undefined}
         />
       ) : (
         <FlatList
@@ -84,23 +117,13 @@ export function SearchJobsScreen() {
           onEndReachedThreshold={0.4}
           ListFooterComponent={isFetchingNextPage ? <LoadingState label="Loading more..." /> : null}
           renderItem={({ item }) => (
-            <SearchJobItem job={item} isSaved={savedIds.has(item.id)} navigation={navigation} />
+            <View style={{ marginBottom: 12 }}>
+              <JobListingItem job={item} isSaved={savedIds.has(item.id)} />
+            </View>
           )}
         />
       )}
     </Screen>
-  );
-}
-
-function SearchJobItem({ job, isSaved, navigation }: { job: Job; isSaved: boolean; navigation: Nav }) {
-  const toggleSaved = useToggleSavedJob(job.id);
-  return (
-    <JobCard
-      job={job}
-      isSaved={isSaved}
-      onToggleSave={() => toggleSaved.mutate(isSaved)}
-      onPress={(j) => (navigation as any).navigate("JobDetails", { jobId: j.id })}
-    />
   );
 }
 

@@ -14,6 +14,7 @@ import {
   fileExtension,
   resumeStoragePath,
 } from "@/lib/resume";
+import { resolveUploadContentType, withContentType } from "@/lib/uploads";
 import { timeAgo } from "@/lib/format";
 import { Button } from "@/components/ui";
 
@@ -29,7 +30,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const ACCEPT_ATTR = [...RESUME_EXTENSIONS, ...RESUME_MIME_TYPES].join(",");
 
-export default function JobApplyPanel({ jobId }: { jobId: string }) {
+export default function JobApplyPanel({ jobId, externalApply = false }: { jobId: string; externalApply?: boolean }) {
   const [phase, setPhase] = useState<"loading" | "anon" | "ready">("loading");
   const userIdRef = useRef<string | null>(null);
 
@@ -136,9 +137,15 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
         }
         const supabase = createBrowserSupabase();
         const path = resumeStoragePath(userId, file.name);
+        // Explicit, extension-derived type (never octet-stream): the bucket allow-list checks it.
+        const contentType = resolveUploadContentType(file, RESUME_MIME_TYPES);
+        if (!contentType) {
+          setSubmitError("Please choose a PDF, DOC or DOCX file.");
+          return;
+        }
         const { error: uploadError } = await supabase.storage
           .from(RESUME_STORAGE_BUCKET)
-          .upload(path, file, { contentType: file.type || "application/pdf", upsert: true });
+          .upload(path, withContentType(file, contentType), { contentType, upsert: true });
         if (uploadError) {
           setSubmitError(`Upload failed: ${uploadError.message}`);
           return;
@@ -165,9 +172,9 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
   if (phase === "anon") {
     return (
       <div className="mt-10 border-t border-line pt-6">
-        <p className="text-sm text-ink-muted">Sign in to apply for this role or save it for later.</p>
+        <p className="text-sm text-ink-muted">{externalApply ? "Sign in to save this role for later." : "Sign in to apply for this role or save it for later."}</p>
         <div className="mt-3">
-          <Button href={`/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`}>Sign in to apply</Button>
+          <Button href={`/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`}>{externalApply ? "Sign in" : "Sign in to apply"}</Button>
         </div>
       </div>
     );
@@ -193,8 +200,8 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
       {saveError && <p className="mt-2 text-sm text-danger">{saveError}</p>}
 
       <div className="mt-6">
-        {applied ? (
-          <div className="rounded-2xl border border-line bg-white p-4 shadow-card">
+        {externalApply ? null : applied ? (
+          <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
             <div className="font-bold text-ink">Application submitted</div>
             <p className="mt-1 text-sm text-ink-muted">
               Status: {STATUS_LABEL[applied.status] ?? applied.status} · Applied {timeAgo(applied.created_at)}.
@@ -204,7 +211,7 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleApply} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+          <form onSubmit={handleApply} className="rounded-2xl border border-line bg-card p-4 shadow-card">
             <div className="font-bold text-ink">Apply with your resume</div>
 
             {resumes.length > 0 && (
@@ -218,7 +225,7 @@ export default function JobApplyPanel({ jobId }: { jobId: string }) {
               <select
                 value={selectedResumeId}
                 onChange={(e) => setSelectedResumeId(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                className="mt-2 w-full rounded-lg border border-line bg-card px-3 py-2 text-sm"
               >
                 {resumes.map((r) => (
                   <option key={r.id} value={r.id}>

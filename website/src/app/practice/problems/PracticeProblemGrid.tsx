@@ -94,8 +94,8 @@ export function PracticeProblemGrid({
                     <span className="flex items-center gap-1.5 text-xs font-medium text-ink-faint">
                       {isSolved ? (
                         <>
-                          <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
-                          <span className="text-emerald-700">Solved</span>
+                          <Check className="h-3.5 w-3.5 text-success" aria-hidden />
+                          <span className="text-success">Solved</span>
                         </>
                       ) : state === "ready" ? (
                         <>
@@ -126,7 +126,7 @@ export function PracticeProblemGrid({
                       </span>
                     ))}
                     {p.is_premium ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">
+                      <span className="inline-flex items-center gap-1 rounded bg-warning/10 px-1.5 py-0.5 font-semibold text-amber-800 dark:text-amber-300">
                         <Lock className="h-3 w-3" aria-hidden /> Premium
                       </span>
                     ) : null}

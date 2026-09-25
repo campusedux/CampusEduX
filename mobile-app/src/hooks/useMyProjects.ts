@@ -1,3 +1,4 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { myProjectsService } from "@/services/myProjects.service";
 import { useAuthStore } from "@/store/authStore";
@@ -14,7 +15,7 @@ export const myProjectsQueryKeys = {
 export const useOwnedProjects = (filter: OwnershipFilter) => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: myProjectsQueryKeys.owned(filter),
+    queryKey: userScopedKey(myProjectsQueryKeys.owned(filter), userId),
     queryFn: () => myProjectsService.getOwnedProjects(userId as string, filter),
     enabled: !!userId,
   });
@@ -23,7 +24,7 @@ export const useOwnedProjects = (filter: OwnershipFilter) => {
 export const useOwnedProjectDetail = (orderId: string) => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: myProjectsQueryKeys.detail(orderId),
+    queryKey: userScopedKey(myProjectsQueryKeys.detail(orderId), userId),
     queryFn: () => myProjectsService.getOwnedProjectDetail(orderId, userId as string),
     enabled: !!orderId && !!userId,
   });

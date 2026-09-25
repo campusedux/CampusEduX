@@ -1,3 +1,4 @@
+import { performLogoutCleanup } from "@/lib/logoutCleanup";
 import React, { useState } from "react";
 import { View, Text } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -5,7 +6,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button } from "@/components/ui";
 import { notify } from "@/lib/notify";
 import { authService } from "@/services/auth.service";
-import { useAuthStore } from "@/store/authStore";
 
 /**
  * Confirmation screen for logging out (matches the "Are you sure?" modal
@@ -14,7 +14,6 @@ import { useAuthStore } from "@/store/authStore";
  */
 export function LogoutScreen() {
   const navigation = useNavigation();
-  const reset = useAuthStore((s) => s.reset);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -22,7 +21,7 @@ export function LogoutScreen() {
     try {
       await authService.logout();
       // RootNavigator swaps to the auth stack as soon as the store clears.
-      reset();
+      await performLogoutCleanup();
     } catch (error: any) {
       setLoggingOut(false);
       notify("Logout failed", error?.message ?? "Please try again.");

@@ -30,8 +30,8 @@ export function BottomBar({
     <div
       className={cn(
         sticky
-          ? "sticky bottom-0 z-10 -mx-4 mt-8 border-t border-line bg-white/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:rounded-2xl sm:border sm:bg-white sm:px-5 sm:py-4 sm:shadow-card"
-          : "static mx-0 mt-8 rounded-2xl border border-line bg-white px-4 py-3 shadow-card sm:px-5 sm:py-4",
+          ? "sticky bottom-0 z-10 -mx-4 mt-8 border-t border-line bg-card/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:rounded-2xl sm:border sm:bg-card sm:px-5 sm:py-4 sm:shadow-card"
+          : "static mx-0 mt-8 rounded-2xl border border-line bg-card px-4 py-3 shadow-card sm:px-5 sm:py-4",
         className,
       )}
     >

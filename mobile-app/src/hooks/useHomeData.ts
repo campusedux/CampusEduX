@@ -1,3 +1,4 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { homeService } from "@/services/home.service";
@@ -68,8 +69,10 @@ export const useLatestJobs = () => {
   });
 };
 
-export const useNotifications = () =>
-  useQuery({ queryKey: homeQueryKeys.notifications, queryFn: homeService.getNotifications });
+export const useNotifications = () => {
+  const userId = useAuthStore((s) => s.user?.id);
+  return useQuery({ queryKey: userScopedKey(homeQueryKeys.notifications, userId), queryFn: homeService.getNotifications });
+};
 
 export const useOfferBanners = () =>
   useQuery({ queryKey: homeQueryKeys.offers, queryFn: homeService.getOfferBanners });
@@ -77,7 +80,7 @@ export const useOfferBanners = () =>
 export const useReferralSummary = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: homeQueryKeys.referral,
+    queryKey: userScopedKey(homeQueryKeys.referral, userId),
     queryFn: () => homeService.getReferralSummary(userId as string),
     enabled: !!userId,
   });

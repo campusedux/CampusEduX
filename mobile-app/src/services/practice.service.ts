@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/constants/brand";
+import { describeRunFailure } from "@/lib/runFailure";
 import type {
   CodingSubmissionDetail,
   CodingSubmissionRow,
@@ -54,7 +55,7 @@ async function callApi<T>(path: string, body: unknown, opts: { requireAuth?: boo
     data: { session },
   } = await supabase.auth.getSession();
   const token = session?.access_token;
-  if (!token && opts.requireAuth) throw new PracticeApiError("Please sign in to do that.", "auth");
+  if (!token && opts.requireAuth) throw new PracticeApiError("Your session expired — sign in again.", "auth");
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
@@ -73,17 +74,12 @@ async function callApi<T>(path: string, body: unknown, opts: { requireAuth?: boo
   }
 
   const json = await res.json().catch(() => ({}));
-  if (res.status === 429) {
-    const retry = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
-    throw new PracticeApiError(
-      "Too many runs, please wait a minute and try again.",
-      "rate_limit",
-      Number.isFinite(retry) ? retry : undefined,
-    );
+  if (res.status === 401 || res.status === 429 || res.status >= 500) {
+    const f = describeRunFailure(res.status, json, res.headers.get("Retry-After"));
+    throw new PracticeApiError(f.message, f.kind, f.retryAfter);
   }
-  if (res.status === 401) throw new PracticeApiError(json?.error ?? "Please sign in again.", "auth");
   if (!res.ok || json?.ok === false) {
-    throw new PracticeApiError(json?.error ?? "Something went wrong. Please try again.", "server");
+    throw new PracticeApiError(describeRunFailure(res.status, json).message, "server");
   }
   return json as T;
 }

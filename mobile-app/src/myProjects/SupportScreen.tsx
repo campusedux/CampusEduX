@@ -3,6 +3,8 @@ import { View, Text, Pressable, Linking } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "@/components/ui";
+import { notify } from "@/lib/notify";
+import { WHATSAPP_DISPLAY, WHATSAPP_SUPPORT_MESSAGE, whatsappUrl } from "@/constants/contact";
 import { BRAND } from "@/constants/brand";
 
 export function SupportScreen() {
@@ -16,10 +18,13 @@ export function SupportScreen() {
       onPress: () => Linking.openURL(`mailto:${BRAND.supportEmail}`),
     },
     {
-      icon: "call-outline" as const,
-      label: "Call Us",
-      subtitle: "+91 98765 43210",
-      onPress: () => Linking.openURL("tel:+919876543210"),
+      icon: "logo-whatsapp" as const,
+      label: "WhatsApp Support",
+      subtitle: WHATSAPP_DISPLAY,
+      onPress: () =>
+        Linking.openURL(whatsappUrl(WHATSAPP_SUPPORT_MESSAGE)).catch(() =>
+          notify("Unable to open WhatsApp", "Please make sure WhatsApp is installed, or email us instead.")
+        ),
     },
     {
       icon: "chatbox-ellipses-outline" as const,

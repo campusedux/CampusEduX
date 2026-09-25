@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import {
@@ -114,6 +115,8 @@ async function pingWebsiteBlogCache(): Promise<void> {
 // ===========================================================================
 export async function createPost(_p: IdResult, fd: FormData): Promise<IdResult> {
   await requirePermission(MODULE, 'add');
+  const urlErr = urlFieldError(fd, { featured_image: 'Featured image URL', canonical_url: 'Canonical URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const payload = await postPayload(fd);
   if (!payload.title) return { ok: false, error: 'Title is required.' };
@@ -136,6 +139,8 @@ export async function createPost(_p: IdResult, fd: FormData): Promise<IdResult> 
 
 export async function updatePost(id: string, _p: Result, fd: FormData): Promise<Result> {
   await requirePermission(MODULE, 'edit');
+  const urlErr = urlFieldError(fd, { featured_image: 'Featured image URL', canonical_url: 'Canonical URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const payload = await postPayload(fd);
   if (!payload.title) return { ok: false, error: 'Title is required.' };

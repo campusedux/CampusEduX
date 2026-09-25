@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { PurchasedProjectsScreen } from "@/myProjects/PurchasedProjectsScreen";
@@ -20,7 +21,7 @@ const Stack = createNativeStackNavigator<MyProjectsStackParamList>();
  */
 export function MyProjectsNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="PurchasedProjects" component={PurchasedProjectsScreen} />
       <Stack.Screen name="MyProjectDetails" component={ProjectDetailsScreen} />
       <Stack.Screen name="DownloadFiles" component={DownloadFilesScreen} />
