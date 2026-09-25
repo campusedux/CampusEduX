@@ -4,9 +4,10 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, LoadingState, ErrorState } from "@/components/ui";
+import { Screen, ScreenHeader, Card, Button, SkeletonList, ErrorState } from "@/components/ui";
 import { notify } from "@/lib/notify";
 import { useReferralSummary } from "@/hooks/useHomeData";
+import { referralAmountText } from "@/lib/referralAmount";
 import type { HomeStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<HomeStackParamList, "ReferralBanner">;
@@ -30,44 +31,39 @@ export function ReferralBannerScreen() {
 
   return (
     <Screen scroll className="px-6">
-      <View className="flex-row items-center mt-2 mb-4">
-        <Pressable onPress={() => navigation.goBack()} className="mr-3">
-          <Ionicons name="arrow-back" size={22} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-bold text-gray-900">Invite &amp; Earn</Text>
-      </View>
+      <ScreenHeader title="Invite & Earn" onBack={() => navigation.goBack()} />
 
       {isLoading ? (
-        <LoadingState label="Loading your referral details..." />
+        <SkeletonList count={2} hero />
       ) : isError || !data ? (
         <ErrorState message="Couldn't load referral details." onRetry={refetch} />
       ) : (
         <>
-          <View className="flex-row items-center rounded-2xl p-5 mb-6" style={{ backgroundColor: "#4F39F6" }}>
-            <View className="flex-1 pr-3">
-              <Text className="text-white font-bold text-lg mb-1">Refer Friends &amp; Earn</Text>
-              <Text className="text-white/80 text-sm">You both get rewarded!</Text>
-            </View>
-            <Ionicons name="gift" size={44} color="#FBBF24" />
+          <View style={{ marginBottom: 24 }}>
+            <Card variant="gradient" accent="indigo" padding={20}>
+              <View className="flex-row items-center">
+                <View className="flex-1 pr-3">
+                  <Text className="text-white font-bold text-xl mb-1">Refer Friends &amp; Earn</Text>
+                  <Text className="text-white/90 text-sm">Share your code and invite friends</Text>
+                </View>
+                <View className="w-16 h-16 rounded-2xl items-center justify-center" style={{ backgroundColor: "rgba(255,255,255,0.2)" }}>
+                  <Ionicons name="gift" size={34} color="#FBBF24" />
+                </View>
+              </View>
+            </Card>
           </View>
 
-          <Text className="text-gray-500 text-sm mb-2">Your Referral Code</Text>
+          <Text className="text-gray-600 text-sm font-medium mb-2">Your Referral Code</Text>
           <View className="flex-row items-center mb-5" style={{ gap: 10 }}>
-            <View className="flex-1 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50">
+            <View className="flex-1 justify-center border border-dashed border-primary-300 rounded-xl px-4 bg-primary-50" style={{ minHeight: 48 }}>
               <Text className="font-bold text-gray-900 tracking-wider">{data.code || "—"}</Text>
             </View>
-            <Pressable
-              onPress={() => copyCode(data.code)}
-              disabled={!data.code}
-              className="px-5 py-3 rounded-xl bg-primary"
-            >
-              <Text className="text-white font-semibold">Copy</Text>
-            </Pressable>
+            <Button label="Copy" size="sm" leftIcon="copy-outline" onPress={() => copyCode(data.code)} disabled={!data.code} />
           </View>
 
-          <Text className="text-gray-500 text-sm mb-2">Share your link</Text>
+          <Text className="text-gray-600 text-sm font-medium mb-2">Share your link</Text>
           <View className="flex-row items-center mb-8" style={{ gap: 10 }}>
-            <View className="flex-1 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50">
+            <View className="flex-1 justify-center border border-gray-200 rounded-xl px-4 bg-gray-50" style={{ minHeight: 48 }}>
               <Text className="text-gray-700 text-xs" numberOfLines={1}>
                 {data.shareLink || "Referral link will appear here"}
               </Text>
@@ -75,25 +71,25 @@ export function ReferralBannerScreen() {
             <Pressable
               onPress={() => shareReferral(data.shareLink)}
               disabled={!data.shareLink}
-              className="w-11 h-11 rounded-xl items-center justify-center bg-primary"
+              accessibilityRole="button"
+              accessibilityLabel="Share referral link"
+              className={`rounded-xl items-center justify-center bg-primary ${data.shareLink ? "" : "opacity-60"}`}
+              style={{ width: 48, height: 48 }}
             >
-              <Ionicons name="share-social-outline" size={18} color="#fff" />
+              <Ionicons name="share-social-outline" size={20} color="#fff" />
             </Pressable>
           </View>
 
-          <Text className="font-bold text-gray-900 mb-3">Refer &amp; Earn Benefits</Text>
-          <View className="flex-row" style={{ gap: 12 }}>
-            <View className="flex-1 bg-gray-50 rounded-2xl p-4">
-              <Text className="text-primary font-bold text-lg">₹{data.referrerBonus}</Text>
-              <Text className="text-gray-900 font-semibold text-sm mt-1">You Get</Text>
-              <Text className="text-gray-400 text-xs mt-0.5">On successful referral</Text>
-            </View>
-            <View className="flex-1 bg-gray-50 rounded-2xl p-4">
-              <Text className="text-primary font-bold text-lg">{data.refereeDiscountPercent}% OFF</Text>
-              <Text className="text-gray-900 font-semibold text-sm mt-1">Friend Gets</Text>
-              <Text className="text-gray-400 text-xs mt-0.5">On first purchase</Text>
-            </View>
-          </View>
+          {referralAmountText(data) ? (
+            <>
+              <Text className="font-bold text-gray-900 text-lg mb-3">Refer &amp; Earn Benefits</Text>
+              <Card variant="tinted" accent="emerald">
+                <Text className="font-bold text-xl" style={{ color: "#047857" }}>{referralAmountText(data)}</Text>
+                <Text className="text-gray-900 font-semibold text-sm mt-1">You Get</Text>
+                <Text className="text-gray-600 text-xs mt-0.5">Per successful referral</Text>
+              </Card>
+            </>
+          ) : null}
         </>
       )}
     </Screen>

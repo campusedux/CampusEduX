@@ -30,8 +30,8 @@ export function SelectCard({
       className={cn(
         "relative flex flex-col items-start gap-3 rounded-2xl border p-4 text-left transition active:scale-[.99] motion-reduce:transform-none sm:p-5",
         selected
-          ? "border-primary bg-primary-50/60 shadow-card"
-          : "border-line bg-white hover:border-primary/30 hover:bg-surface",
+          ? "border-primary bg-primary-50/60 shadow-card ring-2 ring-primary/20"
+          : "border-line bg-card hover:border-primary/30 hover:bg-surface",
       )}
     >
       {selected && (

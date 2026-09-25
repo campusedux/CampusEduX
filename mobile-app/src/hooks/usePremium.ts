@@ -1,3 +1,4 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
@@ -20,7 +21,7 @@ export const usePremiumFeatures = () =>
 export const useMembership = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: premiumQueryKeys.membership,
+    queryKey: userScopedKey(premiumQueryKeys.membership, userId),
     queryFn: () => premiumService.getMembership(userId as string),
     enabled: !!userId,
   });

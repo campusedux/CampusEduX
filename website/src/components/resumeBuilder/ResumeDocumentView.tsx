@@ -57,7 +57,7 @@ export function ResumeDocumentView({ model, spec, accentColor, density = "screen
   };
 
   return (
-    <div className={className} style={sheetStyle}>
+    <div className={className ? `theme-light ${className}` : "theme-light"} style={sheetStyle}>
       <Header model={model} spec={spec} accent={accent} showAccent={showAccent} />
       <div style={{ padding: spec.header === "accent-band" ? `${t.padding + 4}px ${t.padding + 8}px` : 0 }}>
         {model.blocks.map((block) => (

@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ReferralDashboardScreen } from "@/referral/ReferralDashboardScreen";
@@ -19,7 +20,7 @@ const Stack = createNativeStackNavigator<ReferralStackParamList>();
  */
 export function ReferralNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ReferralDashboard" component={ReferralDashboardScreen} />
       <Stack.Screen name="ShareReferral" component={ShareReferralScreen} />
       <Stack.Screen name="Earnings" component={EarningsScreen} />

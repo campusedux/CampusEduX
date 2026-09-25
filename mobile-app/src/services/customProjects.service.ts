@@ -1,6 +1,12 @@
 import { supabase } from "@/lib/supabase";
 import {
-  CUSTOM_PROJECT_TOKENS,
+  CUSTOM_IMAGE_MIME_TYPES,
+  CUSTOM_UPLOAD_MIME_TYPES,
+  extensionForImageMime,
+  readFileBody,
+  resolveContentType,
+} from "@/lib/uploadMime";
+import {
   type CustomFeature,
   type CustomPlatformPricing,
   type CustomProjectBuilderConfig,
@@ -12,6 +18,7 @@ import {
   type CustomProjectRequest,
   type CustomProjectRequestDetail,
   type CustomProjectType,
+  tokenForType,
   type CustomRequirement,
 } from "@/types";
 
@@ -50,9 +57,11 @@ function mapFeatureRow(row: any): CustomFeature {
     projectLevels: Array.isArray(row.project_levels) ? row.project_levels : [],
     price: Number(row.price) || 0,
     sortOrder: Number(row.sort_order) || 0,
-    // Optional catalog fields (migration 0034) — safe when absent.
+    // Optional catalog fields (migration 0034/0090) — safe when absent.
     level: row.level ?? "standard",
     dependencies: Array.isArray(row.dependencies) ? row.dependencies : [],
+    conflicts: Array.isArray(row.conflicts) ? row.conflicts : [],
+    includedInLevels: Array.isArray(row.included_in_levels) ? row.included_in_levels : [],
     icon: row.icon ?? null,
     imageUrl: row.image_url ?? null,
   };
@@ -91,6 +100,109 @@ function mapMessageRow(row: any): CustomProjectMessage {
 
 // --- pure pricing helpers (no DB) — spec §10 / §36 --------------------
 
+/**
+ * Academic-only Extra Feature price override — mirrors
+ * website/src/lib/customProjects.ts's ACADEMIC_EXTRA_FEATURE_PRICES exactly
+ * (same ids, same values; also duplicated server-side in
+ * mobile-app/supabase/functions/_shared/academicPricing.ts, which is what
+ * create-custom-project-order actually charges from). Keep all three in
+ * sync — the website has a test asserting this
+ * (website/tests/lib/customProjects.test.ts).
+ */
+export const ACADEMIC_EXTRA_FEATURE_PRICES: Record<string, number> = {
+  // Non-advanced (₹40–100) ---------------------------------------------
+  "doc-viva": 40,
+  "media-pdf-upload": 45,
+  "doc-ppt": 45,
+  "auth-google": 50,
+  "pay-history": 50,
+  "notif-inapp": 55,
+  "media-multi-image": 55,
+  "search-filters": 55,
+  "doc-documentation": 55,
+  "doc-srs": 60,
+  "notif-email": 65,
+  "doc-project-report": 70,
+  "auth-otp": 75,
+  "admin-dashboard-basic": 80,
+  "notif-push": 80,
+  "analytics-dashboard": 85,
+  "deploy-web": 85,
+  "deploy-support": 95,
+  // Advanced (₹100–150) --------------------------------------------------
+  "search-advanced": 110,
+  "deploy-apk": 120,
+  "pay-razorpay": 125,
+  "int-rest-api": 130,
+  "doc-academic-package": 150,
+};
+
+/**
+ * The price to charge/display for `feature` given the active project type.
+ * Mirrors website/src/lib/customProjects.ts's priceForFeature exactly. The
+ * app has no "AI-recommended" concept yet (spec: AI understanding step is
+ * mobile-absent) — `isRecommended` is always false here, which matches what
+ * create-custom-project-order computes server-side when the app's draft
+ * (which never sets aiRecommendedFeatureIds) is read.
+ */
+export function priceForFeature(
+  feature: Pick<CustomFeature, "id" | "price">,
+  projectType: CustomProjectType | null,
+  isRecommended: boolean
+): number {
+  const catalogPrice = Number(feature.price) || 0;
+  if (projectType === "academic" && !isRecommended && catalogPrice > 0) {
+    const override = ACADEMIC_EXTRA_FEATURE_PRICES[feature.id];
+    if (override !== undefined) return override;
+  }
+  return catalogPrice;
+}
+
+/**
+ * Enabling `id` may require other features to be on first. Returns the
+ * feature-id list with any missing dependencies added, plus the rows that
+ * got auto-enabled (so the caller can show "X requires Y" once). Pure —
+ * mirrors website/src/lib/customProjects.ts's resolveDependencies exactly.
+ */
+export function resolveDependencies(
+  featureIds: string[],
+  id: string,
+  features: CustomFeature[]
+): { featureIds: string[]; added: CustomFeature[] } {
+  const byId = new Map(features.map((f) => [f.id, f]));
+  const target = byId.get(id);
+  const deps = target?.dependencies ?? [];
+  const added: CustomFeature[] = [];
+  let next = featureIds;
+  for (const depId of deps) {
+    if (next.includes(depId)) continue;
+    const depFeature = byId.get(depId);
+    if (!depFeature) continue;
+    next = [...next, depId];
+    added.push(depFeature);
+  }
+  return { featureIds: next, added };
+}
+
+/**
+ * If enabling `id` would conflict with an already-enabled feature, returns
+ * that conflicting row (conflicts are symmetric — checked both directions
+ * since catalog data may only declare the relationship on one side). Mirrors
+ * website/src/lib/customProjects.ts's findConflict exactly.
+ */
+export function findConflict(featureIds: string[], id: string, features: CustomFeature[]): CustomFeature | null {
+  const byId = new Map(features.map((f) => [f.id, f]));
+  const target = byId.get(id);
+  if (!target) return null;
+  for (const otherId of featureIds) {
+    if (otherId === id) continue;
+    const other = byId.get(otherId);
+    if (!other) continue;
+    if ((target.conflicts ?? []).includes(otherId) || (other.conflicts ?? []).includes(id)) return other;
+  }
+  return null;
+}
+
 /** Features actually offered for this project type + level, sorted for display. */
 export function getFeaturesFor(
   projectType: CustomProjectType | null,
@@ -107,13 +219,62 @@ export function getFeaturesFor(
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+/** Whether `feature` comes free with this type + level (never charged, never toggleable). */
+export function isFeatureIncluded(
+  feature: Pick<CustomFeature, "includedInLevels">,
+  projectType: CustomProjectType | null,
+  projectLevel: CustomProjectLevel | null
+): boolean {
+  if (!projectType || !projectLevel) return false;
+  return (feature.includedInLevels ?? []).includes(`${projectType}:${projectLevel}`);
+}
+
+/** Features offered for this tier split into free-included and paid add-ons. */
+export function splitFeaturesFor(
+  projectType: CustomProjectType | null,
+  projectLevel: CustomProjectLevel | null,
+  features: CustomFeature[]
+): { included: CustomFeature[]; addOnCatalog: CustomFeature[] } {
+  const offered = getFeaturesFor(projectType, projectLevel, features);
+  return {
+    included: offered.filter((f) => isFeatureIncluded(f, projectType, projectLevel)),
+    addOnCatalog: offered.filter((f) => !isFeatureIncluded(f, projectType, projectLevel)),
+  };
+}
+
 /**
- * Base Price + Selected Feature Prices + Platform Charges = Estimated Project
- * Price (spec §10). Computed entirely on the client so a feature tap never hits
- * the database. The token is a fixed per-type constant — never a % of the
- * estimate, never from the features (spec §11).
+ * Add-ons the customer would unlock by switching from Standard to Advanced —
+ * offered for this type at Advanced but not at Standard. Empty on Advanced.
  */
-export function estimatePrice(
+export function getAdvancedOnlyFeatures(
+  projectType: CustomProjectType | null,
+  projectLevel: CustomProjectLevel | null,
+  features: CustomFeature[]
+): CustomFeature[] {
+  if (!projectType || projectLevel !== "standard") return [];
+  return features
+    .filter(
+      (f) =>
+        f.projectTypes.includes(projectType) &&
+        f.projectLevels.includes("advanced") &&
+        !f.projectLevels.includes("standard")
+    )
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * THE single source of truth for every price the builder shows (spec §10):
+ * Base Price + paid add-ons + platform charges = estimated project price.
+ * Included features are free and are never charged even if their id is in
+ * `featureIds` (old drafts). Computed on the client so a tap never hits the
+ * database; create-custom-project-order recomputes the same figure server-side
+ * (parity asserted in tests/unit/services/customProjectsServerParity.test.ts).
+ * The token is a fixed per-type constant and is deducted from the total.
+ */
+export function calculateEstimate(
   config: Pick<
     CustomProjectBuilderConfig,
     "projectType" | "projectLevel" | "platform" | "featureIds"
@@ -128,23 +289,27 @@ export function estimatePrice(
     (p) => p.projectType === projectType && p.projectLevel === projectLevel
   );
   const basePrice = priceRow?.basePrice ?? 0;
+  const platformCharges = platformPricing.find((p) => p.platform === platform)?.charge ?? 0;
 
-  const platformRow = platformPricing.find((p) => p.platform === platform);
-  const platformCharge = platformRow?.charge ?? 0;
+  const { included, addOnCatalog } = splitFeaturesFor(projectType, projectLevel, features);
+  const includedFeatures = included.map((f) => ({ ...f, price: 0 }));
+  const addOns = addOnCatalog
+    .filter((f) => featureIds.includes(f.id))
+    .map((f) => ({ ...f, price: priceForFeature(f, projectType, false) }));
+  const addOnsTotal = round2(addOns.reduce((s, f) => s + f.price, 0));
 
-  const available = getFeaturesFor(projectType, projectLevel, features);
-  const selectedFeatures = available.filter((f) => featureIds.includes(f.id));
-  const featureTotal = selectedFeatures.reduce((s, f) => s + f.price, 0);
-
-  const tokenAmount = projectType ? CUSTOM_PROJECT_TOKENS[projectType] : 0;
+  const total = round2(basePrice + addOnsTotal + platformCharges);
+  const token = tokenForType(projectType);
 
   return {
     basePrice,
-    platformCharge,
-    featureTotal,
-    estimatedTotal: basePrice + featureTotal + platformCharge,
-    tokenAmount,
-    selectedFeatures,
+    includedFeatures,
+    addOns,
+    addOnsTotal,
+    platformCharges,
+    total,
+    token,
+    balanceAfterToken: Math.max(0, round2(total - token)),
   };
 }
 
@@ -183,13 +348,16 @@ export const customProjectsService = {
 
   // --- uploads (private bucket, path <uid>/uploads/<file>) ------------
 
-  async uploadProjectImage(userId: string, fileUri: string): Promise<string> {
-    const ext = (fileUri.split(".").pop() || "jpg").split("?")[0].toLowerCase();
-    const path = `${userId}/uploads/image_${Date.now()}.${ext}`;
-    const blob = await (await fetch(fileUri)).blob();
+  async uploadProjectImage(userId: string, fileUri: string, mimeType?: string | null): Promise<string> {
+    // Bucket allows png/jpeg/webp only (0117/089); the picker re-encodes to JPEG at quality < 1.
+    const { body, hintType } = await readFileBody(fileUri);
+    const contentType =
+      resolveContentType({ mimeType, uri: fileUri, hintType }, CUSTOM_IMAGE_MIME_TYPES) ?? (mimeType ? null : "image/jpeg");
+    if (!contentType) throw new Error("Project image must be a PNG, JPEG or WebP.");
+    const path = `${userId}/uploads/image_${Date.now()}.${extensionForImageMime(contentType)}`;
     const { error } = await supabase.storage
       .from(UPLOADS_BUCKET)
-      .upload(path, blob, { contentType: blob.type || `image/${ext}`, upsert: true });
+      .upload(path, body, { contentType, upsert: true });
     if (error) throw new Error(error.message);
     return path;
   },
@@ -202,15 +370,18 @@ export const customProjectsService = {
   ): Promise<{ path: string; name: string; sizeMb: number }> {
     const safeName = fileName.replace(/[^A-Za-z0-9._-]/g, "_");
     const path = `${userId}/uploads/ref_${Date.now()}_${safeName}`;
-    const blob = await (await fetch(fileUri)).blob();
+    const { body, hintType, size } = await readFileBody(fileUri);
+    // Never octet-stream (not in the bucket allow-list): picker mime -> extension.
+    const contentType = resolveContentType({ name: fileName, uri: fileUri, mimeType, hintType }, CUSTOM_UPLOAD_MIME_TYPES);
+    if (!contentType) throw new Error("That file type isn't accepted. Use PDF, DOC/DOCX, ZIP or PNG/JPEG/WebP.");
     const { error } = await supabase.storage
       .from(UPLOADS_BUCKET)
-      .upload(path, blob, { contentType: mimeType || blob.type || "application/octet-stream", upsert: true });
+      .upload(path, body, { contentType, upsert: true });
     if (error) throw new Error(error.message);
     return {
       path,
       name: fileName,
-      sizeMb: Math.round((blob.size / (1024 * 1024)) * 100) / 100,
+      sizeMb: Math.round((size / (1024 * 1024)) * 100) / 100,
     };
   },
 
@@ -327,7 +498,7 @@ export const customProjectsService = {
       supabase.from("custom_project_requests").select("*").eq("id", requestId).maybeSingle(),
       supabase
         .from("custom_project_request_features")
-        .select("feature_id, feature_name, feature_price, category")
+        .select("feature_id, feature_name, feature_price, category, is_included")
         .eq("request_id", requestId),
       supabase
         .from("custom_project_request_files")
@@ -392,6 +563,7 @@ export const customProjectsService = {
         featureId: f.feature_id,
         featureName: f.feature_name ?? "",
         featurePrice: Number(f.feature_price) || 0,
+        isIncluded: f.is_included === true,
         category: f.category ?? "",
       })),
       referenceFiles: (fileRes.data ?? []).map((f: any) => ({

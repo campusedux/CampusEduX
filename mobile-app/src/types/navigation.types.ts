@@ -37,6 +37,15 @@ export type HomeStackParamList = {
   LatestJobs: undefined;
   ReferralBanner: undefined;
   OfferBanner: undefined;
+  PracticeHub: undefined;
+  PracticeProblems: { category?: string } | undefined;
+  PracticeProblem: { slug: string; title?: string };
+  PracticeCompiler: undefined;
+  PracticeSubmissions: undefined;
+  PracticeSubmission: { id: string };
+  InterviewCategories: undefined;
+  InterviewTopics: { categorySlug: string };
+  InterviewTopic: { categorySlug: string; topicSlug: string };
 };
 
 export type ProjectStackParamList = {
@@ -67,7 +76,6 @@ export type JobStackParamList = {
   CompanyList: undefined;
   CompanyDetails: { companyId: string };
   JobDetails: { jobId: string };
-  ApplyJob: { jobId: string };
   ResumeUpload: { jobId: string };
   SavedJobs: undefined;
   AppliedJobs: undefined;
@@ -145,7 +153,17 @@ export type CustomProjectsStackParamList = {
   BuilderUploads: undefined;
   BuilderEstimate: undefined;
   BuilderPayment: undefined;
-  SubmitSuccess: { requestId: string; requestCode: string; tokenAmount: number; title: string };
+  SubmitSuccess: {
+    requestId: string;
+    requestCode: string;
+    tokenAmount: number;
+    title: string;
+    /** Estimated project price at submit time — for the receipt / balance line. */
+    estimatedTotal: number;
+    /** ISO timestamp of the successful payment. */
+    paidAt: string;
+  };
+  LegalDocument: { docId: LegalDocId };
   SubmitFailed: { message?: string } | undefined;
   MyCustomProjects: undefined;
   CustomProjectDetail: { requestId: string };

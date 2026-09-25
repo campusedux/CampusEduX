@@ -45,11 +45,6 @@ export function AllProjectsScreen() {
         </View>
       </View>
 
-      <CustomProjectBanner
-        onStartProject={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
-        onLearnMore={() => (navigation.getParent() as any)?.navigate("CustomProjects", { screen: "BuilderStart" })}
-      />
-
       <View className="mb-4">
         <FlatList
           horizontal
@@ -70,6 +65,8 @@ export function AllProjectsScreen() {
           }}
         />
       </View>
+
+      <CustomProjectBanner />
 
       {!isLoading && !isError && projects.length > 0 && (
         <View className="flex-row items-center justify-between mb-3">

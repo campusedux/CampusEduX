@@ -1,17 +1,14 @@
 import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/constants";
+import { cleanText, timeAgo, formatSalary, isUsableImageUrl } from "@/lib/homeFormat";
 import { rankByAcademicRelevance, type AcademicProfile } from "@/lib/personalization";
 import type { Project, ProjectCategory, Job, AppNotification, ReferralSummary, OfferBanner } from "@/types";
 import {
   SAMPLE_CATEGORIES,
-  SAMPLE_TRENDING,
   SAMPLE_PREMIUM,
   SAMPLE_BEST_SELLERS,
   SAMPLE_NEW_ARRIVALS,
-  SAMPLE_LATEST_JOBS,
-  SAMPLE_SEARCH_PROJECTS,
   SAMPLE_OFFERS,
-  SAMPLE_REFERRAL,
   buildSampleNotifications,
 } from "@/data/sampleHomeContent";
 
@@ -51,30 +48,60 @@ function mapJobRow(row: any): Job {
 }
 
 /**
+ * Home-only mappers: normalise raw rows into clean display values and return
+ * null for rows that can't be shown (no title / no company) so they're dropped.
+ */
+function mapCleanProject(row: any): Project | null {
+  const title = cleanText(row.title);
+  if (!title) return null;
+  const price = Number(row.price);
+  return {
+    ...mapProjectRow(row),
+    title,
+    categoryName: cleanText(row.category?.name ?? row.category_name),
+    techStack: (Array.isArray(row.tech_stack) ? row.tech_stack : []).map(cleanText).filter(Boolean),
+    price: Number.isFinite(price) ? price : (undefined as unknown as number),
+    thumbnailUrl: isUsableImageUrl(row.thumbnail_url) ? row.thumbnail_url.trim() : null,
+  };
+}
+
+function mapCleanJob(row: any): Job | null {
+  const title = cleanText(row.title);
+  const companyName = cleanText(row.company_name);
+  if (!title || !companyName) return null;
+  const posted = row.posted_at ?? row.created_at;
+  const days = Math.floor((Date.now() - new Date(posted).getTime()) / 86_400_000);
+  return {
+    ...mapJobRow(row),
+    title,
+    companyName,
+    location: cleanText(row.location),
+    salaryRange: formatSalary(row.salary_range),
+    postedAt: timeAgo(posted),
+    isNew: Number.isFinite(days) && days <= 3,
+    companyLogoUrl: isUsableImageUrl(row.company_logo_url) ? row.company_logo_url.trim() : null,
+  };
+}
+
+const notNull = <T,>(v: T | null): v is T => v !== null;
+
+/**
  * Runs a Supabase query and returns its rows.
  *
- * On error (e.g. the table has not been created yet) the sample data is used so
- * the Home screens still match the designs before the backend exists.
- *
- * `fallbackWhenEmpty` controls what happens when the query SUCCEEDS but returns
- * no rows: for shared catalog content (categories, trending, …) we still show
- * sample data so the marketplace never looks dead; for per-user content
- * (notifications) an empty result is real — a new student genuinely has none —
- * so it is passed straight through.
+ * A real empty result is always returned as-is (the screen shows its honest
+ * EmptyState / hides the section). A query failure throws so the hook reports
+ * `isError` (ErrorState + retry). Sample rows are a `__DEV__`-only stand-in
+ * for a failed query — never in a production build.
  */
-async function withFallback<T>(
-  label: string,
-  run: () => Promise<T[]>,
-  sample: T[],
-  fallbackWhenEmpty = true
-): Promise<T[]> {
+async function withFallback<T>(label: string, run: () => Promise<T[]>, sample: T[]): Promise<T[]> {
   try {
-    const rows = await run();
-    if (rows.length > 0) return rows;
-    return fallbackWhenEmpty ? sample : rows;
+    return await run();
   } catch (error) {
-    console.info(`[home.service] ${label}: using sample content (${(error as Error).message})`);
-    return sample;
+    if (__DEV__) {
+      console.info(`[home.service] ${label}: using sample content in dev (${(error as Error).message})`);
+      return sample;
+    }
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 
@@ -99,23 +126,19 @@ export const homeService = {
     );
   },
 
+  /** Real rows only: errors propagate and an empty table yields [] — never sample data. */
   async getTrendingProjects(limit = 5, academic?: AcademicProfile): Promise<Project[]> {
-    return withFallback(
-      "trending",
-      async () => {
-        // Pull a wider slice so branch-relevant projects can surface even when
-        // they aren't in the global top-N by sales, then re-rank + trim.
-        const { data, error } = await supabase
-          .from("projects")
-          .select("*, category:categories(name)")
-          .order("sales_count", { ascending: false })
-          .limit(academic ? Math.max(limit * 4, 20) : limit);
-        if (error) throw new Error(error.message);
-        const ranked = academic ? rankByAcademicRelevance(data ?? [], academic) : data ?? [];
-        return ranked.slice(0, limit).map(mapProjectRow);
-      },
-      SAMPLE_TRENDING
-    );
+    // Pull a wider slice so branch-relevant projects can surface even when
+    // they aren't in the global top-N by sales, then re-rank + trim.
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*, category:categories(name)")
+      .eq("status", "published")
+      .order("sales_count", { ascending: false })
+      .limit(academic ? Math.max(limit * 4, 20) : Math.max(limit * 2, 10));
+    if (error) throw new Error(error.message);
+    const ranked = academic ? rankByAcademicRelevance(data ?? [], academic) : data ?? [];
+    return ranked.map(mapCleanProject).filter(notNull).slice(0, limit);
   },
 
   async getPremiumProjects(limit = 10): Promise<Project[]> {
@@ -168,21 +191,17 @@ export const homeService = {
     );
   },
 
+  /** Real rows only: errors propagate and an empty table yields [] — never sample data. */
   async getLatestJobs(limit = 10, academic?: AcademicProfile): Promise<Job[]> {
-    return withFallback(
-      "latest-jobs",
-      async () => {
-        const { data, error } = await supabase
-          .from("jobs")
-          .select("*")
-          .order("posted_at", { ascending: false })
-          .limit(academic ? Math.max(limit * 3, 20) : limit);
-        if (error) throw new Error(error.message);
-        const ranked = academic ? rankByAcademicRelevance(data ?? [], academic) : data ?? [];
-        return ranked.slice(0, limit).map(mapJobRow);
-      },
-      SAMPLE_LATEST_JOBS
-    );
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("status", "open")
+      .order("posted_at", { ascending: false })
+      .limit(academic ? Math.max(limit * 3, 20) : Math.max(limit * 2, 10));
+    if (error) throw new Error(error.message);
+    const ranked = academic ? rankByAcademicRelevance(data ?? [], academic) : data ?? [];
+    return ranked.map(mapCleanJob).filter(notNull).slice(0, limit);
   },
 
   async getNotifications(): Promise<AppNotification[]> {
@@ -207,10 +226,7 @@ export const homeService = {
           })
         );
       },
-      buildSampleNotifications(),
-      // per-user: a new student has no notifications — show an empty list, not
-      // someone else's sample notifications.
-      false
+      buildSampleNotifications()
     );
   },
 
@@ -245,62 +261,52 @@ export const homeService = {
     );
   },
 
+  /** Real rows only: no match → empty result, error → throws. Never returns sample projects. */
   async searchAll(query: string): Promise<{ projects: Project[]; jobs: Job[] }> {
-    try {
-      const [{ data: projectRows, error: projectError }, { data: jobRows, error: jobError }] = await Promise.all([
-        supabase.from("projects").select("*, category:categories(name)").ilike("title", `%${query}%`).limit(20),
-        supabase.from("jobs").select("*").ilike("title", `%${query}%`).limit(20),
-      ]);
-      if (projectError) throw new Error(projectError.message);
-      if (jobError) throw new Error(jobError.message);
-      const projects = (projectRows ?? []).map(mapProjectRow);
-      const jobs = (jobRows ?? []).map(mapJobRow);
-      if (projects.length > 0 || jobs.length > 0) return { projects, jobs };
-      throw new Error("no rows");
-    } catch {
-      const q = query.trim().toLowerCase();
-      const projects = SAMPLE_SEARCH_PROJECTS.filter((p) => p.title.toLowerCase().includes(q));
-      const jobs = SAMPLE_LATEST_JOBS.filter((j) => j.title.toLowerCase().includes(q));
-      return {
-        projects: projects.length || jobs.length ? projects : SAMPLE_SEARCH_PROJECTS,
-        jobs,
-      };
-    }
+    const [{ data: projectRows, error: projectError }, { data: jobRows, error: jobError }] = await Promise.all([
+      supabase.from("projects").select("*, category:categories(name)").ilike("title", `%${query}%`).limit(20),
+      supabase.from("jobs").select("*").ilike("title", `%${query}%`).limit(20),
+    ]);
+    if (projectError) throw new Error(projectError.message);
+    if (jobError) throw new Error(jobError.message);
+    return { projects: (projectRows ?? []).map(mapProjectRow), jobs: (jobRows ?? []).map(mapJobRow) };
   },
 
+  /**
+   * Per-user and real only. A failed read of the user's own code THROWS (ErrorState
+   * + retry) — no borrowed code or link is ever returned. A new student has a real
+   * referral_codes row (ensure_referral_code trigger, migration 0021) with zeroed
+   * totals. Reward amounts come from reward_settings only; if that row can't be
+   * read they are `null` and the screens hide the amount text.
+   */
   async getReferralSummary(userId: string): Promise<ReferralSummary> {
-    // Per-user (not catalog): only fall back to SAMPLE_REFERRAL on a genuine
-    // query error. A new student has a real referral_codes row (created by the
-    // ensure_referral_code trigger, migration 0021) with zeroed totals.
-    try {
-      const [{ data, error }, { data: reward }] = await Promise.all([
-        supabase
-          .from("referral_codes")
-          .select("code, total_referrals, total_earned")
-          .eq("user_id", userId)
-          .maybeSingle(),
-        // reward_settings has a public SELECT policy (admin 007); drives the
-        // "earn ₹X" copy on the home referral banner instead of a hard-coded 100.
-        supabase
-          .from("reward_settings")
-          .select("bonus_type, bonus_value")
-          .eq("id", 1)
-          .maybeSingle(),
-      ]);
-      if (error) throw new Error(error.message);
-      const code = data?.code ?? "";
-      const referrerBonus =
-        reward && reward.bonus_type !== "percent" ? Number(reward.bonus_value ?? 100) : 100;
-      return {
-        code,
-        shareLink: code ? `${BRAND.referralBaseUrl}/${code}` : "",
-        totalReferrals: data?.total_referrals ?? 0,
-        totalEarned: data?.total_earned ?? 0,
-        referrerBonus,
-        refereeDiscountPercent: 20,
-      };
-    } catch {
-      return SAMPLE_REFERRAL;
-    }
+    const [{ data, error }, rewardRes] = await Promise.all([
+      supabase
+        .from("referral_codes")
+        .select("code, total_referrals, total_earned")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      // reward_settings has a public SELECT policy (admin 007).
+      supabase
+        .from("reward_settings")
+        .select("bonus_type, bonus_value, reward_on_signup, reward_on_first_purchase")
+        .eq("id", 1)
+        .maybeSingle(),
+    ]);
+    if (error) throw new Error(error.message);
+    const reward = rewardRes.error ? null : rewardRes.data;
+    const bonusValue = reward && reward.bonus_value != null ? Number(reward.bonus_value) : null;
+    const validBonus = bonusValue !== null && Number.isFinite(bonusValue);
+    const code = data?.code ?? "";
+    return {
+      code,
+      shareLink: code ? `${BRAND.referralBaseUrl}${code}` : "",
+      totalReferrals: data?.total_referrals ?? 0,
+      totalEarned: data?.total_earned ?? 0,
+      referrerBonus: validBonus && reward?.bonus_type !== "percent" ? bonusValue : null,
+      referrerBonusPercent: validBonus && reward?.bonus_type === "percent" ? bonusValue : null,
+      rewardOnSignup: reward ? !!reward.reward_on_signup : null,
+      rewardOnFirstPurchase: reward ? reward.reward_on_first_purchase ?? true : null,
+    };
   },
 };

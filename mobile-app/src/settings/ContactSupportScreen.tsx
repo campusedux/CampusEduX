@@ -4,6 +4,8 @@ import { notify } from "@/lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button } from "@/components/ui";
+import { WHATSAPP_DISPLAY, WHATSAPP_SUPPORT_MESSAGE, whatsappUrl } from "@/constants/contact";
+import { BRAND } from "@/constants/brand";
 
 export function ContactSupportScreen() {
   const navigation = useNavigation();
@@ -15,7 +17,7 @@ export function ContactSupportScreen() {
       notify("Add a message", "Please describe your issue before submitting.");
       return;
     }
-    const url = `mailto:support@campusedux.app?subject=${encodeURIComponent(
+    const url = `mailto:${BRAND.supportEmail}?subject=${encodeURIComponent(
       "App feedback"
     )}&body=${encodeURIComponent(ticketText.trim())}`;
     try {
@@ -23,7 +25,7 @@ export function ContactSupportScreen() {
       setTicketVisible(false);
       setTicketText("");
     } catch {
-      notify("Couldn't open mail app", "Email us directly at support@campusedux.app.");
+      notify("Couldn't open mail app", `Email us directly at ${BRAND.supportEmail}.`);
     }
   };
 
@@ -46,23 +48,23 @@ export function ContactSupportScreen() {
 
       <Text className="text-gray-400 text-sm mb-3">How can we help you?</Text>
 
-      <Pressable onPress={() => Linking.openURL("mailto:support@campusedux.app")} className="flex-row items-center justify-between border border-gray-100 rounded-2xl p-4 mb-3">
+      <Pressable onPress={() => Linking.openURL(`mailto:${BRAND.supportEmail}`)} className="flex-row items-center justify-between border border-gray-100 rounded-2xl p-4 mb-3">
         <View className="flex-row items-center flex-1">
           <Ionicons name="mail-outline" size={20} color="#4F39F6" />
           <View className="ml-3 flex-1">
             <Text className="font-semibold text-gray-900">Email Us</Text>
-            <Text className="text-gray-400 text-sm mt-0.5">support@campusedux.app</Text>
+            <Text className="text-gray-400 text-sm mt-0.5">{BRAND.supportEmail}</Text>
           </View>
         </View>
         <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
       </Pressable>
 
-      <Pressable onPress={() => Linking.openURL("tel:+919876543210")} className="flex-row items-center justify-between border border-gray-100 rounded-2xl p-4 mb-3">
+      <Pressable onPress={() => Linking.openURL(whatsappUrl(WHATSAPP_SUPPORT_MESSAGE)).catch(() => notify("Unable to open WhatsApp", "Please make sure WhatsApp is installed, or email us instead."))} className="flex-row items-center justify-between border border-gray-100 rounded-2xl p-4 mb-3">
         <View className="flex-row items-center flex-1">
-          <Ionicons name="call-outline" size={20} color="#4F39F6" />
+          <Ionicons name="logo-whatsapp" size={20} color="#4F39F6" />
           <View className="ml-3 flex-1">
-            <Text className="font-semibold text-gray-900">Call Us</Text>
-            <Text className="text-gray-400 text-sm mt-0.5">+91 98765 43210 · Mon - Sat, 10AM - 7PM</Text>
+            <Text className="font-semibold text-gray-900">WhatsApp Support</Text>
+            <Text className="text-gray-400 text-sm mt-0.5">{WHATSAPP_DISPLAY}</Text>
           </View>
         </View>
         <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />

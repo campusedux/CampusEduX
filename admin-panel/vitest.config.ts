@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
  * @testing-library/react later if/when component tests are introduced.
  */
 export default defineConfig({
+  // Component render tests (react-dom/server) need the automatic JSX runtime.
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -1,3 +1,4 @@
+import { userScopedKey } from "@/lib/queryClient";
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Sharing from "expo-sharing";
@@ -31,7 +32,7 @@ export const useTemplateCatalog = () =>
 
 export const useResumeList = () => {
   const userId = useAuthStore((s) => s.user?.id);
-  return useQuery({ queryKey: resumeQueryKeys.list, queryFn: () => resumeService.getResumes(userId as string), enabled: !!userId });
+  return useQuery({ queryKey: userScopedKey(resumeQueryKeys.list, userId), queryFn: () => resumeService.getResumes(userId as string), enabled: !!userId });
 };
 
 export const useResumeDetail = (resumeId: string) =>
@@ -159,7 +160,7 @@ export const useUpdateFreeformSection = (resumeId: string) => {
 export const useMyCustomProjectsForResume = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: resumeQueryKeys.myCustomProjects,
+    queryKey: userScopedKey(resumeQueryKeys.myCustomProjects, userId),
     queryFn: () => resumeService.listMyCustomProjects(userId as string),
     enabled: !!userId,
   });
@@ -212,7 +213,7 @@ export function useDownloadResumePdf(resumeId: string, resumeTitle: string) {
 /** AI writing-assist — calls the website's /api/resume/assist. Never writes to the resume itself; the caller decides whether to accept the suggestion. */
 export const useResumeAssist = () => useMutation({ mutationFn: (input: AssistRequestInput) => resumeAssistService.requestSuggestion(input) });
 
-/** Creates a public share link for a resume; resolves to the full campusedux.app/r/<token> URL. */
+/** Creates a public share link for a resume; resolves to the full www.campusedux.com/r/<token> URL. */
 export const useCreateResumeShare = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useMutation({ mutationFn: (resumeId: string) => resumeService.createShareLink(userId as string, resumeId) });
@@ -221,7 +222,7 @@ export const useCreateResumeShare = () => {
 export const useResumeDownloadHistory = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: resumeQueryKeys.downloadHistory,
+    queryKey: userScopedKey(resumeQueryKeys.downloadHistory, userId),
     queryFn: () => resumeService.getDownloadHistory(userId as string),
     enabled: !!userId,
   });

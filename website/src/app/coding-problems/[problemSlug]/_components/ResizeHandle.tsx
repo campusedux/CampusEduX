@@ -60,7 +60,7 @@ export function ResizeHandle({
           "relative flex items-center justify-center rounded-full border shadow-sm transition-colors duration-150",
           tone === "dark"
             ? "border-white/15 bg-[#1e293b] text-slate-400 group-hover:border-primary-400/60 group-hover:bg-primary-500/20 group-hover:text-primary-200 group-focus-visible:border-primary-300"
-            : "border-line bg-white text-ink-faint group-hover:border-primary/40 group-hover:text-primary group-focus-visible:border-primary group-focus-visible:text-primary",
+            : "border-line bg-card text-ink-faint group-hover:border-primary/40 group-hover:text-primary group-focus-visible:border-primary group-focus-visible:text-primary",
           vertical ? "h-8 w-[18px]" : "h-[18px] w-8",
         )}
       >

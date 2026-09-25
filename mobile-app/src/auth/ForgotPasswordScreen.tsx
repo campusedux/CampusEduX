@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { Text } from "react-native";
-import { notify } from "@/lib/notify";
+import { notify, notifyThen } from "@/lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, Input, Button, AuthHeader } from "@/components/ui";
 import { authService } from "@/services/auth.service";
+import { describeAuthError } from "@/auth/authErrors";
 import { useAuthStore } from "@/store/authStore";
 import { goBackSafely } from "@/navigation/safeNavigation";
 import type { AuthStackParamList } from "@/types";
@@ -27,7 +28,16 @@ export function ForgotPasswordScreen() {
     setError(undefined);
     setSubmitting(true);
     try {
-      await authService.requestPasswordReset(identifier.trim());
+      const channel = await authService.requestPasswordReset(identifier.trim());
+      if (channel === "email-link") {
+        // The reset link opens /reset-password on the website; no OTP step here.
+        notifyThen(
+          "Check your email",
+          "We've sent a link to reset your password.",
+          () => goBackSafely(navigation, "Login")
+        );
+        return;
+      }
       setPendingIdentifier(identifier.trim());
       // Verifying the OTP creates a real session; this flag tells the auth
       // listener not to treat the user as "logged in" until they set a new
@@ -38,7 +48,9 @@ export function ForgotPasswordScreen() {
         identifier: identifier.trim(),
       });
     } catch (err: any) {
-      notify("Something went wrong", err.message ?? "Please try again.");
+      const friendly = describeAuthError(err, "Please try again.");
+      // shouldCreateUser:false makes an unregistered address fail with "Signups not allowed…".
+      notify("Couldn't send code", friendly.kind === "user_not_found" ? "We couldn't find an account with those details." : friendly.message);
     } finally {
       setSubmitting(false);
     }

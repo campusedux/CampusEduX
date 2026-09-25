@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SettingsScreen } from "@/settings/SettingsScreen";
@@ -21,7 +22,7 @@ const Stack = createNativeStackNavigator<SettingsStackParamList>();
 /** Module 11 - Settings, reached from the drawer. */
 export function SettingsNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Theme" component={ThemeScreen} />
       <Stack.Screen name="Language" component={LanguageScreen} />

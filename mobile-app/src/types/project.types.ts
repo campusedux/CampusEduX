@@ -19,6 +19,8 @@ export interface Project {
   isBestSeller: boolean;
   salesCount: number;
   createdAt: string;
+  /** Wishlist only: false = unpublished/removed project shown as a "No longer available" tombstone. */
+  available?: boolean;
 }
 
 export interface ProjectDetail extends Project {

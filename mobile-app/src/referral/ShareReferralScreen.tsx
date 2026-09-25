@@ -6,6 +6,7 @@ import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState } from "@/components/ui";
 import { useReferralOverview } from "@/hooks/useReferral";
+import { describeRewardRule } from "@/services/referral.service";
 
 const SHARE_CHANNELS = [
   { key: "whatsapp", label: "WhatsApp", icon: "logo-whatsapp" as const, color: "#25D366" },
@@ -19,8 +20,12 @@ export function ShareReferralScreen() {
   const navigation = useNavigation();
   const { data, isLoading, isError, refetch } = useReferralOverview();
 
+  // With a known reward rule (admin reward_settings) the message explains it;
+  // when the rule is unknown (null) the message carries NO amount at all —
+  // a default number must never go out in a share.
   const message = data
-    ? `Join me on CampusEduX! Use my referral code ${data.code} to get 20% off your first purchase: ${data.shareLink}`
+    ? `Join me on CampusEduX using my code ${data.code}: ${data.shareLink}` +
+      (data.rewardRule ? `\n\n(${describeRewardRule(data.rewardRule)})` : "")
     : "";
 
   const shareTo = async () => {

@@ -13,6 +13,7 @@ export function PremiumProjectsScreen() {
         title: "Unlock Premium Projects",
         subtitle: "High quality, industry level projects with source code",
         icon: "diamond-outline",
+        accent: "violet",
       }}
       emptyLabel="No premium projects yet"
     />

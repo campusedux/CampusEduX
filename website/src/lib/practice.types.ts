@@ -38,9 +38,9 @@ export function practiceCrumbs(problemTitle: string): { label: string; href?: st
 }
 
 export const DIFFICULTY_PILL_CLASS: Record<string, string> = {
-  Easy: "bg-emerald-50 text-emerald-700",
-  Medium: "bg-amber-50 text-amber-700",
-  Hard: "bg-red-50 text-red-700",
+  Easy: "bg-success/10 text-success",
+  Medium: "bg-warning/10 text-amber-800 dark:text-amber-300",
+  Hard: "bg-danger/10 text-danger",
 };
 
 export interface PracticeCategory {

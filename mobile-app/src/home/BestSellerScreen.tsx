@@ -12,6 +12,7 @@ export function BestSellerScreen() {
         title: "Most Purchased",
         subtitle: "By Our Users",
         icon: "trophy-outline",
+        accent: "amber",
       }}
       emptyLabel="No best sellers yet"
     />

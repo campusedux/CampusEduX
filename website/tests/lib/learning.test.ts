@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { firstTopicOf, flattenTopics, GRID_TYPE_LABEL, type LearningTree } from "@/lib/learning.types";
+import { flattenTopics, GRID_TYPE_LABEL, type LearningTree } from "@/lib/learning.types";
 
 function tree(sections: { slug: string; topics: string[] }[]): LearningTree {
   return {
@@ -19,18 +19,6 @@ function tree(sections: { slug: string; topics: string[] }[]): LearningTree {
     })),
   };
 }
-
-describe("firstTopicOf", () => {
-  it("returns the first topic of the first non-empty section", () => {
-    const r = firstTopicOf(tree([{ slug: "empty", topics: [] }, { slug: "basics", topics: ["Intro", "Vars"] }]));
-    expect(r?.sectionSlug).toBe("basics");
-    expect(r?.topic.title).toBe("Intro");
-  });
-
-  it("returns null when the whole tree has no topics", () => {
-    expect(firstTopicOf(tree([{ slug: "a", topics: [] }]))).toBeNull();
-  });
-});
 
 describe("flattenTopics", () => {
   it("flattens in section then topic order and pairs each topic with its section", () => {

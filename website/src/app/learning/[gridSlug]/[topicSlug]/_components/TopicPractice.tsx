@@ -25,7 +25,7 @@ export async function TopicPractice({ gridSlug, topicSlug }: { gridSlug: string;
           </h2>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {mock_tests.map((t) => (
-              <li key={t.id} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+              <li key={t.id} className="rounded-2xl border border-line bg-card p-4 shadow-card">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-ink">{t.title}</span>
                   {t.is_premium ? (
@@ -60,7 +60,7 @@ export async function TopicPractice({ gridSlug, topicSlug }: { gridSlug: string;
           </h2>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {coding_problems.map((p) => (
-              <li key={p.id} className="rounded-2xl border border-line bg-white p-4 shadow-card">
+              <li key={p.id} className="rounded-2xl border border-line bg-card p-4 shadow-card">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-ink">{p.title}</span>
                   {p.is_premium ? (

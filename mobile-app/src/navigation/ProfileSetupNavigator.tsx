@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SelectCourseScreen } from "@/auth/SelectCourseScreen";
@@ -37,7 +38,7 @@ export function ProfileSetupNavigator() {
   const user = useAuthStore((s) => s.user);
 
   return (
-    <Stack.Navigator
+    <Stack.Navigator screenLayout={boundaryScreenLayout}
       screenOptions={{ headerShown: false }}
       initialRouteName={resumeProfileSetupStep(user)}
     >

@@ -8,6 +8,9 @@ interface CircularProgressProps {
   strokeWidth?: number;
   color?: string;
   trackColor?: string;
+  /** Centre label colours (default: the classic light-mode grays). */
+  labelColor?: string;
+  sublabelColor?: string;
   label?: string;
   sublabel?: string;
 }
@@ -23,6 +26,8 @@ export function CircularProgress({
   strokeWidth = 9,
   color = "#4F39F6",
   trackColor = "#E5E7EB",
+  labelColor,
+  sublabelColor,
   label,
   sublabel,
 }: CircularProgressProps) {
@@ -47,10 +52,10 @@ export function CircularProgress({
           strokeLinecap="round"
         />
       </Svg>
-      <Text className="font-bold text-gray-900" style={{ fontSize: size * 0.22 }}>
+      <Text className="font-bold text-gray-900" style={{ fontSize: size * 0.22, ...(labelColor ? { color: labelColor } : null) }}>
         {label ?? `${Math.round(clamped)}%`}
       </Text>
-      {sublabel && <Text className="text-gray-400" style={{ fontSize: size * 0.09 }}>{sublabel}</Text>}
+      {sublabel && <Text className="text-gray-400" style={{ fontSize: size * 0.09, ...(sublabelColor ? { color: sublabelColor } : null) }}>{sublabel}</Text>}
     </View>
   );
 }

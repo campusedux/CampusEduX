@@ -3,10 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import type { UploadedFile } from '@/components/ui/UploadDropzone';
-import { FEATURE_LEVELS } from '@/lib/custom-projects/constants';
+import { FEATURE_LEVELS, INCLUDED_KEYS } from '@/lib/custom-projects/constants';
 
 type Result = { ok: boolean; error?: string };
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -101,6 +102,8 @@ export async function markInboxRead(inboxId: string): Promise<Result> {
 
 export async function saveDelivery(requestId: string, _prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('custom_projects', 'edit');
+  const urlErr = urlFieldError(fd, { demo_url: 'Demo URL' });
+  if (urlErr) return { ok: false, error: urlErr };
   const supabase = createClient();
   const { error } = await supabase
     .from('custom_project_deliveries')
@@ -205,6 +208,9 @@ function parseFeatureForm(fd: FormData):
   const category = str(fd, 'category');
   if (!category) return { ok: false, error: 'Category is required.' };
 
+  const urlErr = urlFieldError(fd, { image_url: 'Image URL' });
+  if (urlErr) return { ok: false, error: urlErr };
+
   const project_types = targetArray(fd, 'project_types', TYPES);
   if (project_types.length === 0) return { ok: false, error: 'Pick at least one project type.' };
 
@@ -217,6 +223,19 @@ function parseFeatureForm(fd: FormData):
   if (!Number.isFinite(price) || price < 0) return { ok: false, error: 'Price cannot be negative.' };
 
   const project_levels = targetArray(fd, 'project_levels', LEVELS);
+  const offeredLevels = project_levels.length ? project_levels : [...LEVELS];
+
+  const included_in_levels = targetArray(fd, 'included_in_levels', INCLUDED_KEYS);
+  for (const key of included_in_levels) {
+    const [t, l] = key.split(':');
+    if (!project_types.includes(t) || !offeredLevels.includes(l)) {
+      return { ok: false, error: `Included for ${key} but the feature is not offered for that type and level.` };
+    }
+    // Advanced must never include less than Standard.
+    if (l === 'standard' && !included_in_levels.includes(`${t}:advanced`)) {
+      return { ok: false, error: `Included in ${t} Standard must also be included in ${t} Advanced.` };
+    }
+  }
   const dependencies = fd
     .getAll('dependencies')
     .map(String)
@@ -231,6 +250,7 @@ function parseFeatureForm(fd: FormData):
       project_types,
       // never store an empty tier array — that would hide the feature everywhere
       project_levels: project_levels.length ? project_levels : ['standard', 'advanced'],
+      included_in_levels,
       level,
       price,
       icon: str(fd, 'icon') || null,

@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { authService } from "@/services/auth.service";
+import { authService, SessionInvalidError } from "@/services/auth.service";
+import { performLogoutCleanup } from "@/lib/logoutCleanup";
+import { reportError } from "@/lib/errorReporting";
 import { legalService } from "@/services/legal.service";
 import { useAuthStore, isAcademicComplete } from "@/store/authStore";
 import {
@@ -8,7 +10,6 @@ import {
   STORAGE_KEYS,
   getCachedProfile,
   setCachedProfile,
-  clearCachedProfile,
 } from "@/lib/storage";
 import type { UserProfile } from "@/types";
 
@@ -36,10 +37,23 @@ export function useAuthBootstrap() {
   const setOnboardingComplete = useAuthStore((s) => s.setOnboardingComplete);
   const setProfileSetupComplete = useAuthStore((s) => s.setProfileSetupComplete);
   const setRecoveringPassword = useAuthStore((s) => s.setRecoveringPassword);
-  const reset = useAuthStore((s) => s.reset);
 
   useEffect(() => {
     let mounted = true;
+    // Id of the account whose data is currently in the client caches; lets us
+    // wipe per-user state if a different account signs in without a SIGNED_OUT.
+    let activeUserId: string | null = null;
+
+    /** The auth user is gone / the JWT is dead: end the session and wipe local state. */
+    async function endInvalidSession() {
+      activeUserId = null;
+      try {
+        await authService.logout();
+      } catch {
+        // Network down or already signed out — local wipe below is what matters.
+      }
+      await performLogoutCleanup();
+    }
 
     async function bootstrap() {
       try {
@@ -54,9 +68,10 @@ export function useAuthBootstrap() {
 
         if (!session?.user) {
           setUser(null);
-          await clearCachedProfile();
+          await performLogoutCleanup();
           return;
         }
+        activeUserId = session.user.id;
 
         // Seed from cache immediately so academic details are on screen even
         // before / without the network round-trip.
@@ -78,6 +93,11 @@ export function useAuthBootstrap() {
           // Register checkbox; this is its durable record). Non-blocking.
           void legalService.ensureConsentRecorded();
         } catch (error) {
+          if (error instanceof SessionInvalidError) {
+            // Deleted / revoked account: do not keep browsing on a cached profile.
+            await endInvalidSession();
+            return;
+          }
           // Offline or transient: keep the cached profile for this user rather
           // than bouncing them to Login.
           if (cachedProfile?.id !== session.user.id) {
@@ -105,12 +125,19 @@ export function useAuthBootstrap() {
       }
 
       if (event === "SIGNED_OUT" || !session?.user) {
-        if (store.isAuthenticated || store.user) {
-          reset();
-          await clearCachedProfile();
+        if (event === "SIGNED_OUT" || store.isAuthenticated || store.user) {
+          activeUserId = null;
+          await performLogoutCleanup();
         }
         return;
       }
+
+      // A different account signed in without an intervening SIGNED_OUT
+      // (e.g. Google account switch): never let it see the previous user's data.
+      if (event === "SIGNED_IN" && activeUserId && activeUserId !== session.user.id) {
+        await performLogoutCleanup();
+      }
+      if (event === "SIGNED_IN") activeUserId = session.user.id;
 
       // A session exists mid password-reset (the OTP step created it) — leave
       // the user on the reset screen until they set a new password.
@@ -127,7 +154,11 @@ export function useAuthBootstrap() {
           await setCachedProfile(profile);
           void legalService.ensureConsentRecorded();
         } catch (error) {
-          console.error("onAuthStateChange: profile load failed:", error);
+          if (error instanceof SessionInvalidError) {
+            await endInvalidSession();
+            return;
+          }
+          reportError(error, { source: "onAuthStateChange:profile-load" });
         }
         return;
       }
@@ -141,7 +172,11 @@ export function useAuthBootstrap() {
           store.setUser(profile);
           await setCachedProfile(profile);
         } catch (error) {
-          console.error("onAuthStateChange: profile refresh failed:", error);
+          if (error instanceof SessionInvalidError) {
+            await endInvalidSession();
+            return;
+          }
+          reportError(error, { source: "onAuthStateChange:profile-refresh" });
         }
       }
     });

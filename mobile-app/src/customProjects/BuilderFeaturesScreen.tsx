@@ -1,152 +1,171 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, TextInput, Pressable } from "react-native";
+import { View, Text, TextInput, Pressable, ScrollView } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { LoadingState, ErrorState } from "@/components/ui";
-import { useCustomFeatures, useCustomPricing } from "@/hooks/useCustomProjects";
-import { estimatePrice, getFeaturesFor } from "@/services/customProjects.service";
+import { ErrorState } from "@/components/ui";
+import { SkeletonList } from "@/components/ui/SkeletonLoader";
+import { isFeatureIncluded, priceForFeature } from "@/services/customProjects.service";
 import { useBuilderStore } from "./builderStore";
-import { WizardScreen, rupees } from "./components/wizard";
+import { useBuilderEstimate } from "./useBuilderEstimate";
+import { WizardScreen } from "./components/wizard";
+import { FeatureIncludedList } from "./components/FeatureIncludedList";
+import { AddOnCard } from "./components/AddOnCard";
+import { InfoTooltip } from "./components/InfoTooltip";
+import { LEVEL_LABEL, TERMS } from "./components/builderCopy";
+import { rupees } from "./components/format";
 import type { CustomFeature, CustomProjectsStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<CustomProjectsStackParamList, "BuilderFeatures">;
 
+const ALL = "All";
+
 export function BuilderFeaturesScreen() {
   const navigation = useNavigation<Nav>();
-  const featuresQ = useCustomFeatures();
-  const pricingQ = useCustomPricing();
-  const config = useBuilderStore((s) => s.config);
+  const { config, estimate, included, addOnCatalog, lockedFeatures, allFeatures, isLoading, isError, refetch } = useBuilderEstimate();
   const toggleFeature = useBuilderStore((s) => s.toggleFeature);
-  const pruneFeatures = useBuilderStore((s) => s.pruneFeatures);
+  const { projectType, projectLevel } = config;
 
   const [rawSearch, setRawSearch] = useState("");
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState(ALL);
   useEffect(() => {
-    const t = setTimeout(() => setSearch(rawSearch.trim().toLowerCase()), 250);
+    const next = rawSearch.trim().toLowerCase();
+    if (next === search) return;
+    const t = setTimeout(() => setSearch(next), 250);
     return () => clearTimeout(t);
-  }, [rawSearch]);
+  }, [rawSearch, search]);
 
-  const available = useMemo(
-    () => getFeaturesFor(config.projectType, config.projectLevel, featuresQ.data ?? []),
-    [config.projectType, config.projectLevel, featuresQ.data]
+  const categories = useMemo(
+    () => [ALL, ...Array.from(new Set([...addOnCatalog, ...lockedFeatures].map((f) => f.category)))],
+    [addOnCatalog, lockedFeatures]
   );
 
-  // Drop any previously-picked feature that isn't valid for the current tier (§37 safe).
-  useEffect(() => {
-    if (available.length) pruneFeatures(available.map((f) => f.id));
-  }, [available, pruneFeatures]);
+  const matches = (f: CustomFeature) =>
+    (category === ALL || f.category === category) &&
+    (!search || f.name.toLowerCase().includes(search) || f.description.toLowerCase().includes(search));
+  const visibleAddOns = addOnCatalog.filter(matches);
+  const visibleLocked = lockedFeatures.filter(matches);
 
-  const nameById = useMemo(
-    () => new Map((featuresQ.data ?? []).map((f) => [f.id, f.name])),
-    [featuresQ.data]
-  );
+  // "Also adds" — dependencies that are paid; ones already included are satisfied for free.
+  const nameById = useMemo(() => new Map(allFeatures.map((f) => [f.id, f])), [allFeatures]);
+  const requiresFor = (f: CustomFeature): string[] =>
+    (f.dependencies ?? [])
+      .map((d) => nameById.get(d))
+      .filter((d): d is CustomFeature => !!d && !isFeatureIncluded(d, projectType, projectLevel) && !config.featureIds.includes(d.id))
+      .map((d) => d.name);
 
-  const grouped = useMemo(() => {
-    const q = search;
-    const rows = q
-      ? available.filter(
-          (f) => f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q)
-        )
-      : available;
-    const map = new Map<string, CustomFeature[]>();
-    for (const f of rows) {
-      const list = map.get(f.category) ?? [];
-      list.push(f);
-      map.set(f.category, list);
-    }
-    return [...map.entries()];
-  }, [available, search]);
-
-  const estimate = useMemo(
-    () =>
-      estimatePrice(
-        config,
-        pricingQ.data?.pricing ?? [],
-        pricingQ.data?.platformPricing ?? [],
-        featuresQ.data ?? []
-      ),
-    [config, pricingQ.data, featuresQ.data]
-  );
-
-  if (featuresQ.isLoading || pricingQ.isLoading) return <LoadingState label="Loading features…" />;
-  if (featuresQ.isError || pricingQ.isError) {
-    return <ErrorState message="Couldn't load the feature catalog." onRetry={featuresQ.refetch} />;
-  }
+  const levelLabel = projectLevel ? LEVEL_LABEL[projectLevel] : "";
+  const nothingToAdd = addOnCatalog.length === 0 && lockedFeatures.length === 0;
 
   return (
     <WizardScreen
       step={5}
-      title="Select features"
-      subtitle="Only features suited to your project type and level are shown."
+      title="Features"
+      helper="See what already comes with your project, then add any extras you want."
       onBack={() => navigation.goBack()}
       onNext={() => navigation.navigate("BuilderUploads")}
-      footerExtra={
-        <View className="flex-row justify-between items-center mb-3">
-          <Text className="text-gray-500">
-            {config.featureIds.length} selected
-          </Text>
-          <Text className="text-gray-900 font-semibold">Estimate {rupees(estimate.estimatedTotal)}</Text>
-        </View>
-      }
+      nextLabel="Continue to uploads"
+      nextDisabled={isError}
     >
-      <View className="flex-row items-center rounded-xl border border-gray-200 bg-white px-3 mb-4" style={{ height: 46 }}>
-        <Ionicons name="search" size={18} color="#9CA3AF" />
-        <TextInput
-          value={rawSearch}
-          onChangeText={setRawSearch}
-          placeholder="Search features"
-          placeholderTextColor="#9CA3AF"
-          className="flex-1 ml-2 text-base text-gray-900"
-        />
-      </View>
-
-      {grouped.length === 0 ? (
-        <Text className="text-gray-400 text-center py-8">No features match “{rawSearch}”.</Text>
+      {isLoading ? (
+        <SkeletonList count={4} />
+      ) : isError ? (
+        <ErrorState message="Couldn't load the feature catalog." onRetry={refetch} />
       ) : (
-        grouped.map(([category, rows]) => (
-          <View key={category} className="mb-4">
-            <Text className="text-gray-500 text-xs font-bold uppercase tracking-wide mb-2">{category}</Text>
-            {rows.map((f) => {
-              const selected = config.featureIds.includes(f.id);
-              return (
-                <Pressable
-                  key={f.id}
-                  onPress={() => toggleFeature(f.id)}
-                  className="flex-row items-center rounded-xl border px-3 py-3 mb-2"
-                  style={{ borderColor: selected ? "#4F39F6" : "#E5E7EB", backgroundColor: selected ? "#EEF0FF" : "#FFFFFF" }}
-                >
-                  <Ionicons
-                    name={selected ? "checkbox" : "square-outline"}
-                    size={20}
-                    color={selected ? "#4F39F6" : "#D1D5DB"}
+        <>
+          {/* SECTION A — included, free, read-only */}
+          <FeatureIncludedList features={included} levelLabel={levelLabel} />
+
+          {/* SECTION B — optional, paid */}
+          <View className="mt-2">
+            <View className="flex-row items-center">
+              <Ionicons name="add-circle-outline" size={20} color="#4F39F6" />
+              <Text className="text-gray-900 font-bold text-base ml-2">Add extra features</Text>
+              <InfoTooltip label={TERMS.addOn.label} text={TERMS.addOn.text} />
+            </View>
+            <Text className="text-gray-600 text-sm mt-1 mb-3">
+              Want more? Add any of these. Each price is added to your estimate.
+            </Text>
+
+            {nothingToAdd ? (
+              <View className="rounded-2xl border border-gray-100 bg-white p-5 items-center">
+                <Ionicons name="checkmark-done-circle-outline" size={32} color="#16A34A" />
+                <Text className="text-gray-900 font-semibold mt-2">No extra features for this project</Text>
+                <Text className="text-gray-500 text-sm text-center mt-1">
+                  Everything available for a {levelLabel} {projectType} project is already included.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View className="flex-row items-center rounded-xl border border-gray-200 bg-white px-3 mb-3" style={{ height: 48 }}>
+                  <Ionicons name="search" size={18} color="#9CA3AF" />
+                  <TextInput
+                    value={rawSearch}
+                    onChangeText={setRawSearch}
+                    placeholder="Search add-on features"
+                    placeholderTextColor="#9CA3AF"
+                    accessibilityLabel="Search add-on features"
+                    className="flex-1 ml-2 text-base text-gray-900"
                   />
-                  <View className="flex-1 ml-3">
-                    <View className="flex-row items-center flex-wrap">
-                      <Text className={`font-medium ${selected ? "text-primary" : "text-gray-900"}`}>{f.name}</Text>
-                      {f.level && f.level !== "standard" ? (
-                        <Text className="text-[10px] font-bold uppercase tracking-wide text-gray-400 ml-2">
-                          {f.level}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {f.description ? (
-                      <Text className="text-gray-400 text-xs mt-0.5">{f.description}</Text>
-                    ) : null}
-                    {f.dependencies && f.dependencies.length > 0 ? (
-                      <Text className="text-xs mt-1" style={{ color: "#B45309" }}>
-                        Requires: {f.dependencies.map((d) => nameById.get(d) ?? d).join(", ")}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Text className="text-gray-700 text-sm font-semibold ml-2">
-                    {f.price > 0 ? `+ ${rupees(f.price)}` : "Free"}
+                </View>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3" contentContainerStyle={{ gap: 8 }}>
+                  {categories.map((c) => {
+                    const on = category === c;
+                    return (
+                      <Pressable
+                        key={c}
+                        onPress={() => setCategory(c)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
+                        accessibilityLabel={`Filter: ${c}`}
+                        className="rounded-full px-4 items-center justify-center"
+                        style={{ minHeight: 44, backgroundColor: on ? "#4F39F6" : "#F3F4F6" }}
+                      >
+                        <Text className={`text-sm font-medium ${on ? "text-white" : "text-gray-700"}`}>{c}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                <View className="flex-row items-center justify-between rounded-xl px-3 mb-3" style={{ minHeight: 44, backgroundColor: "#EEF0FF" }} accessibilityLiveRegion="polite">
+                  <Text className="text-primary font-semibold">
+                    {estimate.addOns.length} add-on{estimate.addOns.length === 1 ? "" : "s"}
                   </Text>
-                </Pressable>
-              );
-            })}
+                  <Text className="text-primary font-bold">+{rupees(estimate.addOnsTotal)}</Text>
+                </View>
+
+                {visibleAddOns.length === 0 && visibleLocked.length === 0 ? (
+                  <Text className="text-gray-500 text-center py-6">No add-on features match your search.</Text>
+                ) : null}
+
+                {visibleAddOns.map((f) => (
+                  <AddOnCard
+                    key={f.id}
+                    feature={f}
+                    price={priceForFeature(f, projectType, false)}
+                    selected={config.featureIds.includes(f.id)}
+                    onToggle={() => toggleFeature(f.id, allFeatures)}
+                    requires={requiresFor(f)}
+                  />
+                ))}
+
+                {visibleLocked.map((f) => (
+                  <AddOnCard
+                    key={f.id}
+                    feature={f}
+                    price={priceForFeature(f, projectType, false)}
+                    selected={false}
+                    onToggle={() => undefined}
+                    locked={{ includedInAdvanced: isFeatureIncluded(f, projectType, "advanced") }}
+                    onSwitchLevel={() => navigation.popTo("BuilderLevel")}
+                  />
+                ))}
+              </>
+            )}
           </View>
-        ))
+        </>
       )}
     </WizardScreen>
   );

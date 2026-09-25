@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { compilerAuthRequired, resolveApiCaller } from "@/lib/apiAuth";
+import { limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { runRequestSchema } from "@/lib/compiler/schema";
 import { runCode } from "@/lib/compiler/run";
-import { checkRateLimit } from "@/lib/compiler/rateLimit";
 import { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/compiler/limits";
 
 /**
@@ -12,37 +12,25 @@ import { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/compiler/limits";
  *
  * User code never runs in this process. Provider keys are read from env here and
  * never leave the server. Every request is Zod-validated, size-capped, timed out
- * and best-effort rate-limited. See `src/lib/compiler/*`.
+ * and rate-limited (durable, per user). See `src/lib/compiler/*`.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function clientKey(req: Request): string {
-  const fwd = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
-  const ip = fwd || req.headers.get("x-real-ip") || "";
-  if (ip) return `ip:${ip}`;
-  return `ua:${(req.headers.get("user-agent") ?? "unknown").slice(0, 100)}`;
-}
-
 export async function POST(req: Request) {
-  // Optional gate — off by default so the compiler is usable straight from a
-  // tutorial link without signing in.
-  if ((process.env.COMPILER_REQUIRE_AUTH || "").toLowerCase() === "true") {
-    const supabase = createAuthedServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ ok: false, error: "Sign in to run code." }, { status: 401 });
-    }
+  const caller = await resolveApiCaller(req);
+  if (!caller && compilerAuthRequired()) {
+    return NextResponse.json({ ok: false, error: "Sign in to run code." }, { status: 401 });
   }
 
-  const rate = checkRateLimit(clientKey(req), RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
-  if (!rate.ok) {
-    return NextResponse.json(
-      { ok: false, error: "You're running code very quickly. Please wait a moment." },
-      { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
+  // Durable per-user limiter (Postgres). Anonymous callers only exist when auth is
+  // explicitly disabled; the limiter needs auth.uid(), so they are unthrottled here.
+  if (caller) {
+    const limited = limitResponse(
+      await rlHit(caller.supabase, "compiler-run", RATE_LIMIT_MAX, Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)),
+      { message: "You're running code very quickly. Please wait a moment." },
     );
+    if (limited) return limited;
   }
 
   let json: unknown;

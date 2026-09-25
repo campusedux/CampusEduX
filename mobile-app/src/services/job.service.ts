@@ -1,4 +1,7 @@
+import { compactRows } from "@/lib/safeRows";
 import { supabase } from "@/lib/supabase";
+import { assertResumeSize } from "@/lib/resumeFile";
+import { RESUME_MIME_TYPES, readFileBody, resolveContentType } from "@/lib/uploadMime";
 import { rankByAcademicRelevance, hasAcademicSignal, type AcademicProfile } from "@/lib/personalization";
 import type {
   Job,
@@ -9,6 +12,8 @@ import type {
   JobApplication,
   ApplicationStage,
   JobAlertPreferences,
+  JobCategoryCount,
+  JobDashboardStats,
 } from "@/types";
 import {
   SAMPLE_JOBS,
@@ -26,42 +31,54 @@ const JOB_SELECT = "*, company:companies(name, logo_url)";
 const PAGE_SIZE = 20;
 
 /**
- * Returns `run()`'s rows, or the sample rows when the query fails.
- *
- * `fallbackWhenEmpty` (default true) keeps sample content for shared catalog
- * reads (job listings, companies). Pass `false` for per-user reads (saved jobs,
- * applications, uploaded résumés) where an empty result is correct for a new
- * student.
+ * Returns `run()`'s rows. A real empty result is always returned as-is (an
+ * honest empty state) — sample rows are a __DEV__-only stand-in for a genuine
+ * query failure, never for "no rows", and never in production (spec: no
+ * sample/fake data in production builds).
  */
-async function orSample<T>(
-  label: string,
-  run: () => Promise<T[]>,
-  sample: T[],
-  fallbackWhenEmpty = true
-): Promise<T[]> {
+async function orSample<T>(label: string, run: () => Promise<T[]>, sample: T[]): Promise<T[]> {
   try {
-    const rows = await run();
-    if (rows.length > 0) return rows;
-    return fallbackWhenEmpty ? sample : rows;
+    return await run();
   } catch (error) {
-    console.info(`[job.service] ${label}: using sample content (${(error as Error).message})`);
-    return sample;
+    if (__DEV__) {
+      console.info(`[job.service] ${label}: using sample content in dev (${(error as Error).message})`);
+      return sample;
+    }
+    throw error;
   }
+}
+
+/**
+ * Active = published (`status = 'open'`) and not past its deadline. RLS only
+ * checks audience targeting, so drafts / closed jobs must be filtered here.
+ */
+function activeOnly(builder: any) {
+  return builder.eq("status", "open").or(`application_deadline.is.null,application_deadline.gt.${new Date().toISOString()}`);
+}
+
+/** Case variants so an exact `skills` array match still hits "react" / "React" / "REACT". */
+function skillVariants(term: string): string[] {
+  const title = term.replace(/\b\w/g, (c) => c.toUpperCase());
+  return Array.from(new Set([term, term.toLowerCase(), term.toUpperCase(), title]));
 }
 
 function matchesJobFilters(j: Job, f: Partial<JobFilters>): boolean {
   if (f.jobType && f.jobType !== "All" && j.jobType !== f.jobType) return false;
   if (f.location && !j.location.toLowerCase().includes(f.location.toLowerCase())) return false;
+  if (f.query?.trim() && !j.title.toLowerCase().includes(f.query.trim().toLowerCase())) return false;
   return true;
 }
 
-function mapJobRow(row: any): Job {
-  const postedDate = new Date(row.posted_at ?? row.created_at);
-  const daysAgo = Math.max(0, Math.floor((Date.now() - postedDate.getTime()) / 86_400_000));
+export function mapJobRow(input: any): Job {
+  const row = input ?? {};
+  const postedDate = new Date(row.posted_at ?? row.created_at ?? Date.now());
+  const daysAgo = Number.isNaN(postedDate.getTime())
+    ? 0
+    : Math.max(0, Math.floor((Date.now() - postedDate.getTime()) / 86_400_000));
   return {
-    id: row.id,
-    title: row.title,
-    companyId: row.company_id,
+    id: row.id ?? "",
+    title: row.title ?? "",
+    companyId: row.company_id ?? "",
     companyName: row.company?.name ?? row.company_name ?? "",
     companyLogoUrl: row.company?.logo_url ?? row.company_logo_url ?? null,
     location: row.location,
@@ -69,6 +86,10 @@ function mapJobRow(row: any): Job {
     postedAt: daysAgo === 0 ? "Today" : `${daysAgo}d ago`,
     jobType: row.job_type ?? "Full Time",
     isNew: daysAgo <= 3,
+    category: row.category ?? null,
+    workMode: row.work_mode ?? null,
+    experienceLevel: row.experience_level ?? null,
+    applyUrl: row.apply_url ?? null,
   };
 }
 
@@ -106,10 +127,23 @@ function stageStatusOrder(status: ApplicationStage["status"]) {
   return { completed: 0, in_progress: 1, pending: 2 }[status];
 }
 
-function applyFilters(query: any, filters: Partial<JobFilters>) {
-  let q = query;
+function applyFilters(builder: any, filters: Partial<JobFilters>) {
+  let q = builder;
+  // Title, company and skills. Characters that are syntax in a PostgREST
+  // filter string are stripped rather than escaped.
+  const term = filters.query?.replace(/[%*,()"\\{}]/g, " ").trim();
+  if (term) {
+    const skills = skillVariants(term).map((v) => `"${v}"`).join(",");
+    q = q.or(`title.ilike.%${term}%,company_name.ilike.%${term}%,skills.ov.{${skills}}`);
+  }
+  if (filters.category) q = q.eq("category", filters.category);
+  if (filters.workMode) q = q.eq("work_mode", filters.workMode);
+  if (filters.experienceLevel) q = q.eq("experience_level", filters.experienceLevel);
   if (filters.jobType && filters.jobType !== "All") q = q.eq("job_type", filters.jobType);
   if (filters.location) q = q.ilike("location", `%${filters.location}%`);
+  // `experience` is freeform text (e.g. "2-4 years"), not a structured range —
+  // best-effort substring match, same tier of precision as `location` above.
+  if (filters.experience) q = q.ilike("experience", `%${filters.experience}%`);
   if (typeof filters.minSalaryLPA === "number" && filters.minSalaryLPA > 0) q = q.gte("salary_min_lpa", filters.minSalaryLPA);
   if (typeof filters.maxSalaryLPA === "number" && filters.maxSalaryLPA < 50) q = q.lte("salary_max_lpa", filters.maxSalaryLPA);
 
@@ -132,7 +166,7 @@ export const jobService = {
     const from = page * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
     try {
-      const { data, error } = await applyFilters(supabase.from("jobs").select(JOB_SELECT), filters).range(from, to);
+      const { data, error } = await applyFilters(activeOnly(supabase.from("jobs").select(JOB_SELECT)), filters).range(from, to);
       if (error) throw new Error(error.message);
       // RLS (migration 0036) has already restricted this page to the student's
       // GLOBAL + Course + Branch jobs — server-side, before pagination (spec §10,
@@ -143,26 +177,13 @@ export const jobService = {
       // sample jobs (spec §18). Sample stays only for a genuine query failure.
       return { jobs, hasMore: jobs.length === PAGE_SIZE };
     } catch (error) {
-      console.info(`[job.service] getAllJobs: using sample content (${(error as Error).message})`);
-      const jobs = page === 0 ? SAMPLE_JOBS.filter((j) => matchesJobFilters(j, filters)) : [];
-      return { jobs, hasMore: false };
+      if (__DEV__) {
+        console.info(`[job.service] getAllJobs: using sample content in dev (${(error as Error).message})`);
+        const jobs = page === 0 ? SAMPLE_JOBS.filter((j) => matchesJobFilters(j, filters)) : [];
+        return { jobs, hasMore: false };
+      }
+      throw error;
     }
-  },
-
-  async searchJobs(query: string): Promise<Job[]> {
-    return orSample(
-      "searchJobs",
-      async () => {
-        const { data, error } = await supabase.from("jobs").select(JOB_SELECT).ilike("title", `%${query}%`).limit(30);
-        if (error) throw new Error(error.message);
-        return (data ?? []).map(mapJobRow);
-      },
-      SAMPLE_JOBS.filter(
-        (j) =>
-          j.title.toLowerCase().includes(query.trim().toLowerCase()) ||
-          j.companyName.toLowerCase().includes(query.trim().toLowerCase())
-      )
-    );
   },
 
   async getRecommendedJobs(userId: string, limit = 15): Promise<Job[]> {
@@ -184,21 +205,57 @@ export const jobService = {
     const fetchLimit = academic && hasAcademicSignal(academic) ? Math.max(limit * 3, 30) : limit;
     let data: any[] | null = null;
     try {
-      const res = await supabase
-        .from("jobs")
-        .select(JOB_SELECT)
+      const res = await activeOnly(supabase.from("jobs").select(JOB_SELECT))
         .order("posted_at", { ascending: false })
         .limit(fetchLimit);
       if (res.error) throw new Error(res.error.message);
       data = res.data;
     } catch (error) {
-      console.info(`[job.service] getRecommendedJobs: using sample content (${(error as Error).message})`);
-      return SAMPLE_JOBS.slice(0, limit);
+      if (__DEV__) {
+        console.info(`[job.service] getRecommendedJobs: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_JOBS.slice(0, limit);
+      }
+      throw error;
     }
 
     const ordered = academic ? rankByAcademicRelevance(data ?? [], academic) : data ?? [];
-    const jobs = ordered.slice(0, limit).map(mapJobRow);
-    return jobs.length > 0 ? jobs : SAMPLE_JOBS.slice(0, limit);
+    // An empty result is a real answer (no jobs match this student's course/
+    // branch/year yet) — show it honestly, never unrelated sample jobs.
+    return ordered.slice(0, limit).map(mapJobRow);
+  },
+
+  /** Real per-category counts of active jobs (RPC `job_category_counts`, migration 0114). */
+  async getCategoryCounts(): Promise<JobCategoryCount[]> {
+    const { data, error } = await supabase.rpc("job_category_counts");
+    if (!error) {
+      return ((data ?? []) as { category: string; job_count: number | string }[]).map((r) => ({
+        category: r.category,
+        jobCount: Number(r.job_count),
+      }));
+    }
+    // RPC not deployed yet: aggregate the same active rows client-side.
+    const res = await activeOnly(supabase.from("jobs").select("category"));
+    if (res.error) throw new Error(res.error.message);
+    const tally = new Map<string, number>();
+    for (const row of (res.data ?? []) as { category: string | null }[]) {
+      const key = row.category ?? "Other";
+      tally.set(key, (tally.get(key) ?? 0) + 1);
+    }
+    return Array.from(tally, ([category, jobCount]) => ({ category, jobCount })).sort((a, b) => b.jobCount - a.jobCount);
+  },
+
+  /** Hero stats (RPC `job_dashboard_stats`, migration 0114). */
+  async getDashboardStats(): Promise<JobDashboardStats> {
+    const { data, error } = await supabase.rpc("job_dashboard_stats");
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!error && row) {
+      return { activeJobs: Number(row.active_jobs), companyCount: Number(row.company_count), fresherJobs: Number(row.fresher_jobs) };
+    }
+    const res = await activeOnly(supabase.from("jobs").select("company_id, company_name"));
+    if (res.error) throw new Error(res.error.message);
+    const rows = (res.data ?? []) as { company_id: string | null; company_name: string }[];
+    const companies = new Set(rows.map((r) => r.company_id ?? r.company_name).filter(Boolean));
+    return { activeJobs: rows.length, companyCount: companies.size, fresherJobs: 0 };
   },
 
   async getCompanies(query = ""): Promise<Company[]> {
@@ -223,8 +280,11 @@ export const jobService = {
       if (error || !data) throw new Error("Company not found.");
       return mapCompanyRow(data);
     } catch (error) {
-      console.info(`[job.service] getCompanyDetails: using sample content (${(error as Error).message})`);
-      return SAMPLE_COMPANIES.find((c) => c.id === companyId) ?? SAMPLE_COMPANIES[0];
+      if (__DEV__) {
+        console.info(`[job.service] getCompanyDetails: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_COMPANIES.find((c) => c.id === companyId) ?? SAMPLE_COMPANIES[0];
+      }
+      throw error;
     }
   },
 
@@ -255,8 +315,11 @@ export const jobService = {
       if (res.error || !res.data) throw new Error("Job not found.");
       row = res.data;
     } catch (error) {
-      console.info(`[job.service] getJobDetail: using sample content (${(error as Error).message})`);
-      return sampleJobDetail(jobId);
+      if (__DEV__) {
+        console.info(`[job.service] getJobDetail: using sample content in dev (${(error as Error).message})`);
+        return sampleJobDetail(jobId);
+      }
+      throw error;
     }
 
     let isSaved = false;
@@ -276,6 +339,16 @@ export const jobService = {
       requirements: row.requirements ?? [],
       skills: row.skills ?? [],
       experience: row.experience ?? "",
+      summary: row.summary ?? "",
+      responsibilities: row.responsibilities ?? [],
+      qualification: row.qualification ?? "",
+      shift: row.shift ?? "",
+      benefits: row.benefits ?? [],
+      category: row.category ?? "",
+      requisitionId: row.requisition_id ?? "",
+      applyUrl: row.apply_url ?? null,
+      applicationDeadline: row.application_deadline ?? null,
+      candidateNote: row.candidate_note ?? "",
       companyRating: row.company?.rating ?? 0,
       companyReviewCount: row.company?.review_count ?? 0,
       isSaved,
@@ -293,8 +366,11 @@ export const jobService = {
       if (error || !data?.recruiter) throw new Error("Recruiter details not available for this job.");
       return mapRecruiterRow(data.recruiter);
     } catch (error) {
-      console.info(`[job.service] getRecruiterForJob: using sample content (${(error as Error).message})`);
-      return sampleRecruiter(jobId);
+      if (__DEV__) {
+        console.info(`[job.service] getRecruiterForJob: using sample content in dev (${(error as Error).message})`);
+        return sampleRecruiter(jobId);
+      }
+      throw error;
     }
   },
 
@@ -319,10 +395,9 @@ export const jobService = {
           .eq("user_id", userId)
           .order("created_at", { ascending: false });
         if (error) throw new Error(error.message);
-        return (data ?? []).map((row: any) => mapJobRow(row.job));
+        return compactRows(data as any[], "job").map((row: any) => mapJobRow(row.job));
       },
-      sampleSavedJobs(),
-      false
+      sampleSavedJobs()
     );
   },
 
@@ -343,18 +418,21 @@ export const jobService = {
           uploadedAt: row.uploaded_at,
         }));
       },
-      sampleResumes(),
-      false
+      sampleResumes()
     );
   },
 
-  async uploadResume(userId: string, fileUri: string, fileName: string): Promise<{ id: string; fileUrl: string }> {
+  async uploadResume(userId: string, fileUri: string, fileName: string, mimeType?: string | null): Promise<{ id: string; fileUrl: string }> {
     const path = `${userId}/${Date.now()}_${fileName}`;
-    const response = await fetch(fileUri);
-    const blob = await response.blob();
+    // The `resumes` bucket only accepts pdf/doc/docx up to 5 MB (0117/089): resolve the type from the
+    // picker mime or the extension (never octet-stream) and send an ArrayBuffer so it is really used.
+    const { body, hintType, size } = await readFileBody(fileUri);
+    assertResumeSize(size);
+    const contentType = resolveContentType({ name: fileName, uri: fileUri, mimeType, hintType }, RESUME_MIME_TYPES);
+    if (!contentType) throw new Error("Please choose a PDF, DOC or DOCX file.");
 
-    const { error: uploadError } = await supabase.storage.from("resumes").upload(path, blob, {
-      contentType: blob.type || "application/pdf",
+    const { error: uploadError } = await supabase.storage.from("resumes").upload(path, body, {
+      contentType,
       upsert: true,
     });
     if (uploadError) throw new Error(uploadError.message);
@@ -405,7 +483,7 @@ export const jobService = {
           .eq("user_id", userId)
           .order("created_at", { ascending: false });
         if (error) throw new Error(error.message);
-        return (data ?? []).map((row: any) => ({
+        return compactRows(data as any[], "job").map((row: any) => ({
           id: row.id,
           job: mapJobRow(row.job),
           appliedAt: row.created_at,
@@ -414,8 +492,7 @@ export const jobService = {
           stages: [] as ApplicationStage[],
         }));
       },
-      sampleAppliedJobs(),
-      false
+      sampleAppliedJobs()
     );
   },
 
@@ -430,6 +507,7 @@ export const jobService = {
       supabase.from("application_stages").select("*").eq("application_id", applicationId).order("sort_order", { ascending: true }),
     ]);
     if (appError || !appRow) throw new Error("Application not found.");
+    if (!appRow.job) throw new Error("This job is no longer available.");
     if (stageError) throw new Error(stageError.message);
 
       return {
@@ -443,8 +521,11 @@ export const jobService = {
           .sort((a: ApplicationStage, b: ApplicationStage) => stageStatusOrder(a.status) - stageStatusOrder(b.status)),
       };
     } catch (error) {
-      console.info(`[job.service] getApplicationDetail: using sample content (${(error as Error).message})`);
-      return sampleApplicationDetail(applicationId);
+      if (__DEV__) {
+        console.info(`[job.service] getApplicationDetail: using sample content in dev (${(error as Error).message})`);
+        return sampleApplicationDetail(applicationId);
+      }
+      throw error;
     }
   },
 
@@ -464,8 +545,11 @@ export const jobService = {
         jobType: data.job_type ?? "All",
       };
     } catch (error) {
-      console.info(`[job.service] getJobAlertPreferences: using sample content (${(error as Error).message})`);
-      return SAMPLE_JOB_ALERT_PREFS;
+      if (__DEV__) {
+        console.info(`[job.service] getJobAlertPreferences: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_JOB_ALERT_PREFS;
+      }
+      throw error;
     }
   },
 

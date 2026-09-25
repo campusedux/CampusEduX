@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -32,7 +33,7 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           <Stack.Screen name="AuthNavigator" component={AuthNavigator} />
         ) : !hasCompletedProfileSetup ? (

@@ -7,14 +7,15 @@ export type PremiumPlanData = {
   name: string;
   price: number;
   original_price?: number | null;
-  period_label?: string | null; // e.g. "per year", "one-time"
+  period_label?: string | null; // e.g. "/ month", "one-time"
   features?: string[] | null;
   is_popular?: boolean | null;
 };
 
 /**
- * Premium plan card. `highlighted` (or `plan.is_popular`) gives the popular
- * plan an indigo ring + badge. `cta` is the subscribe control (client island).
+ * Premium plan card. The recommended plan (`highlighted`, or `plan.is_popular`
+ * from the admin) gets a gradient frame, a "Recommended" ribbon and a lift.
+ * `cta` is the subscribe control (client island) — rendered as-is.
  */
 export function PremiumCard({
   plan,
@@ -33,39 +34,43 @@ export function PremiumCard({
   return (
     <div
       className={cn(
-        "relative flex flex-col rounded-2xl border bg-white p-6 shadow-card transition",
-        popular
-          ? "border-primary shadow-card-lg ring-2 ring-primary lg:-translate-y-1"
-          : "border-line hover:-translate-y-0.5 hover:shadow-card-lg motion-reduce:transform-none",
+        "relative flex flex-col rounded-3xl p-[1.5px] transition",
+        popular ? "bg-gradient-to-br from-primary via-accent-violet to-accent-pink shadow-glow lg:-translate-y-2" : "bg-line",
         className,
       )}
     >
-      {popular && (
-        <span className="absolute -top-3 left-6 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-[0.7rem] font-bold uppercase tracking-wide text-white shadow-sm">
-          <Sparkles className="h-3 w-3" aria-hidden />
-          Most popular
-        </span>
-      )}
-      <h3 className="text-lg font-bold text-ink">{plan.name}</h3>
-      <div className="mt-3 flex items-baseline gap-1.5">
-        <span className="text-3xl font-bold text-ink">{plan.price > 0 ? formatINR(plan.price) : "Free"}</span>
-        {plan.period_label && <span className="text-sm text-ink-muted">{plan.period_label}</span>}
+      <div className="relative flex flex-1 flex-col rounded-[calc(1.5rem-1.5px)] bg-card p-6 sm:p-7">
+        {popular && (
+          <span className="absolute -top-3.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-gradient-to-r from-primary to-accent-violet px-3.5 py-1 text-[0.7rem] font-bold uppercase tracking-wide text-white shadow-glow">
+            <Sparkles className="h-3 w-3" aria-hidden />
+            Recommended
+          </span>
+        )}
+        <h3 className="font-display text-xl font-bold text-ink">{plan.name}</h3>
+        <div className="mt-4 flex items-baseline gap-1.5">
+          <span className="font-display text-4xl font-bold tracking-tight text-ink">
+            {plan.price > 0 ? formatINR(plan.price) : "Free"}
+          </span>
+          {plan.period_label && <span className="text-sm text-ink-muted">{plan.period_label}</span>}
+        </div>
+        {typeof plan.original_price === "number" && plan.original_price > plan.price && (
+          <span className="mt-1 text-xs text-ink-faint line-through">{formatINR(plan.original_price)}</span>
+        )}
+        {subNote && <p className="mt-1.5 text-xs font-medium text-success">{subNote}</p>}
+        {plan.features && plan.features.length > 0 && (
+          <ul className="mt-6 flex-1 space-y-2.5 border-t border-line pt-5">
+            {plan.features.map((f, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-sm text-ink">
+                <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-success/15">
+                  <Check className="h-3 w-3 text-success" strokeWidth={3} aria-hidden />
+                </span>
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {cta && <div className="mt-6">{cta}</div>}
       </div>
-      {typeof plan.original_price === "number" && plan.original_price > plan.price && (
-        <span className="mt-1 text-xs text-ink-faint line-through">{formatINR(plan.original_price)}</span>
-      )}
-      {subNote && <p className="mt-1 text-xs text-ink-faint">{subNote}</p>}
-      {plan.features && plan.features.length > 0 && (
-        <ul className="mt-4 flex-1 space-y-2">
-          {plan.features.map((f, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm text-ink-muted">
-              <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-success" aria-hidden />
-              <span>{f}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {cta && <div className="mt-6">{cta}</div>}
     </div>
   );
 }

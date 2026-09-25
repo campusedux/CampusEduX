@@ -2,6 +2,8 @@ import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import NotificationRow from "./NotificationRow";
 import { EmptyState } from "@/components/ui";
+import { Bell } from "lucide-react";
+import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export default async function NotificationsPage() {
   const user = await requireUser();
@@ -16,11 +18,11 @@ export default async function NotificationsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-ink">Notifications</h1>
+      <AccountPageHeader title="Notifications" />
       {(!data || data.length === 0) ? (
-        <EmptyState className="mt-6" title="No notifications yet" />
+        <EmptyState icon={Bell} title="No notifications yet" subtitle="Updates about your applications, purchases and account show up here." />
       ) : (
-        <div className="mt-6 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
+        <div className="card divide-y divide-line overflow-hidden">
           {data.map((n) => (
             <NotificationRow key={n.id} notification={n} />
           ))}

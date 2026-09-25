@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, Pressable, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "@/components/ui";
 import { CARD_SHADOW } from "@/constants/theme";
 import type { Project } from "@/types";
+import { formatINR } from "@/lib/homeFormat";
 
 interface ProjectCardProps {
   project: Project;
@@ -37,9 +38,14 @@ export function ProjectCard({
   tag,
 }: ProjectCardProps) {
   // `row`/`grid` are kept as aliases so older call sites don't break.
+  const [imageFailed, setImageFailed] = useState(false);
+  const thumb = project.thumbnailUrl && !imageFailed ? project.thumbnailUrl : null;
+  const price = formatINR(project.price);
   const isCompact = variant === "compact" || variant === "row";
+  // Real Supabase rows can have a null/undefined rating (no reviews yet): show the star row only for a valid rating with reviews.
+  const hasRating = typeof project.rating === "number" && Number.isFinite(project.rating) && (project.reviewCount ?? 0) > 0;
 
-  const techLine = project.techStack.slice(0, 3).join(" • ") || project.categoryName;
+  const techLine = (project.techStack ?? []).slice(0, 3).join(" • ") || project.categoryName || "";
   const premiumBadge = project.isPremium ? "PREMIUM" : project.isBestSeller ? "BESTSELLER" : tag;
 
   if (isCompact) {
@@ -53,8 +59,8 @@ export function ProjectCard({
           className="items-center justify-center rounded-xl mr-3 overflow-hidden"
           style={{ width: 56, height: 56, backgroundColor: "#EEF0FF" }}
         >
-          {project.thumbnailUrl ? (
-            <Image source={{ uri: project.thumbnailUrl }} className="w-full h-full" resizeMode="cover" />
+          {thumb ? (
+            <Image source={{ uri: thumb }} className="w-full h-full" resizeMode="cover" onError={() => setImageFailed(true)} />
           ) : (
             <Ionicons name={project.isPremium ? "diamond-outline" : "cube-outline"} size={24} color="#4F39F6" />
           )}
@@ -63,17 +69,23 @@ export function ProjectCard({
           <Text className="font-semibold text-gray-900" numberOfLines={1}>
             {project.title}
           </Text>
-          <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
-            {techLine}
-          </Text>
+          {techLine ? (
+            <Text className="text-gray-500 text-xs mt-0.5" numberOfLines={1}>
+              {techLine}
+            </Text>
+          ) : null}
           <View className="flex-row items-center justify-between mt-1.5">
-            <View className="flex-row items-center">
-              <Ionicons name="star" size={12} color="#F59E0B" />
-              <Text className="text-xs text-gray-500 ml-1">
-                {project.rating.toFixed(1)} ({project.reviewCount})
-              </Text>
-            </View>
-            <Text className="font-bold text-primary">₹{project.price}</Text>
+            {hasRating ? (
+              <View className="flex-row items-center">
+                <Ionicons name="star" size={12} color="#F59E0B" />
+                <Text className="text-xs text-gray-500 ml-1">
+                  {project.rating.toFixed(1)} ({project.reviewCount})
+                </Text>
+              </View>
+            ) : (
+              <View />
+            )}
+            {price ? <Text className="font-bold text-primary">{price}</Text> : null}
           </View>
         </View>
       </PressableScale>
@@ -87,8 +99,8 @@ export function ProjectCard({
       style={CARD_SHADOW}
     >
       <View className="w-full items-center justify-center" style={{ height: 168, backgroundColor: "#EEF0FF" }}>
-        {project.thumbnailUrl ? (
-          <Image source={{ uri: project.thumbnailUrl }} className="w-full h-full" resizeMode="cover" />
+        {thumb ? (
+          <Image source={{ uri: thumb }} className="w-full h-full" resizeMode="cover" onError={() => setImageFailed(true)} />
         ) : (
           <Ionicons name={project.isPremium ? "diamond-outline" : "cube-outline"} size={44} color="#4F39F6" />
         )}
@@ -124,19 +136,25 @@ export function ProjectCard({
         <Text className="font-bold text-gray-900 text-base" numberOfLines={1}>
           {project.title}
         </Text>
-        <Text className="text-gray-500 text-xs mt-1" numberOfLines={1}>
-          {techLine}
-        </Text>
+        {techLine ? (
+          <Text className="text-gray-500 text-xs mt-1" numberOfLines={1}>
+            {techLine}
+          </Text>
+        ) : null}
 
         <View className="flex-row items-center justify-between mt-3">
+          {hasRating ? (
+            <View className="flex-row items-center">
+              <Ionicons name="star" size={13} color="#F59E0B" />
+              <Text className="text-xs text-gray-500 ml-1">
+                {project.rating.toFixed(1)} ({project.reviewCount})
+              </Text>
+            </View>
+          ) : (
+            <View />
+          )}
           <View className="flex-row items-center">
-            <Ionicons name="star" size={13} color="#F59E0B" />
-            <Text className="text-xs text-gray-500 ml-1">
-              {project.rating.toFixed(1)} ({project.reviewCount})
-            </Text>
-          </View>
-          <View className="flex-row items-center">
-            <Text className="font-bold text-primary text-base mr-2">₹{project.price}</Text>
+            {price ? <Text className="font-bold text-primary text-base mr-2">{price}</Text> : null}
             <View className="flex-row items-center rounded-lg px-2.5 py-1" style={{ backgroundColor: "#EEF0FF" }}>
               <Text className="text-primary text-xs font-semibold mr-0.5">View</Text>
               <Ionicons name="arrow-forward" size={12} color="#4F39F6" />

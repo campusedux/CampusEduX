@@ -118,6 +118,7 @@ export const supabase = {
     updateUser: jest.fn(() => Promise.resolve(config.auth.updateUser ?? { data: {}, error: null })),
     signOut: jest.fn(() => Promise.resolve({ error: null })),
     getSession: jest.fn(() => Promise.resolve(config.auth.getSession ?? { data: { session: null }, error: null })),
+    resend: jest.fn(() => Promise.resolve(config.auth.resend ?? { data: {}, error: null })),
     getUser: jest.fn(() => Promise.resolve(config.auth.getUser ?? { data: { user: null }, error: null })),
   },
   storage: {

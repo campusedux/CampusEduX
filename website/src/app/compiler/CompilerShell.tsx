@@ -122,7 +122,7 @@ export function CompilerShell({
   return (
     <div
       className={cn(
-        "flex min-h-0 w-full flex-col overflow-hidden bg-[#0b1120]",
+        "theme-light flex min-h-0 w-full flex-col overflow-hidden bg-[#0b1120]",
         bare ? "h-full rounded-none border-0" : "rounded-2xl border border-line shadow-card",
         className,
       )}

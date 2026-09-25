@@ -1,3 +1,5 @@
+import { PermissionGate } from '@/components/auth/PermissionGate';
+import { MONEY_RPC_ROLES } from '@/lib/permission-gate';
 import { requireModule } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SearchFilterBar, FilterSelect } from '@/components/ui/SearchFilterBar';
@@ -16,11 +18,10 @@ export async function WithdrawalQueue({
   basePath: string;
   searchParams: { page?: string; status?: string };
 }) {
-  const admin = await requireModule('referrals');
+  await requireModule('referrals');
   const page = Math.max(1, Number(searchParams.page) || 1);
   const status = searchParams.status ?? '';
   const { rows, total, missing } = await listWithdrawalRequests({ page, status });
-  const canDecide = admin.perms.referrals.edit || admin.perms.orders.edit;
 
   return (
     <div className="space-y-6">
@@ -79,9 +80,19 @@ export async function WithdrawalQueue({
                     </td>
                     <td className="py-2.5 text-ink-muted">{formatDateTime(r.created_at)}</td>
                     <td className="py-2.5 text-right">
-                      {r.status === 'pending' && canDecide ? (
+                      {r.status === 'pending' ? (
                         <div className="flex justify-end">
-                          <DecisionButtons action={decideWithdrawal.bind(null, r.id)} />
+                          {/* action needs orders:edit; RPC needs referrals:edit + super_admin/admin */}
+                          <PermissionGate
+                            can={[
+                              { module: 'orders', action: 'edit' },
+                              { module: 'referrals', action: 'edit' },
+                            ]}
+                            roles={MONEY_RPC_ROLES}
+                            mode="disable"
+                          >
+                            <DecisionButtons action={decideWithdrawal.bind(null, r.id)} />
+                          </PermissionGate>
                         </div>
                       ) : (
                         <span className="text-xs text-ink-faint">

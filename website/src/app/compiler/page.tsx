@@ -4,6 +4,7 @@ import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import CompilerWorkspace from "./CompilerWorkspace";
 import { CompilerFallback } from "./CompilerFallback";
+import { compilerAuthRequired } from "@/lib/apiAuth";
 
 export const metadata: Metadata = {
   title: "Online Code Compiler",
@@ -44,8 +45,10 @@ export default function CompilerPage() {
           { name: "Online Compiler", path: "/compiler" },
         ])}
       />
+      {/* The IDE card has no visible page title; this keeps one <h1> per page for assistive tech. */}
+      <h1 className="sr-only">Online Compiler</h1>
       <Suspense fallback={<CompilerFallback />}>
-        <CompilerWorkspace />
+        <CompilerWorkspace requireAuth={compilerAuthRequired()} />
       </Suspense>
     </>
   );

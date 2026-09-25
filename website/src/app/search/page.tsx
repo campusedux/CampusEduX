@@ -58,7 +58,7 @@ export default async function SearchPage({ searchParams }: { searchParams: SP })
               <Link
                 key={b.href}
                 href={b.href}
-                className="rounded-full border border-line bg-white px-3.5 py-1.5 text-sm font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
+                className="rounded-full border border-line bg-card px-3.5 py-1.5 text-sm font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
               >
                 {b.label}
               </Link>
@@ -77,7 +77,7 @@ export default async function SearchPage({ searchParams }: { searchParams: SP })
                 <Link
                   key={b.href}
                   href={b.href}
-                  className="rounded-full border border-line bg-white px-3.5 py-1.5 text-sm font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
+                  className="rounded-full border border-line bg-card px-3.5 py-1.5 text-sm font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
                 >
                   {b.label}
                 </Link>
@@ -112,7 +112,7 @@ export default async function SearchPage({ searchParams }: { searchParams: SP })
                     )}
                   </div>
 
-                  <ul className="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
+                  <ul className="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
                     {group.items.map((item) => (
                       <li key={item.id}>
                         <Link href={item.href} className="flex items-start gap-3 p-4 transition hover:bg-surface">

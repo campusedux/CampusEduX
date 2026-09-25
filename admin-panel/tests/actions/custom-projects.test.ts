@@ -161,6 +161,44 @@ describe('createFeature — advanced validation (spec §5)', () => {
   });
 });
 
+describe('createFeature — included_in_levels', () => {
+  const base = () => {
+    const fd = form({ name: 'Login', category: 'Authentication', price: '800' });
+    fd.append('project_types', 'academic');
+    fd.append('project_levels', 'standard');
+    fd.append('project_levels', 'advanced');
+    return fd;
+  };
+
+  it('stores only valid, offered included keys', async () => {
+    setTableResult('custom_project_features', { data: null, error: null });
+    const fd = base();
+    fd.append('included_in_levels', 'academic:standard');
+    fd.append('included_in_levels', 'academic:advanced');
+    fd.append('included_in_levels', 'bogus:tier'); // dropped
+    await expect(createFeature({ ok: false }, fd)).rejects.toMatchObject({ url: '/custom-projects/features?saved=1' });
+    const row = callsFor('custom_project_features').find((c) => c.verb === 'insert')?.args[0] as Record<string, unknown>;
+    expect(row.included_in_levels).toEqual(['academic:standard', 'academic:advanced']);
+  });
+
+  it('rejects Advanced including less than Standard', async () => {
+    const fd = base();
+    fd.append('included_in_levels', 'academic:standard');
+    const res = await createFeature({ ok: false }, fd);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/Standard must also be included in academic Advanced/);
+    expect(callsFor('custom_project_features').some((c) => c.verb === 'insert')).toBe(false);
+  });
+
+  it('rejects an included key for a type the feature is not offered to', async () => {
+    const fd = base();
+    fd.append('included_in_levels', 'business:advanced');
+    const res = await createFeature({ ok: false }, fd);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/not offered/);
+  });
+});
+
 describe('updateFeature', () => {
   it('never rewrites the key and redirects on success', async () => {
     setTableResult('custom_project_features', { data: null, error: null });

@@ -1,5 +1,8 @@
 import { create } from "zustand";
+import { notify } from "@/lib/notify";
+import { findConflict, isFeatureIncluded, resolveDependencies } from "@/services/customProjects.service";
 import type {
+  CustomFeature,
   CustomPlatform,
   CustomProjectBuilderConfig,
   CustomProjectLevel,
@@ -27,12 +30,20 @@ interface BuilderState {
   config: CustomProjectBuilderConfig;
   /** Whether the store has been seeded from a saved draft this session. */
   hydratedFromDraft: boolean;
+  /** Local preview URIs for uploaded files (path -> uri). Session-only; never saved to the draft. */
+  previews: Record<string, string>;
+  setPreview: (path: string, uri: string) => void;
   patch: (fields: Partial<CustomProjectBuilderConfig>) => void;
   setType: (t: CustomProjectType) => void;
   setLevel: (l: CustomProjectLevel) => void;
   setPlatform: (p: CustomPlatform) => void;
-  toggleFeature: (id: string) => void;
-  /** Drop any selected feature ids that are no longer valid for the tier. */
+  /**
+   * `features` is the full eligible-for-this-tier catalog, so conflicts and
+   * dependencies can be checked/resolved the same way
+   * website/src/app/custom-projects/features/BuilderFeatures.tsx does.
+   */
+  toggleFeature: (id: string, features: CustomFeature[]) => void;
+  /** Drop selected feature ids that are no longer a valid paid add-on for the tier (incl. ones now included). */
   pruneFeatures: (validIds: string[]) => void;
   addRequirement: (text: string) => void;
   removeRequirement: (index: number) => void;
@@ -45,6 +56,9 @@ interface BuilderState {
 export const useBuilderStore = create<BuilderState>((set) => ({
   config: EMPTY_BUILDER_CONFIG,
   hydratedFromDraft: false,
+  previews: {},
+
+  setPreview: (path, uri) => set((s) => ({ previews: { ...s.previews, [path]: uri } })),
 
   patch: (fields) => set((s) => ({ config: { ...s.config, ...fields } })),
 
@@ -58,17 +72,42 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   setLevel: (projectLevel) => set((s) => ({ config: { ...s.config, projectLevel } })),
   setPlatform: (platform) => set((s) => ({ config: { ...s.config, platform } })),
 
-  toggleFeature: (id) =>
+  toggleFeature: (id, features) =>
     set((s) => {
       const has = s.config.featureIds.includes(id);
-      return {
-        config: {
-          ...s.config,
-          featureIds: has
-            ? s.config.featureIds.filter((f) => f !== id)
-            : [...s.config.featureIds, id],
-        },
-      };
+      if (has) {
+        return {
+          config: { ...s.config, featureIds: s.config.featureIds.filter((f) => f !== id) },
+        };
+      }
+
+      const feature = features.find((f) => f.id === id);
+
+      // Same message as website/src/app/custom-projects/features/BuilderFeatures.tsx.
+      const conflict = findConflict(s.config.featureIds, id, features);
+      if (conflict && feature) {
+        notify("Can't add this feature", `"${feature.name}" and "${conflict.name}" can't be enabled together.`);
+        return s;
+      }
+
+      // A dependency that is already INCLUDED for this tier is satisfied for free —
+      // never add it to the paid selection.
+      const { projectType, projectLevel } = s.config;
+      const resolved = resolveDependencies(s.config.featureIds, id, features);
+      const added = resolved.added.filter((a) => !isFeatureIncluded(a, projectType, projectLevel));
+      const withDeps = resolved.featureIds.filter(
+        (fid) => !resolved.added.some((a) => a.id === fid && !added.includes(a))
+      );
+      const next = withDeps.includes(id) ? withDeps : [...withDeps, id];
+      if (added.length > 0 && feature) {
+        notify(
+          "Feature added automatically",
+          `"${feature.name}" requires ${added.map((a) => `"${a.name}"`).join(", ")}. ${
+            added.length > 1 ? "They have" : "It has"
+          } been enabled automatically.`
+        );
+      }
+      return { config: { ...s.config, featureIds: next } };
     }),
 
   pruneFeatures: (validIds) =>
@@ -118,5 +157,5 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       hydratedFromDraft: true,
     })),
 
-  reset: () => set(() => ({ config: EMPTY_BUILDER_CONFIG, hydratedFromDraft: false })),
+  reset: () => set(() => ({ config: EMPTY_BUILDER_CONFIG, hydratedFromDraft: false, previews: {} })),
 }));

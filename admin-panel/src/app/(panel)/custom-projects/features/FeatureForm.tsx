@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import {
   FEATURE_LEVELS,
   FEATURE_LEVEL_LABEL,
+  INCLUDED_KEYS,
   PROJECT_TYPE_LABEL,
   type FeatureLevel,
 } from '@/lib/custom-projects/constants';
@@ -28,6 +29,7 @@ export interface FeatureFormInitial {
   icon?: string | null;
   image_url?: string | null;
   dependencies?: string[];
+  included_in_levels?: string[];
   sort_order?: number;
   is_active?: boolean;
 }
@@ -82,6 +84,7 @@ export function FeatureForm({
   const [level, setLevel] = useState<string>(initial.level ?? 'standard');
   const [price, setPrice] = useState<number>(initial.price ?? 0);
   const [deps, setDeps] = useState<string[]>(initial.dependencies ?? []);
+  const [included, setIncluded] = useState<string[]>(initial.included_in_levels ?? []);
   const [imageUrl, setImageUrl] = useState<string>(initial.image_url ?? '');
 
   const toggle = (list: string[], set: (v: string[]) => void, v: string) =>
@@ -111,6 +114,16 @@ export function FeatureForm({
     types: types.length ? '' : 'Select at least one project type.',
     level: (FEATURE_LEVELS as readonly string[]).includes(level) ? '' : 'Choose a feature level.',
     price: Number.isFinite(price) && price >= 0 ? '' : 'Price cannot be negative.',
+    included: INCLUDED_KEYS.some((k) => {
+      const [t, l] = k.split(':');
+      return (
+        included.includes(k) &&
+        ((!types.includes(t) || !(tiers.length ? tiers : ['standard', 'advanced']).includes(l)) ||
+          (l === 'standard' && !included.includes(`${t}:advanced`)))
+      );
+    })
+      ? 'Included Standard must also be included in Advanced, and only for offered types/tiers.'
+      : '',
     key:
       mode === 'create' && key.trim() && !slugPreview(key)
         ? 'Use letters, numbers and dashes.'
@@ -300,6 +313,38 @@ export function FeatureForm({
             ))}
           </div>
         </details>
+      </Section>
+
+      <Section
+        title="Included by default"
+        description="Tick the project type + tier combos that get this feature free. Included features are read-only in the builder and are never charged, whatever the price above says. Advanced must include everything Standard does."
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          {TYPES.map((t) => (
+            <div key={t} className="rounded-lg border border-border p-3">
+              <p className="mb-2 text-sm font-medium text-ink">{PROJECT_TYPE_LABEL[t]}</p>
+              {TIERS.map(([l, label]) => {
+                const k = `${t}:${l}`;
+                const offered = types.includes(t) && (tiers.length ? tiers : ['standard', 'advanced']).includes(l);
+                return (
+                  <label key={k} className="flex items-center gap-2 py-0.5 text-sm text-ink-muted">
+                    <input
+                      type="checkbox"
+                      name="included_in_levels"
+                      value={k}
+                      disabled={!offered}
+                      checked={offered && included.includes(k)}
+                      onChange={() => toggle(included, setIncluded, k)}
+                      className="h-4 w-4 rounded border-border text-brand"
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <FieldError>{errors.included || undefined}</FieldError>
       </Section>
 
       <Section title="Dependencies" description="Features this one needs. The builder warns when one is missing (spec §14).">

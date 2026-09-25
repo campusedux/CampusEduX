@@ -23,7 +23,7 @@ const STATUS_UI: Record<AtsStatus, { text: string; badge: string; bar: string }>
 function CategoryCard({ category, resumeId }: { category: AtsCategory; resumeId: string }) {
   const ui = STATUS_UI[category.status];
   return (
-    <div className="rounded-2xl border border-line bg-white p-5">
+    <div className="rounded-2xl border border-line bg-card p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-bold text-ink">{category.label}</h3>
@@ -95,19 +95,16 @@ export default async function ResumeAtsPage({ params }: { params: { id: string }
   const analysis = breakdown ? buildAtsAnalysis(breakdown, resume.content, resume.personalDetails) : null;
 
   return (
-    <div className="container-page py-10">
-      <Link href="/resume" className="text-sm text-ink-muted hover:text-ink">
-        &larr; Back to your résumés
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold text-ink">ATS check — &ldquo;{resume.title}&rdquo;</h1>
+    <div>
+      <h1 className="font-display text-[1.6rem] font-bold tracking-tight text-ink">ATS check — &ldquo;{resume.title}&rdquo;</h1>
 
       {!analysis ? (
-        <div className="mt-6 flex items-center gap-2 rounded-2xl border border-line bg-white p-6 text-sm text-ink-muted">
+        <div className="mt-6 flex items-center gap-2 rounded-2xl border border-line bg-card p-6 text-sm text-ink-muted">
           <AlertTriangle className="h-4 w-4 text-danger" /> Couldn&apos;t analyse this résumé right now. Please try again shortly.
         </div>
       ) : (
         <>
-          <div className="mt-6 flex items-center gap-6 rounded-2xl border border-line bg-white p-6">
+          <div className="mt-6 flex items-center gap-6 rounded-2xl border border-line bg-card p-6">
             <div className="text-4xl font-bold text-ink">{analysis.overall}</div>
             <div>
               <div className="text-sm font-semibold text-ink">{overallLabel(analysis.overall)}</div>

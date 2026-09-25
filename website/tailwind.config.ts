@@ -1,52 +1,65 @@
 import type { Config } from "tailwindcss";
 
 /**
- * CampusEduX website design tokens — mirrors the mobile app
- * (`mobile-app/src/constants/theme.ts` + `mobile-app/tailwind.config.js`) so the
- * site reads as "the CampusEduX app opened in a browser".
+ * CampusEduX website design tokens (redesign/ui-2026).
  *
- * The app palette is the source of truth: indigo `#4F39F6` primary on a white
- * surface, soft low card shadows, rounded-2xl cards, system sans (the app loads
- * no custom font — only `monospace` for code).
+ * Every colour is a CSS variable holding space-separated RGB channels, defined
+ * in `src/app/globals.css` for `:root` (light) and `.dark` (dark). That is what
+ * makes dark mode work site-wide without `dark:` variants on every element, and
+ * keeps Tailwind's `/opacity` modifiers working (`bg-primary/10`, `border-line/60`).
  *
- * The legacy editorial tokens (navy / paper / marigold / emerald / slate) were
- * removed at the end of P7 once every page moved to the shared component system.
+ * Token roles:
+ * - `canvas`  page ground · `card` raised surfaces (was `bg-white`) ·
+ *   `surface` inset fills (inputs, tinted rows) · `line` borders
+ * - `ink` / `ink-muted` / `ink-faint` text, strongest → weakest
+ * - `primary` brand indigo (+ 50–900 scale), `success` / `danger` / `warning`
+ * - `scrim` modal/drawer backdrop — near-black in BOTH themes (never use `ink`
+ *   for a backdrop: it turns light in dark mode)
+ *
+ * `text-primary` / `text-success` / `text-danger` resolve to a separate
+ * `*-text` variable (see `textColor` below): in dark mode the solid fill has to
+ * stay deep enough for white button labels while text on a dark card has to be
+ * lighter to stay legible — one value cannot satisfy both.
  */
+const rgb = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
+const primaryScale = {
+  DEFAULT: rgb("primary"),
+  50: rgb("primary-50"),
+  100: rgb("primary-100"),
+  200: rgb("primary-200"),
+  300: rgb("primary-300"),
+  400: rgb("primary-400"),
+  500: rgb("primary"),
+  600: rgb("primary-600"),
+  700: rgb("primary-700"),
+  800: rgb("primary-800"),
+  900: rgb("primary-900"),
+};
+
 const config: Config = {
+  darkMode: "class",
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       colors: {
-        // ---- App palette (source of truth) --------------------------------
-        primary: {
-          DEFAULT: "#4F39F6",
-          50: "#EEF0FF",
-          100: "#E0E3FF",
-          200: "#C7CBFE",
-          300: "#A5A9FC",
-          400: "#8480F9",
-          500: "#4F39F6",
-          600: "#4429EA",
-          700: "#3A20CE",
-          800: "#3730A3",
-          900: "#312E81",
-        },
-        surface: "#F8F9FC", // interior fills (inputs, tinted rows, empty states)
-        // Page ground — a very light indigo/lavender tint so pure-white cards
-        // lift off the page. Mood cue from the mobile brief; kept subtle.
-        canvas: "#F7F8FD",
+        primary: primaryScale,
+        canvas: rgb("canvas"),
+        card: rgb("card"),
+        surface: rgb("surface"),
+        line: rgb("line"),
+        scrim: rgb("scrim"),
         ink: {
-          DEFAULT: "#111827", // textPrimary
-          muted: "#6B7280", // textSecondary — AA on white (4.8:1)
-          faint: "#6E7583", // textMuted — darkened from the app's #9CA3AF to ~4.2:1 for a11y
+          DEFAULT: rgb("ink"),
+          muted: rgb("ink-muted"),
+          faint: rgb("ink-faint"),
         },
-        line: "#E5E7EB", // border
-        success: "#16A34A",
-        danger: "#DC2626",
-        warning: "#F59E0B",
-        // Fixed pastel accent set for category / module tiles, so those stop
-        // hard-coding hex + opacity in inline styles. Use with an opacity
-        // suffix for the soft fill, solid for the icon/label.
+        success: rgb("success"),
+        danger: rgb("danger"),
+        warning: rgb("warning"),
+        // Fixed pastel accent set for category / module tiles. Use with an
+        // opacity suffix for the soft fill, solid for the icon/label. Mid-tone
+        // on purpose, so they read on both a white and a dark card.
         accent: {
           violet: "#7C3AED",
           sky: "#3B82F6",
@@ -56,33 +69,22 @@ const config: Config = {
           teal: "#0D9488",
         },
       },
+      textColor: {
+        primary: { DEFAULT: rgb("primary-text") },
+        success: rgb("success-text"),
+        danger: rgb("danger-text"),
+      },
       fontFamily: {
-        // The app uses the platform system font. `serif` is aliased to the same
-        // stack so any stray `font-serif` never reintroduces a serif.
-        sans: [
-          "-apple-system",
-          "BlinkMacSystemFont",
-          '"Segoe UI"',
-          "Roboto",
-          '"Helvetica Neue"',
-          "Arial",
-          "sans-serif",
-        ],
-        serif: [
-          "-apple-system",
-          "BlinkMacSystemFont",
-          '"Segoe UI"',
-          "Roboto",
-          '"Helvetica Neue"',
-          "Arial",
-          "sans-serif",
-        ],
+        // Self-hosted by next/font in the root layout (no external font host,
+        // so the CSP's `font-src 'self'` still holds).
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", '"Segoe UI"', "Roboto", "Arial", "sans-serif"],
+        display: ["var(--font-display)", "var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Alias so any stray `font-serif` never reintroduces a serif.
+        serif: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       borderRadius: {
-        // App scale: sm 8 · md 12 · lg 16 · xl 24. `sm`/DEFAULT are nudged up
-        // from Tailwind's 2px/4px so currently-sharp elements move toward the
-        // app's rounded look.
+        // Scale: sm 8 · md 12 · lg 16 · xl 20 · 2xl 16 (cards) · 3xl 24 (hero panels).
         sm: "0.5rem",
         DEFAULT: "0.75rem",
         md: "0.75rem",
@@ -91,13 +93,13 @@ const config: Config = {
         "2xl": "1rem",
       },
       boxShadow: {
-        // Mirrors CARD_SHADOW / CARD_SHADOW_LG in the app theme.
-        card: "0 6px 14px -4px rgba(15,23,42,0.08), 0 2px 6px -2px rgba(15,23,42,0.05)",
-        "card-lg": "0 14px 30px -8px rgba(15,23,42,0.12), 0 4px 10px -4px rgba(15,23,42,0.06)",
+        card: "var(--shadow-card)",
+        "card-lg": "var(--shadow-card-lg)",
+        glow: "var(--shadow-glow)",
       },
       keyframes: {
-        // Subtle, fast entrances (spec §15). All are neutralised by the
-        // reduced-motion guard in globals.css.
+        // Subtle, fast entrances. All are neutralised by the reduced-motion
+        // guard in globals.css.
         "fade-in": {
           from: { opacity: "0" },
           to: { opacity: "1" },
@@ -110,11 +112,26 @@ const config: Config = {
           from: { opacity: "0", transform: "scale(.96)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
+        "slide-up": {
+          from: { opacity: "0", transform: "translateY(16px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        shimmer: {
+          from: { backgroundPosition: "200% 0" },
+          to: { backgroundPosition: "-200% 0" },
+        },
+        "progress-fill": {
+          from: { transform: "scaleX(0)" },
+          to: { transform: "scaleX(1)" },
+        },
       },
       animation: {
         "fade-in": "fade-in .2s ease-out both",
         "fade-in-up": "fade-in-up .22s ease-out both",
         "scale-in": "scale-in .16s ease-out both",
+        "slide-up": "slide-up .28s cubic-bezier(.2,.8,.2,1) both",
+        shimmer: "shimmer 1.6s linear infinite",
+        "progress-fill": "progress-fill .8s cubic-bezier(.2,.8,.2,1) both",
       },
     },
   },

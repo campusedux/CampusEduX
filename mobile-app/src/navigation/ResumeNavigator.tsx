@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ResumeDashboardScreen } from "@/resume/ResumeDashboardScreen";
@@ -26,7 +27,7 @@ const Stack = createNativeStackNavigator<ResumeStackParamList>();
  */
 export function ResumeNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ResumeDashboard" component={ResumeDashboardScreen} />
       <Stack.Screen name="ResumeTips" component={ResumeTipsScreen} />
       <Stack.Screen name="Templates" component={TemplatesScreen} />

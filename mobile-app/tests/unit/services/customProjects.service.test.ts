@@ -2,8 +2,9 @@ jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModul
 
 import {
   customProjectsService,
-  estimatePrice,
+  calculateEstimate,
   getFeaturesFor,
+  splitFeaturesFor,
 } from "@/services/customProjects.service";
 import { CUSTOM_PROJECT_TOKENS } from "@/types";
 import { resetSupabaseMock, setTableResult, setFunctionResult } from "../../mocks/supabase.mock";
@@ -39,9 +40,9 @@ describe("CUSTOM_PROJECT_TOKENS (spec §2 / §41)", () => {
   });
 });
 
-describe("estimatePrice", () => {
+describe("calculateEstimate", () => {
   it("matches the spec §10 worked example (Personal Advanced = ₹32,999)", () => {
-    const est = estimatePrice(
+    const est = calculateEstimate(
       { projectType: "personal", projectLevel: "advanced", platform: "web", featureIds: ["ai", "chat", "razorpay", "analytics"] },
       PRICING,
       PLATFORMS,
@@ -49,48 +50,92 @@ describe("estimatePrice", () => {
     );
     // 19,999 base + (4000 + 3000 + 2000 + 4000) features + 0 platform
     expect(est.basePrice).toBe(19999);
-    expect(est.featureTotal).toBe(13000);
-    expect(est.platformCharge).toBe(0);
-    expect(est.estimatedTotal).toBe(32999);
-    expect(est.tokenAmount).toBe(3000);
+    expect(est.addOnsTotal).toBe(13000);
+    expect(est.platformCharges).toBe(0);
+    expect(est.total).toBe(32999);
+    expect(est.token).toBe(3000);
   });
 
   it("adds the platform charge on top", () => {
-    const est = estimatePrice(
+    const est = calculateEstimate(
       { projectType: "personal", projectLevel: "advanced", platform: "web_android", featureIds: [] },
       PRICING,
       PLATFORMS,
       FEATURES
     );
-    expect(est.estimatedTotal).toBe(19999 + 3000);
+    expect(est.total).toBe(19999 + 3000);
   });
 
   it("token is the same for Standard and Advanced and is independent of feature count", () => {
-    const std = estimatePrice({ projectType: "personal", projectLevel: "standard", platform: "web", featureIds: [] }, PRICING, PLATFORMS, FEATURES);
-    const adv = estimatePrice({ projectType: "personal", projectLevel: "advanced", platform: "web", featureIds: ["chat", "analytics"] }, PRICING, PLATFORMS, FEATURES);
-    expect(std.tokenAmount).toBe(3000);
-    expect(adv.tokenAmount).toBe(3000);
+    const std = calculateEstimate({ projectType: "personal", projectLevel: "standard", platform: "web", featureIds: [] }, PRICING, PLATFORMS, FEATURES);
+    const adv = calculateEstimate({ projectType: "personal", projectLevel: "advanced", platform: "web", featureIds: ["chat", "analytics"] }, PRICING, PLATFORMS, FEATURES);
+    expect(std.token).toBe(3000);
+    expect(adv.token).toBe(3000);
     expect(std.basePrice).not.toBe(adv.basePrice); // base price DID change
   });
 
   it("ignores feature ids not available for the chosen type/level", () => {
     // 'ai' is advanced-only; ask for it on a Standard build
-    const est = estimatePrice(
+    const est = calculateEstimate(
       { projectType: "personal", projectLevel: "standard", platform: "web", featureIds: ["ai", "chat"] },
       PRICING,
       PLATFORMS,
       FEATURES
     );
-    expect(est.selectedFeatures.map((f) => f.id)).toEqual(["chat"]);
-    expect(est.featureTotal).toBe(3000);
+    expect(est.addOns.map((f) => f.id)).toEqual(["chat"]);
+    expect(est.addOnsTotal).toBe(3000);
   });
 
   it("prices Personal above Academic and Business above Personal (spec §41)", () => {
-    const a = estimatePrice({ projectType: "academic", projectLevel: "advanced", platform: "web", featureIds: [] }, PRICING, PLATFORMS, FEATURES);
-    const p = estimatePrice({ projectType: "personal", projectLevel: "advanced", platform: "web", featureIds: [] }, PRICING, PLATFORMS, FEATURES);
-    const b = estimatePrice({ projectType: "business", projectLevel: "advanced", platform: "web", featureIds: [] }, PRICING, PLATFORMS, FEATURES);
-    expect(p.estimatedTotal).toBeGreaterThan(a.estimatedTotal);
-    expect(b.estimatedTotal).toBeGreaterThan(p.estimatedTotal);
+    const a = calculateEstimate({ projectType: "academic", projectLevel: "advanced", platform: "web", featureIds: [] }, PRICING, PLATFORMS, FEATURES);
+    const p = calculateEstimate({ projectType: "personal", projectLevel: "advanced", platform: "web", featureIds: [] }, PRICING, PLATFORMS, FEATURES);
+    const b = calculateEstimate({ projectType: "business", projectLevel: "advanced", platform: "web", featureIds: [] }, PRICING, PLATFORMS, FEATURES);
+    expect(p.total).toBeGreaterThan(a.total);
+    expect(b.total).toBeGreaterThan(p.total);
+  });
+});
+
+describe("calculateEstimate — included features & balance", () => {
+  const INCL: CustomFeature[] = [
+    { id: "login", name: "Login", description: "", category: "Auth", projectTypes: ["academic"], projectLevels: ["standard", "advanced"], price: 800, sortOrder: 1, includedInLevels: ["academic:standard", "academic:advanced"] },
+    { id: "search-filters", name: "Filters", description: "", category: "Search", projectTypes: ["academic"], projectLevels: ["standard", "advanced"], price: 800, sortOrder: 2, includedInLevels: ["academic:advanced"] },
+  ];
+  const cfg = (level: "standard" | "advanced", featureIds: string[]) =>
+    ({ projectType: "academic", projectLevel: level, platform: "web", featureIds }) as const;
+
+  it("never charges an included feature, even when its id is selected", () => {
+    const est = calculateEstimate(cfg("standard", ["login"]), PRICING, PLATFORMS, INCL);
+    expect(est.addOns).toEqual([]);
+    expect(est.addOnsTotal).toBe(0);
+    expect(est.total).toBe(7999);
+    expect(est.includedFeatures.map((f) => f.id)).toEqual(["login"]);
+    expect(est.includedFeatures[0].price).toBe(0);
+  });
+
+  it("switching Standard -> Advanced moves a feature from add-on to included", () => {
+    const std = calculateEstimate(cfg("standard", ["search-filters"]), PRICING, PLATFORMS, INCL);
+    expect(std.addOns.map((f) => f.id)).toEqual(["search-filters"]);
+    expect(std.addOnsTotal).toBe(55); // Academic override, not the 800 catalog price
+    expect(std.total).toBe(7999 + 55);
+
+    const adv = calculateEstimate(cfg("advanced", ["search-filters"]), PRICING, PLATFORMS, INCL);
+    expect(adv.addOns).toEqual([]);
+    expect(adv.includedFeatures.map((f) => f.id)).toEqual(["login", "search-filters"]);
+    expect(adv.total).toBe(9999);
+  });
+
+  it("balanceAfterToken is total - token and never negative", () => {
+    const est = calculateEstimate(cfg("standard", []), PRICING, PLATFORMS, INCL);
+    expect(est.token).toBe(1500);
+    expect(est.balanceAfterToken).toBe(7999 - 1500);
+    const none = calculateEstimate({ projectType: null, projectLevel: null, platform: null, featureIds: [] }, [], [], []);
+    expect(none.balanceAfterToken).toBe(0);
+  });
+
+  it("splitFeaturesFor keeps included out of the add-on catalog", () => {
+    const { included, addOnCatalog } = splitFeaturesFor("academic", "standard", INCL);
+    expect(included.map((f) => f.id)).toEqual(["login"]);
+    expect(addOnCatalog.map((f) => f.id)).toEqual(["search-filters"]);
   });
 });
 

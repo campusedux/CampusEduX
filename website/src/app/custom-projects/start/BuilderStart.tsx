@@ -113,7 +113,7 @@ export default function BuilderStart() {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
         <Field label="Project name" required htmlFor="cp-title">
           <Input
             id="cp-title"
@@ -126,7 +126,7 @@ export default function BuilderStart() {
         </Field>
       </section>
 
-      <section className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
         <h2 className="text-lg font-bold text-ink">
           What should this project achieve? <span className="text-danger">*</span>
         </h2>
@@ -145,7 +145,7 @@ export default function BuilderStart() {
         />
       </section>
 
-      <section className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
         <h2 className="text-lg font-bold text-ink">
           Project type <span className="text-danger">*</span>
         </h2>
@@ -164,7 +164,7 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
         <h2 className="text-lg font-bold text-ink">
           Project level <span className="text-danger">*</span>
         </h2>
@@ -183,7 +183,7 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
         <h2 className="text-lg font-bold text-ink">
           Platform <span className="text-danger">*</span>
         </h2>
@@ -211,7 +211,7 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-line bg-white shadow-card">
+      <section className="rounded-2xl border border-line bg-card shadow-card">
         <button
           type="button"
           onClick={() => setOptionalOpen((o) => !o)}

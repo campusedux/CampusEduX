@@ -4,6 +4,7 @@ import { notify } from "@/lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
+import { STORE_URL } from "@/constants/contact";
 import { Screen } from "@/components/ui";
 import type { SettingsStackParamList } from "@/types";
 
@@ -24,7 +25,9 @@ export function AboutScreen() {
           "• Projects, Jobs, and Placement Prep in one app\n• Resume Builder with ATS scoring\n• Referral rewards & Premium plans"
         ),
     },
-    { icon: "star-outline" as const, label: "Rate Us", onPress: () => Linking.openURL("https://play.google.com/store/apps") },
+    ...(STORE_URL
+      ? [{ icon: "star-outline" as const, label: "Rate Us", onPress: () => Linking.openURL(STORE_URL).catch(() => notify("Couldn't open the store", "Please try again later.")) }]
+      : []),
     {
       icon: "share-social-outline" as const,
       label: "Share App",

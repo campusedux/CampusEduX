@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import { MainNavigator } from "./MainNavigator";
@@ -7,6 +8,7 @@ import { CustomProjectsNavigator } from "./CustomProjectsNavigator";
 import { ReferralNavigator } from "./ReferralNavigator";
 import { PremiumNavigator } from "./PremiumNavigator";
 import { SettingsNavigator } from "./SettingsNavigator";
+import { useSchemeColors } from "@/theme";
 import { DrawerContent } from "./DrawerContent";
 import type { DrawerParamList } from "@/types";
 
@@ -19,9 +21,11 @@ const Drawer = createDrawerNavigator<DrawerParamList>();
  * as sibling stacks alongside MainTabs.
  */
 export function DrawerNavigator() {
+  const { colors, isDark } = useSchemeColors();
   return (
-    <Drawer.Navigator
-      screenOptions={{ headerShown: false, drawerStyle: { width: "82%" } }}
+    <Drawer.Navigator screenLayout={boundaryScreenLayout}
+      // Dark/AMOLED: the panel behind the menu takes the surface colour (Light: the library default, unchanged).
+      screenOptions={{ headerShown: false, drawerStyle: isDark ? { width: "82%", backgroundColor: colors.surface } : { width: "82%" } }}
       drawerContent={(props) => <DrawerContent {...props} />}
     >
       <Drawer.Screen name="MainTabs" component={MainNavigator} />

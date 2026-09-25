@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import { onlyActiveJobs } from "@/lib/jobsActive";
 import { searchLearning } from "@/lib/learning";
 import {
   type GlobalSearchResult,
@@ -138,15 +139,11 @@ async function searchJobs(term: string, limit: number): Promise<SubResult> {
     const cols = "id,title,company_name,location,job_type";
 
     const [text, skills] = await Promise.all([
-      supabase
-        .from("jobs")
-        .select(cols, { count: "exact" })
+      onlyActiveJobs(supabase.from("jobs").select(cols, { count: "exact" }))
         .or(orIlike(["title", "company_name", "location", "description", "experience"], term))
         .order("posted_at", { ascending: false })
         .limit(limit),
-      supabase
-        .from("jobs")
-        .select(cols)
+      onlyActiveJobs(supabase.from("jobs").select(cols))
         .overlaps("skills", arrayMatchVariants(term))
         .order("posted_at", { ascending: false })
         .limit(limit),

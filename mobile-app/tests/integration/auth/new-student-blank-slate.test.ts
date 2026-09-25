@@ -86,8 +86,7 @@ it("notifications are empty", async () => {
   expect(await homeService.getNotifications()).toEqual([]);
 });
 
-it("shared catalog still renders (categories fall back to sample when unseeded)", async () => {
+it("an unseeded catalog is a real empty list — no sample categories", async () => {
   setTableResult("categories", { data: [] });
-  const categories = await homeService.getCategories();
-  expect(categories.length).toBeGreaterThan(0); // catalog keeps its sample fallback
+  expect(await homeService.getCategories()).toEqual([]);
 });

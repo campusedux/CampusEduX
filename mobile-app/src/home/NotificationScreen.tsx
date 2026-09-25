@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, Pressable, SectionList, Image } from "react-native";
+import { View, Text, SectionList, Image } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, LoadingState, ErrorState, EmptyState } from "@/components/ui";
+import { Screen, ScreenHeader, HeaderIconButton, Chip, Card, IconTile, SkeletonList, ErrorState, EmptyState } from "@/components/ui";
+import type { AccentName } from "@/constants/theme";
 import { useNotifications, useMarkNotificationRead } from "@/hooks/useHomeData";
 import type { AppNotification, HomeStackParamList } from "@/types";
 
@@ -13,6 +14,12 @@ const CATEGORY_ICON: Record<AppNotification["category"], keyof typeof Ionicons.g
   offers: "pricetag-outline",
   updates: "cube-outline",
   messages: "chatbubble-outline",
+};
+
+const CATEGORY_ACCENT: Record<AppNotification["category"], AccentName> = {
+  offers: "orange",
+  updates: "blue",
+  messages: "teal",
 };
 
 type Tab = "all" | "offers" | "updates" | "messages";
@@ -45,33 +52,30 @@ export function NotificationScreen() {
     return groupByDay(filtered);
   }, [data, tab]);
 
+  const countFor = (t: Tab) => (data ?? []).filter((n) => t === "all" || n.category === t).length;
+
   return (
     <Screen className="px-6">
-      <View className="flex-row items-center justify-between mt-2 mb-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-bold text-gray-900">Notifications</Text>
-        <Pressable onPress={() => refetch()}>
-          <Ionicons name="settings-outline" size={20} color="#111827" />
-        </Pressable>
-      </View>
+      <ScreenHeader
+        title="Notifications"
+        onBack={() => navigation.goBack()}
+        right={<HeaderIconButton icon="refresh-outline" label="Refresh notifications" onPress={() => refetch()} />}
+      />
 
-      <View className="flex-row mb-4" style={{ gap: 8 }}>
+      <View className="flex-row flex-wrap">
         {TABS.map((t) => (
-          <Pressable
+          <Chip
             key={t}
+            label={t.charAt(0).toUpperCase() + t.slice(1)}
+            active={tab === t}
+            count={data ? countFor(t) : undefined}
             onPress={() => setTab(t)}
-            className="px-4 py-2 rounded-full border"
-            style={{ backgroundColor: tab === t ? "#4F39F6" : "#fff", borderColor: tab === t ? "#4F39F6" : "#E5E7EB" }}
-          >
-            <Text className={tab === t ? "text-white font-medium capitalize text-xs" : "text-gray-600 capitalize text-xs"}>{t}</Text>
-          </Pressable>
+          />
         ))}
       </View>
 
       {isLoading ? (
-        <LoadingState label="Loading notifications..." />
+        <SkeletonList count={4} />
       ) : isError ? (
         <ErrorState message="Couldn't load notifications." onRetry={refetch} />
       ) : sections.length === 0 ? (
@@ -81,35 +85,40 @@ export function NotificationScreen() {
           sections={sections}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          stickySectionHeadersEnabled={false}
           renderSectionHeader={({ section }) => (
-            <Text className="text-gray-400 text-sm font-medium mb-2 mt-3">{section.title}</Text>
+            <Text className="text-gray-500 text-xs font-bold uppercase mb-2 mt-3" style={{ letterSpacing: 0.6 }}>
+              {section.title}
+            </Text>
           )}
           renderItem={({ item }) => (
-            <Pressable
-              onPress={() => !item.isRead && markRead.mutate(item.id)}
-              className="bg-white rounded-2xl border border-gray-100 p-3 mb-3"
-            >
-              <View className="flex-row items-start">
-                <View className="w-9 h-9 rounded-full items-center justify-center mr-3" style={{ backgroundColor: "#EEF0FF" }}>
-                  <Ionicons name={CATEGORY_ICON[item.category]} size={16} color="#4F39F6" />
+            <View style={{ marginBottom: 12 }}>
+              <Card
+                variant={item.isRead ? "plain" : "tinted"}
+                accent={item.isRead ? "indigo" : CATEGORY_ACCENT[item.category]}
+                padding={14}
+                onPress={() => !item.isRead && markRead.mutate(item.id)}
+                accessibilityLabel={`${item.isRead ? "" : "Unread. "}${item.title}`}
+              >
+                <View className="flex-row items-start">
+                  <View className="mr-3">
+                    <IconTile icon={CATEGORY_ICON[item.category]} accent={CATEGORY_ACCENT[item.category]} variant="soft" size={40} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className={`text-gray-900 ${item.isRead ? "font-semibold" : "font-bold"}`}>{item.title}</Text>
+                    <Text className="text-gray-600 text-sm mt-0.5">{item.body}</Text>
+                    <Text className="text-gray-500 text-xs mt-1">
+                      {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </Text>
+                  </View>
+                  {!item.isRead && <View className="w-2.5 h-2.5 rounded-full bg-primary mt-1.5 ml-2" />}
                 </View>
-                <View className="flex-1">
-                  <Text className="font-semibold text-gray-900">{item.title}</Text>
-                  <Text className="text-gray-500 text-sm mt-0.5">{item.body}</Text>
-                  <Text className="text-gray-400 text-xs mt-1">
-                    {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </Text>
-                </View>
-                {!item.isRead && <View className="w-2 h-2 rounded-full bg-primary mt-1" />}
-              </View>
-              {item.imageUrl ? (
-                <Image
-                  source={{ uri: item.imageUrl }}
-                  className="w-full h-40 rounded-xl mt-3"
-                  resizeMode="cover"
-                />
-              ) : null}
-            </Pressable>
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} className="w-full h-40 rounded-xl mt-3" resizeMode="cover" />
+                ) : null}
+              </Card>
+            </View>
           )}
         />
       )}

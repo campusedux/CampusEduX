@@ -70,8 +70,11 @@ export function PurchasedProjectsScreen() {
           <FlatList
             data={filtered}
             keyExtractor={(item) => item.orderId}
-            renderItem={({ item }) => (
-              <View className="flex-row items-center border border-gray-100 rounded-2xl p-3 mb-3">
+            renderItem={({ item }) => {
+              // Wishlisted project that was unpublished/removed: greyed, not openable (manage it in Wishlist).
+              const gone = tab === "wishlist" && item.project.available === false;
+              return (
+              <View className="flex-row items-center border border-gray-100 rounded-2xl p-3 mb-3" style={gone ? { opacity: 0.6 } : undefined} testID={gone ? "wishlist-unavailable" : undefined}>
                 <View className="w-12 h-12 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: "#EEF0FF" }}>
                   <Ionicons name="cube-outline" size={22} color="#4F39F6" />
                 </View>
@@ -81,7 +84,7 @@ export function PurchasedProjectsScreen() {
                     {tab === "wishlist" ? item.project.categoryName : `Purchased on ${new Date(item.purchasedAt).toLocaleDateString()}`}
                   </Text>
                 </View>
-                <Button
+                {gone ? null : <Button
                   label={tab === "wishlist" ? "View" : "View"}
                   variant="outline"
                   onPress={() =>
@@ -89,9 +92,10 @@ export function PurchasedProjectsScreen() {
                       ? (navigation.getParent() as any)?.navigate("MainTabs", { screen: "Projects", params: { screen: "ProjectDetails", params: { projectId: item.project.id } } })
                       : (navigation as any).navigate("MyProjectDetails", { orderId: item.orderId })
                   }
-                />
+                />}
               </View>
-            )}
+              );
+            }}
           />
         </>
       )}

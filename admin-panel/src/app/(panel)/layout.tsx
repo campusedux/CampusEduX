@@ -1,6 +1,7 @@
 import { requireAdmin } from '@/lib/auth';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
+import { AdminPermissionsProvider } from '@/components/auth/AdminPermissionsProvider';
 import { ToastProvider } from '@/components/ui/toast';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const admin = await requireAdmin();
 
   return (
+    <AdminPermissionsProvider role={admin.role} perms={admin.perms}>
     <ToastProvider>
       <div className="flex min-h-screen">
         <Sidebar perms={admin.perms} />
@@ -18,5 +20,6 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         </div>
       </div>
     </ToastProvider>
+    </AdminPermissionsProvider>
   );
 }

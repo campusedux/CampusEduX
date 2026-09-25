@@ -1,3 +1,6 @@
+export type WorkMode = "Remote" | "Hybrid" | "On-site";
+export type ExperienceLevel = "Fresher" | "Experienced";
+
 export interface Job {
   id: string;
   title: string;
@@ -9,6 +12,23 @@ export interface Job {
   postedAt: string;
   jobType: "Full Time" | "Part Time" | "Internship" | "Contract";
   isNew: boolean;
+  /** Normalised category (migration 0114); undefined/null until backfilled. */
+  category?: string | null;
+  /** null = not set by the admin — the UI never guesses. */
+  workMode?: WorkMode | null;
+  experienceLevel?: ExperienceLevel | null;
+  applyUrl?: string | null;
+}
+
+export interface JobCategoryCount {
+  category: string;
+  jobCount: number;
+}
+
+export interface JobDashboardStats {
+  activeJobs: number;
+  companyCount: number;
+  fresherJobs: number;
 }
 
 export interface JobDetail extends Job {
@@ -16,6 +36,17 @@ export interface JobDetail extends Job {
   requirements: string[];
   skills: string[];
   experience: string;
+  summary: string;
+  responsibilities: string[];
+  qualification: string;
+  shift: string;
+  benefits: string[];
+  category: string;
+  requisitionId: string;
+  applyUrl: string | null;
+  /** ISO timestamp; null = no deadline. */
+  applicationDeadline: string | null;
+  candidateNote: string;
   companyRating: number;
   companyReviewCount: number;
   isSaved: boolean;
@@ -72,6 +103,17 @@ export interface JobFilters {
   minSalaryLPA: number;
   maxSalaryLPA: number;
   sortBy: "relevance" | "latest" | "salary";
+  /**
+   * Free-text title search. Composed in at the call site (SearchJobsScreen)
+   * from its own local text-input state — never held in useJobFilterStore —
+   * so tapping "Reset" in the filter modal can't silently wipe search text
+   * the user can still see on the previous screen.
+   */
+  query?: string;
+  /** Exact match on jobs.category (one of the fixed set or "Other"). */
+  category?: string | null;
+  workMode?: WorkMode | null;
+  experienceLevel?: ExperienceLevel | null;
 }
 
 export const DEFAULT_JOB_FILTERS: JobFilters = {

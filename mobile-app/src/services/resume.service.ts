@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { mimeFromName } from "@/lib/uploadMime";
 import * as Print from "expo-print";
 import { BRAND } from "@/constants/brand";
 import type {
@@ -274,7 +275,7 @@ export const resumeService = {
         .order("updated_at", { ascending: false });
       if (error) throw new Error(error.message);
       // a new student has not built a résumé yet — an empty list is the correct
-      // state; SAMPLE_RESUME_LIST is only for when the table/query fails.
+      // state; SAMPLE_RESUME_LIST is a __DEV__-only stand-in when the table/query fails.
       return (data ?? []).map((row) => ({
         id: row.id,
         title: row.title,
@@ -283,8 +284,12 @@ export const resumeService = {
         updatedAt: row.updated_at,
       }));
     } catch (error) {
-      console.info(`[resume.service] getResumes: using sample content (${(error as Error).message})`);
-      return SAMPLE_RESUME_LIST;
+      // A failure must surface as ErrorState — never a sample list a student could mistake for their own résumés.
+      if (__DEV__) {
+        console.info(`[resume.service] getResumes: using sample content in dev (${(error as Error).message})`);
+        return SAMPLE_RESUME_LIST;
+      }
+      throw error instanceof Error ? error : new Error(String(error));
     }
   },
 
@@ -451,7 +456,7 @@ export const resumeService = {
 
     const form = new FormData();
     // React Native's fetch understands this { uri, name, type } shape for file parts.
-    form.append("file", { uri: file.uri, name: file.name, type: file.mimeType ?? "application/octet-stream" } as unknown as Blob);
+    form.append("file", { uri: file.uri, name: file.name, type: mimeFromName(file.name) ?? file.mimeType ?? "application/octet-stream" } as unknown as Blob);
 
     const res = await fetch(`${BRAND.website.replace(/\/$/, "")}/api/resume/parse`, {
       method: "POST",

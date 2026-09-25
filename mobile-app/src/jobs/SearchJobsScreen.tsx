@@ -1,12 +1,14 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, Pressable, TextInput, FlatList } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState, EmptyState } from "@/components/ui";
-import { JobCard } from "@/components/cards";
-import { useSearchJobs, useToggleSavedJob, useSavedJobs } from "@/hooks/useJobs";
-import type { JobStackParamList, Job } from "@/types";
+import { useAllJobs, useSavedJobs } from "@/hooks/useJobs";
+import { useJobFilterStore } from "@/store/jobFilterStore";
+import { DEFAULT_JOB_FILTERS } from "@/types";
+import type { JobStackParamList } from "@/types";
+import { JobListingItem } from "./components/JobListingCard";
 
 type Nav = NativeStackNavigationProp<JobStackParamList, "SearchJobs">;
 type Rte = RouteProp<JobStackParamList, "SearchJobs">;
@@ -14,11 +16,29 @@ type Rte = RouteProp<JobStackParamList, "SearchJobs">;
 export function SearchJobsScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Rte>();
-  const [query, setQuery] = useState(params?.initialQuery ?? "");
+  const [rawQuery, setRawQuery] = useState(params?.initialQuery ?? "");
+  const [query, setQuery] = useState(rawQuery);
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(rawQuery.trim()), 250);
+    return () => clearTimeout(t);
+  }, [rawQuery]);
 
-  const { data, isLoading, isError, refetch } = useSearchJobs(query);
+  const { filters, setFilters } = useJobFilterStore();
+  // `query` is composed in here, never written to useJobFilterStore, so
+  // "Reset" in the filter modal can't silently wipe this text box.
+  const effectiveFilters = { ...filters, query };
+  const { data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useAllJobs(effectiveFilters);
+  const jobs = data?.pages.flatMap((p) => p.jobs) ?? [];
+
   const { data: saved } = useSavedJobs();
   const savedIds = new Set((saved ?? []).map((j) => j.id));
+
+  const activeChips = [
+    filters.category ? { key: "category", label: filters.category, clear: { category: null } } : null,
+    filters.experienceLevel ? { key: "exp", label: filters.experienceLevel, clear: { experienceLevel: null } } : null,
+    filters.workMode ? { key: "mode", label: filters.workMode, clear: { workMode: null } } : null,
+  ].filter((c): c is NonNullable<typeof c> => c !== null);
 
   return (
     <Screen className="px-6">
@@ -30,14 +50,14 @@ export function SearchJobsScreen() {
           <Ionicons name="search-outline" size={18} color="#9CA3AF" />
           <TextInput
             className="flex-1 mx-2 text-gray-900"
-            value={query}
-            onChangeText={setQuery}
+            value={rawQuery}
+            onChangeText={setRawQuery}
             placeholder="Search job title, skills or company"
             placeholderTextColor="#9CA3AF"
             autoFocus={!params?.initialQuery}
           />
-          {query.length > 0 && (
-            <Pressable onPress={() => setQuery("")} hitSlop={8}>
+          {rawQuery.length > 0 && (
+            <Pressable onPress={() => setRawQuery("")} hitSlop={8}>
               <Ionicons name="close-circle" size={18} color="#9CA3AF" />
             </Pressable>
           )}
@@ -47,38 +67,63 @@ export function SearchJobsScreen() {
         </Pressable>
       </View>
 
-      {query.trim().length > 1 && <Text className="text-gray-400 text-sm mb-3">{data?.length ?? 0} jobs found</Text>}
+      {activeChips.length > 0 && (
+        <View className="flex-row flex-wrap mb-3" style={{ gap: 8 }}>
+          {activeChips.map((c) => (
+            <Pressable
+              key={c.key}
+              onPress={() => setFilters({ ...filters, ...c.clear })}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${c.label} filter`}
+              className="flex-row items-center rounded-full px-3 py-1.5"
+              style={{ backgroundColor: "#EEF2FF" }}
+            >
+              <Text style={{ color: "#4F46E5", fontWeight: "600", fontSize: 13 }}>{c.label}</Text>
+              <Ionicons name="close" size={14} color="#4F46E5" style={{ marginLeft: 6 }} />
+            </Pressable>
+          ))}
+        </View>
+      )}
 
-      {query.trim().length < 2 ? (
-        <EmptyState icon="search-outline" title="Search for a job" subtitle="Try a title, skill, or company name." />
-      ) : isLoading ? (
-        <LoadingState label="Searching..." />
+      {!isLoading && !isError && jobs.length > 0 && (
+        <Text className="text-gray-400 text-sm mb-3">{jobs.length} jobs found</Text>
+      )}
+
+      {isLoading ? (
+        <LoadingState label="Loading jobs..." />
       ) : isError ? (
-        <ErrorState message="Search failed." onRetry={refetch} />
-      ) : !data || data.length === 0 ? (
-        <EmptyState title="No jobs found" subtitle={`Nothing matched "${query}"`} />
+        <ErrorState message="Couldn't load jobs." onRetry={refetch} />
+      ) : jobs.length === 0 ? (
+        <EmptyState
+          icon={filters.category && !query ? "briefcase-outline" : "search-outline"}
+          title={filters.category && !query ? `No openings in ${filters.category} yet` : "No jobs found"}
+          subtitle={
+            query
+              ? `Nothing matched "${query}"`
+              : filters.category
+                ? "New roles are added regularly — check back soon or browse all jobs."
+                : "Try a different filter."
+          }
+          actionLabel={filters.category ? "Browse all jobs" : undefined}
+          onAction={filters.category ? () => setFilters({ ...DEFAULT_JOB_FILTERS, sortBy: "latest" }) : undefined}
+        />
       ) : (
         <FlatList
-          data={data}
+          data={jobs}
           keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          onEndReached={() => hasNextPage && fetchNextPage()}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={isFetchingNextPage ? <LoadingState label="Loading more..." /> : null}
           renderItem={({ item }) => (
-            <SearchJobItem job={item} isSaved={savedIds.has(item.id)} navigation={navigation} />
+            <View style={{ marginBottom: 12 }}>
+              <JobListingItem job={item} isSaved={savedIds.has(item.id)} />
+            </View>
           )}
         />
       )}
     </Screen>
-  );
-}
-
-function SearchJobItem({ job, isSaved, navigation }: { job: Job; isSaved: boolean; navigation: Nav }) {
-  const toggleSaved = useToggleSavedJob(job.id);
-  return (
-    <JobCard
-      job={job}
-      isSaved={isSaved}
-      onToggleSave={() => toggleSaved.mutate(isSaved)}
-      onPress={(j) => (navigation as any).navigate("JobDetails", { jobId: j.id })}
-    />
   );
 }
 

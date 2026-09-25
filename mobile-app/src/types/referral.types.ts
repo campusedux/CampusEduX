@@ -19,9 +19,10 @@ export interface ReferralOverview {
   successfulReferrals: number;
   pendingReferrals: number;
   cancelledReferrals: number;
-  /** Estimated ₹ still to be paid once pending referrals convert. */
-  pendingRewards: number;
-  rewardRule: ReferralRewardRule;
+  /** Estimated ₹ still to be paid once pending referrals convert; null when the reward rule is unknown. */
+  pendingRewards: number | null;
+  /** null when reward_settings couldn't be read — screens hide every amount. */
+  rewardRule: ReferralRewardRule | null;
 }
 
 export type ReferralStatus = "successful" | "pending" | "cancelled";
@@ -44,7 +45,8 @@ export interface EarningsMonthPoint {
 export interface EarningsSummary {
   totalEarnings: number;
   totalReferrals: number;
-  pendingEarnings: number;
+  /** null when the reward rule is unknown (estimate hidden). */
+  pendingEarnings: number | null;
   successfulReferrals: number;
   pendingReferrals: number;
   cancelledReferrals: number;

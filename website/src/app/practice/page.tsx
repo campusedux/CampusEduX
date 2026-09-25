@@ -106,7 +106,7 @@ export default async function PracticeHubPage() {
               <Link
                 key={c.slug}
                 href={`/practice/problems?category=${encodeURIComponent(c.slug)}`}
-                className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3.5 py-1.5 text-sm font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
+                className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3.5 py-1.5 text-sm font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
               >
                 {c.name}
                 <span className="rounded-full bg-surface px-1.5 text-xs font-semibold text-ink-faint">

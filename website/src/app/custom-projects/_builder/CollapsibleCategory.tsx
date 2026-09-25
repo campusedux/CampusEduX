@@ -20,7 +20,7 @@ export function CollapsibleCategory({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-white">
+    <div className="overflow-hidden rounded-2xl border border-line bg-card">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

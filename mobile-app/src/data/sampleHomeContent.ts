@@ -4,7 +4,6 @@ import type {
   Job,
   AppNotification,
   OfferBanner,
-  ReferralSummary,
 } from "@/types";
 
 /**
@@ -142,12 +141,3 @@ export const SAMPLE_OFFERS: OfferBanner[] = [
   { id: "of-2", title: "Flat 30% OFF", description: "On New Arrivals", discountLabel: "30%", couponCode: "NEW30" },
   { id: "of-3", title: "Flat 20% OFF", description: "On Best Sellers", discountLabel: "20%", couponCode: "BEST20" },
 ];
-
-export const SAMPLE_REFERRAL: ReferralSummary = {
-  code: "ROHAN21",
-  shareLink: "https://campusedux.app/ref/ROHAN21",
-  totalReferrals: 25,
-  totalEarned: 1250,
-  referrerBonus: 100,
-  refereeDiscountPercent: 20,
-};

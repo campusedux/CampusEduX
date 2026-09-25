@@ -29,7 +29,7 @@ export default function ContactForm() {
 
   if (status === "sent") {
     return (
-      <div className="mt-8 rounded-2xl border border-success/40 bg-white p-5 shadow-card">
+      <div className="mt-8 rounded-2xl border border-success/40 bg-card p-5 shadow-card">
         <div className="font-semibold text-ink">Thanks — your message has been sent.</div>
         <p className="mt-1 text-sm text-ink-muted">The CampusEduX team will get back to you by email.</p>
         <button

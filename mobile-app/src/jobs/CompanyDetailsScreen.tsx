@@ -1,5 +1,7 @@
 import React from "react";
-import { View, Text, Pressable, Image, Linking } from "react-native";
+import { notify } from "@/lib/notify";
+import { openHttpUrl } from "@/lib/openApplyUrl";
+import { View, Text, Pressable, Image } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -42,7 +44,11 @@ export function CompanyDetailsScreen() {
         <View className="flex-1">
           <Text className="font-bold text-gray-900 text-lg">{company.name}</Text>
           {company.website && (
-            <Pressable onPress={() => Linking.openURL(company.website as string)}>
+            <Pressable
+              onPress={async () => {
+                if (!(await openHttpUrl(company.website))) notify("Couldn't open link", "This company's website link isn't valid.");
+              }}
+            >
               <Text className="text-primary text-sm">{company.website}</Text>
             </Pressable>
           )}

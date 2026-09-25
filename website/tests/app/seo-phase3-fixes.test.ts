@@ -240,10 +240,10 @@ describe("Phase 3: account referral link never falls back to campusedux.app", ()
     setTableResult("referral_codes", { data: { code: "ABC123", total_referrals: 0, total_earned: 0 } });
     setTableResult("referrals", { data: [] });
 
-    const { default: CopyLinkButton } = await import("@/app/account/referral/CopyLinkButton");
+    const { default: ShareReferralLink } = await import("@/components/referral/ShareReferralLink");
     const { default: AccountReferralPage } = await import("@/app/account/referral/page");
     const result = await AccountReferralPage();
-    const button = findByType(result, CopyLinkButton);
+    const button = findByType(result, ShareReferralLink);
 
     expect(button).not.toBeNull();
     expect(button!.props.link).toBe("https://www.campusedux.com/register?ref=ABC123");
@@ -257,10 +257,10 @@ describe("Phase 3: account referral link never falls back to campusedux.app", ()
     setTableResult("referral_codes", { data: { code: "XYZ789", total_referrals: 0, total_earned: 0 } });
     setTableResult("referrals", { data: [] });
 
-    const { default: CopyLinkButton } = await import("@/app/account/referral/CopyLinkButton");
+    const { default: ShareReferralLink } = await import("@/components/referral/ShareReferralLink");
     const { default: AccountReferralPage } = await import("@/app/account/referral/page");
     const result = await AccountReferralPage();
-    const button = findByType(result, CopyLinkButton);
+    const button = findByType(result, ShareReferralLink);
 
     expect(button!.props.link).toBe("https://example.test/register?ref=XYZ789");
   });
@@ -272,10 +272,10 @@ describe("Phase 3: account referral link never falls back to campusedux.app", ()
     setTableResult("referral_codes", { data: { code: "NOAPP1", total_referrals: 0, total_earned: 0 } });
     setTableResult("referrals", { data: [] });
 
-    const { default: CopyLinkButton } = await import("@/app/account/referral/CopyLinkButton");
+    const { default: ShareReferralLink } = await import("@/components/referral/ShareReferralLink");
     const { default: AccountReferralPage } = await import("@/app/account/referral/page");
     const result = await AccountReferralPage();
-    const button = findByType(result, CopyLinkButton);
+    const button = findByType(result, ShareReferralLink);
 
     expect(button!.props.link).not.toMatch(/campusedux\.app/);
   });

@@ -3,7 +3,7 @@ import { View, Text, Pressable, Switch } from "react-native";
 import { notify } from "@/lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, Button, Input, Chip, LoadingState } from "@/components/ui";
+import { Screen, Button, Input, Chip, LoadingState, ErrorState } from "@/components/ui";
 import { useJobAlertPreferences, useSaveJobAlertPreferences } from "@/hooks/useJobs";
 import type { JobFilters } from "@/types";
 
@@ -11,7 +11,7 @@ const JOB_TYPES: JobFilters["jobType"][] = ["All", "Full Time", "Part Time", "In
 
 export function JobAlertsScreen() {
   const navigation = useNavigation();
-  const { data: prefs, isLoading } = useJobAlertPreferences();
+  const { data: prefs, isLoading, isError, refetch } = useJobAlertPreferences();
   const saveMutation = useSaveJobAlertPreferences();
 
   const [enabled, setEnabled] = useState(false);
@@ -42,6 +42,7 @@ export function JobAlertsScreen() {
   };
 
   if (isLoading) return <Screen className="items-center justify-center"><LoadingState label="Loading preferences..." /></Screen>;
+  if (isError) return <Screen className="items-center justify-center px-6"><ErrorState message="Couldn't load your job alert preferences." onRetry={refetch} /></Screen>;
 
   return (
     <Screen scroll className="px-6">

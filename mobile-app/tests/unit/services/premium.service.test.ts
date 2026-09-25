@@ -21,9 +21,9 @@ describe("premiumService.getPlans", () => {
     });
   });
 
-  it("falls back to sample plans when the table is empty (catalog content is safe to demo)", async () => {
+  it("returns an honest empty catalog when the table is empty (never a fake planId a real Subscribe tap could send)", async () => {
     setTableResult("premium_plans", { data: [] });
-    expect(await premiumService.getPlans()).toEqual(SAMPLE_PREMIUM_PLANS);
+    expect(await premiumService.getPlans()).toEqual([]);
   });
 
   it("falls back to sample plans when the query fails", async () => {

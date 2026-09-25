@@ -13,3 +13,18 @@ export const APP_STATUS_LABEL: Record<string, string> = {
   rejected: 'Rejected',
   hired: 'Hired',
 };
+
+export const WORK_MODES = ['Remote', 'Hybrid', 'On-site'] as const;
+export const EXPERIENCE_LEVELS = ['Fresher', 'Experienced'] as const;
+/** Mirrors migration 086 `job_canonical_category()`. */
+export const JOB_CATEGORIES = [
+  'IT & Software',
+  'Core Engineering',
+  'Data/AI',
+  'Design',
+  'Marketing',
+  'Sales',
+  'Finance',
+  'HR',
+  'Other',
+] as const;

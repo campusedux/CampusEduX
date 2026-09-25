@@ -15,9 +15,9 @@ const STEPS = [
   "Pick a project type & level",
   "Choose your platform",
   "Describe the project & add requirements",
-  "Select features — see a live estimate",
+  "See what's included, add extra features — with a live estimate",
   "Upload an image & reference files",
-  "Pay the project token to submit",
+  "Review your estimate, then pay the project token to submit",
 ];
 
 export function BuilderStartScreen() {

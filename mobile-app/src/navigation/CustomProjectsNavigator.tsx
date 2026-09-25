@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { BuilderStartScreen } from "@/customProjects/BuilderStartScreen";
@@ -13,6 +14,7 @@ import { SubmitSuccessScreen } from "@/customProjects/SubmitSuccessScreen";
 import { SubmitFailedScreen } from "@/customProjects/SubmitFailedScreen";
 import { MyCustomProjectsScreen } from "@/customProjects/MyCustomProjectsScreen";
 import { CustomProjectDetailScreen } from "@/customProjects/CustomProjectDetailScreen";
+import { LegalDocumentScreen } from "@/legal";
 import type { CustomProjectsStackParamList } from "@/types";
 
 const Stack = createNativeStackNavigator<CustomProjectsStackParamList>();
@@ -24,7 +26,7 @@ const Stack = createNativeStackNavigator<CustomProjectsStackParamList>();
  */
 export function CustomProjectsNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="BuilderStart" component={BuilderStartScreen} />
       <Stack.Screen name="BuilderType" component={BuilderTypeScreen} />
       <Stack.Screen name="BuilderLevel" component={BuilderLevelScreen} />
@@ -38,6 +40,7 @@ export function CustomProjectsNavigator() {
       <Stack.Screen name="SubmitFailed" component={SubmitFailedScreen} options={{ presentation: "modal" }} />
       <Stack.Screen name="MyCustomProjects" component={MyCustomProjectsScreen} />
       <Stack.Screen name="CustomProjectDetail" component={CustomProjectDetailScreen} />
+      <Stack.Screen name="LegalDocument" component={LegalDocumentScreen} />
     </Stack.Navigator>
   );
 }

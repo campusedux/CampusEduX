@@ -158,7 +158,10 @@ export interface CodingProblemDetail {
   topic: { grid_slug: string; topic_slug: string; title: string };
   locked: boolean;
   editorial: string;
+  /** Empty `{}` until the caller has submitted an attempt (or is admin) — see `solution_locked`. */
   solution_code: Record<string, string>;
+  /** true = a solution exists but is withheld until the user submits an attempt. */
+  solution_locked?: boolean;
   solution_approach: string;
 }
 
@@ -205,14 +208,6 @@ export interface MockTestDetail {
    *  without this field behave as 'topic'. */
   scope?: "topic" | "chapter" | "course";
   topic: { grid_slug: string; topic_slug: string; title: string } | null;
-}
-
-/** First readable topic of a grid, for "start reading" / grid-root redirect. */
-export function firstTopicOf(tree: LearningTree): { sectionSlug: string; topic: LearningTreeTopic } | null {
-  for (const section of tree.sections) {
-    if (section.topics.length) return { sectionSlug: section.slug, topic: section.topics[0] };
-  }
-  return null;
 }
 
 /** Flat reading order across the whole grid (matches the RPC's prev/next). */

@@ -38,7 +38,7 @@ export default function JdMatchPanel({ resumeId }: { resumeId: string }) {
       {error && <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{error}</p>}
 
       {result && (
-        <div className="rounded-2xl border border-line bg-white p-6">
+        <div className="rounded-2xl border border-line bg-card p-6">
           <div className="flex items-center gap-4">
             <div className="text-3xl font-bold text-ink">{result.matchPercent}%</div>
             <div className="text-sm text-ink-muted">

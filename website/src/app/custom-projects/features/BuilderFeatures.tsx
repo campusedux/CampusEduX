@@ -27,6 +27,7 @@ import {
   type Platform,
 } from "@/lib/customProjects";
 import { useDraft } from "../_builder/useDraft";
+import { resolveUploadContentType, withContentType } from "@/lib/uploads";
 import { BottomBar } from "../_builder/BottomBar";
 import { ConfigSummary } from "../_builder/ConfigSummary";
 import { CollapsibleCategory } from "../_builder/CollapsibleCategory";
@@ -155,7 +156,8 @@ export default function BuilderFeatures({
     setUploadError(null);
     const f = list[0];
     if (!f || !userId) return;
-    if (!CP_IMAGE_TYPES.includes(f.type)) {
+    const imageType = resolveUploadContentType(f, CP_IMAGE_TYPES);
+    if (!imageType) {
       setUploadError("Project image must be a PNG, JPEG or WebP.");
       return;
     }
@@ -169,7 +171,7 @@ export default function BuilderFeatures({
       const path = `${userId}/uploads/image_${Date.now()}.${ext}`;
       const { error } = await createBrowserSupabase()
         .storage.from(CP_UPLOADS_BUCKET)
-        .upload(path, f, { contentType: f.type || `image/${ext}`, upsert: true });
+        .upload(path, withContentType(f, imageType), { contentType: imageType, upsert: true });
       if (error) {
         setUploadError(`Upload failed: ${error.message}`);
         return;
@@ -192,7 +194,8 @@ export default function BuilderFeatures({
           setUploadError(`"${f.name}" is over ${CP_MAX_FILE_MB} MB and was skipped.`);
           continue;
         }
-        if (f.type && !CP_DOC_TYPES.includes(f.type)) {
+        const docType = resolveUploadContentType(f, CP_DOC_TYPES);
+        if (!docType) {
           setUploadError(`"${f.name}" is not an accepted file type and was skipped.`);
           continue;
         }
@@ -201,7 +204,7 @@ export default function BuilderFeatures({
         const path = `${userId}/uploads/ref_${Date.now()}_${safe}`;
         const { error } = await supabase.storage
           .from(CP_UPLOADS_BUCKET)
-          .upload(path, f, { contentType: f.type || "application/octet-stream", upsert: true });
+          .upload(path, withContentType(f, docType), { contentType: docType, upsert: true });
         if (error) {
           setUploadError(`Upload failed for "${f.name}": ${error.message}`);
           continue;
@@ -346,7 +349,7 @@ export default function BuilderFeatures({
               hint="PNG, JPEG or WebP"
             />
             {draft.projectImagePath && (
-              <div className="flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink">
+              <div className="flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2 text-sm text-ink">
                 <ImageIcon className="h-4 w-4 flex-shrink-0 text-ink-faint" aria-hidden />
                 <span className="flex-1 truncate">Image attached</span>
                 <button
@@ -373,7 +376,7 @@ export default function BuilderFeatures({
             {draft.referenceFiles.length > 0 && (
               <ul className="space-y-1.5">
                 {draft.referenceFiles.map((r, i) => (
-                  <li key={r.path} className="flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink">
+                  <li key={r.path} className="flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2 text-sm text-ink">
                     <FileText className="h-4 w-4 flex-shrink-0 text-ink-faint" aria-hidden />
                     <span className="flex-1 truncate">
                       {r.name} <span className="text-xs text-ink-muted">({r.sizeMb} MB)</span>
@@ -412,7 +415,7 @@ export default function BuilderFeatures({
 
       {/* Right sidebar */}
       <aside className="space-y-4 lg:sticky lg:top-24">
-        <div className="rounded-2xl border border-line bg-white p-5 shadow-card">
+        <div className="rounded-2xl border border-line bg-card p-5 shadow-card">
           <h2 className="text-base font-bold text-ink">Your selection</h2>
           <dl className="mt-4 space-y-2.5 text-sm">
             <div className="flex items-center justify-between gap-3">
@@ -460,7 +463,7 @@ export default function BuilderFeatures({
             value={browseQuery}
             onChange={(e) => setBrowseQuery(e.target.value)}
             placeholder="Search all extra features…"
-            className="block h-10 w-full rounded-xl border border-line bg-white pl-10 pr-3 text-sm text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="block h-10 w-full rounded-xl border border-line bg-card pl-10 pr-3 text-sm text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </div>
         <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">

@@ -1,3 +1,4 @@
+import { boundaryScreenLayout } from "@/components/errors/ErrorBoundary";
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { PlacementHomeScreen } from "@/placement/PlacementHomeScreen";
@@ -22,7 +23,7 @@ const Stack = createNativeStackNavigator<PlacementStackParamList>();
  */
 export function PlacementNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenLayout={boundaryScreenLayout} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="PlacementHome" component={PlacementHomeScreen} />
       <Stack.Screen name="LearningGrids" component={LearningGridsScreen} />
       <Stack.Screen name="LearningGrid" component={LearningGridScreen} />

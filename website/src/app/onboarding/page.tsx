@@ -34,7 +34,7 @@ export default async function OnboardingPage() {
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-lg flex-col justify-center px-4 py-12 sm:px-6">
-      <div className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+      <div className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
         <h1 className="text-2xl font-bold text-ink">Tell us about your studies</h1>
         <p className="mt-1 text-sm text-ink-muted">
           A few details so we can personalise projects, jobs and learning content for you.

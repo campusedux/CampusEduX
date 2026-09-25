@@ -120,6 +120,20 @@ export const FEATURE_LEVEL_TONE: Record<FeatureLevel, 'neutral' | 'info' | 'bran
   premium: 'warning',
 };
 
+/**
+ * "<project_type>:<project_level>" combos a feature can be INCLUDED (free,
+ * read-only in the builder, never charged) for. Mirrors the CHECK in
+ * migration 0115 / 087.
+ */
+export const INCLUDED_KEYS = [
+  'academic:standard',
+  'academic:advanced',
+  'personal:standard',
+  'personal:advanced',
+  'business:standard',
+  'business:advanced',
+] as const;
+
 export const PROJECT_TYPE_LABEL: Record<string, string> = {
   academic: 'Academic',
   personal: 'Personal',

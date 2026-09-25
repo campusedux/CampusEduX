@@ -1,4 +1,5 @@
-import { LEGAL, LEGAL_VERSIONS, LEGAL_HUB_ORDER, legalUrl } from "@/constants/legal";
+import { BRAND } from "@/constants/brand";
+import { LEGAL_VERSIONS, LEGAL_HUB_ORDER, legalUrl } from "@/constants/legal";
 import { LEGAL_DOCUMENTS } from "@/legal/content";
 import { interpolateDocument } from "@/legal/interpolate";
 import type { LegalDocId } from "@/types";
@@ -36,7 +37,7 @@ describe("legal content <-> config are in sync", () => {
 
       expect(LEGAL_VERSIONS[id]?.version).toMatch(/^\d+\.\d+\.\d+$/);
       expect(LEGAL_VERSIONS[id]?.effectiveDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(legalUrl(id)).toMatch(/^https:\/\/campusedux\.app\//);
+      expect(legalUrl(id).startsWith(`${BRAND.website.replace(/\/$/, "")}/`)).toBe(true);
     }
   });
 
@@ -49,12 +50,5 @@ describe("legal content <-> config are in sync", () => {
       const filled = interpolateDocument(LEGAL_DOCUMENTS[id]);
       expect(JSON.stringify(filled)).not.toMatch(/\{\{\w+\}\}/);
     }
-  });
-
-  it("known owner-input placeholders are surfaced (not silently blank)", () => {
-    // These must remain visible bracketed placeholders until the owner fills them.
-    expect(LEGAL.governingCityState).toContain("[");
-    expect(LEGAL.registeredAddress).toContain("[");
-    expect(LEGAL.grievanceOfficerName).toContain("[");
   });
 });

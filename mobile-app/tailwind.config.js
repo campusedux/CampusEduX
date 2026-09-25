@@ -27,9 +27,14 @@ module.exports = {
           900: '#312E81',
         },
         surface: '#F8F9FC',
+        canvas: '#F5F6FB',
+        secondary: '#0D9488',
         success: '#16A34A',
         danger: '#DC2626',
         warning: '#F59E0B',
+        info: '#2563EB',
+        // Feature accents are NOT registered here: blue/orange/... already exist as
+        // default Tailwind palettes the app uses. Use ACCENTS/accentTint() from theme.ts.
       },
     },
   },

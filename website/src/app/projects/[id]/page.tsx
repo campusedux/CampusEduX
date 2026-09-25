@@ -89,7 +89,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
   }
 
   return (
-    <div className="container-page py-8 sm:py-10">
+    <div className="container-page pb-32 pt-8 sm:pt-10 md:pb-12">
       <JsonLd data={productJsonLd} />
       <JsonLd
         data={breadcrumbJsonLd([
@@ -100,58 +100,82 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
 
       <Breadcrumb className="mb-6" items={[{ label: "Projects", href: "/projects" }, { label: project.title }]} />
 
-      <div className="grid gap-8 lg:grid-cols-[1.15fr_1fr] lg:items-start">
-        {/* Gallery */}
-        <Gallery images={gallery} title={project.title} />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start xl:gap-12">
+        <div className="min-w-0">
+          <header>
+            {project.category_name && (
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-primary">{project.category_name}</p>
+            )}
+            <h1 className="mt-2 font-display text-[1.75rem] font-bold leading-tight tracking-tight text-ink sm:text-[2.3rem]">
+              {project.title}
+            </h1>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Rating value={project.rating} count={project.review_count} showEmpty />
+              {project.is_premium && <Badge tone="premium">Premium</Badge>}
+              {project.is_best_seller && <Badge tone="success">Best seller</Badge>}
+            </div>
+          </header>
 
-        {/* Buy box — sticks alongside the gallery on desktop */}
-        <div className="lg:sticky lg:top-24">
-          <div className="text-sm text-ink-muted">{project.category_name || "Uncategorised"}</div>
-          <h1 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">{project.title}</h1>
-
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Rating value={project.rating} count={project.review_count} showEmpty />
-            {project.is_premium && <Badge tone="premium">Premium</Badge>}
-            {project.is_best_seller && <Badge tone="success">Best seller</Badge>}
+          <div className="mt-6">
+            <Gallery images={gallery} title={project.title} />
           </div>
 
           {(project.tech_stack ?? []).length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {(project.tech_stack as string[]).map((t) => (
-                <TagPill key={t}>{t}</TagPill>
-              ))}
-            </div>
+            <section className="mt-8" aria-labelledby="tech-title">
+              <h2 id="tech-title" className="text-xs font-bold uppercase tracking-[0.14em] text-ink-faint">
+                Tech stack
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(project.tech_stack as string[]).map((t) => (
+                  <TagPill key={t}>{t}</TagPill>
+                ))}
+              </div>
+            </section>
           )}
 
-          <div className="card mt-5 p-5">
-            <PriceDisplay price={project.price} size="lg" />
-            <p className="mt-1 text-xs text-ink-faint">
-              License: {project.license || "Standard"} · Platform fee {project.platform_fee_percent ?? 0}%
-            </p>
-            <ProjectPurchasePanel projectId={project.id} price={Number(project.price) || 0} title={project.title} />
-          </div>
+          <section className="mt-10 max-w-3xl">
+            <h2 className="h-section">About this project</h2>
+            <p className="mt-3 whitespace-pre-line leading-7 text-ink-muted">{project.description || "No description provided yet."}</p>
+          </section>
+
+          <section className="mt-12">
+            <h2 className="h-section">Reviews</h2>
+            {reviews.length === 0 ? (
+              <EmptyState className="mt-4" title="No reviews yet" subtitle="Be the first to review this project after buying it." />
+            ) : (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {reviews.map((r) => (
+                  <ReviewCard key={r.id} review={r} />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
-      </div>
 
-      {/* About */}
-      <section className="mt-12 max-w-3xl">
-        <h2 className="text-xl font-bold text-ink">About this project</h2>
-        <p className="mt-3 whitespace-pre-line text-ink-muted">{project.description || "No description provided yet."}</p>
-      </section>
-
-      {/* Reviews */}
-      <section className="mt-12">
-        <h2 className="text-xl font-bold text-ink">Reviews</h2>
-        {reviews.length === 0 ? (
-          <EmptyState className="mt-4" title="No reviews yet" subtitle="Be the first to review this project after buying it." />
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {reviews.map((r) => (
-              <ReviewCard key={r.id} review={r} />
-            ))}
+        {/* Buy box — sticky beside the content on desktop */}
+        <aside id="buy" className="scroll-mt-24 lg:sticky lg:top-24" aria-label="Buy this project">
+          <div className="card p-6">
+            <PriceDisplay price={project.price} size="lg" />
+            <ProjectPurchasePanel projectId={project.id} price={Number(project.price) || 0} title={project.title} />
+            <dl className="mt-6 space-y-2.5 border-t border-line pt-5 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-muted">License</dt>
+                <dd className="font-medium text-ink">{project.license || "Standard"}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-muted">Platform fee</dt>
+                <dd className="font-medium text-ink">{project.platform_fee_percent ?? 0}%</dd>
+              </div>
+              {(project.tech_stack ?? []).length > 0 && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-muted">Tech</dt>
+                  <dd className="truncate text-right font-medium text-ink">{(project.tech_stack as string[]).slice(0, 3).join(", ")}</dd>
+                </div>
+              )}
+            </dl>
           </div>
-        )}
-      </section>
+        </aside>
+      </div>
 
       {/* Related */}
       {related.length > 0 && (
@@ -164,6 +188,16 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
           </div>
         </section>
       )}
+
+      {/* Phone: price + jump to the buy box (the purchase flow itself lives there, unchanged). */}
+      <div className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-30 border-t border-line/70 bg-card/95 px-4 py-3 backdrop-blur-xl md:bottom-0 lg:hidden">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+          <PriceDisplay price={project.price} size="lg" />
+          <a href="#buy" className="btn-primary h-11 px-6">
+            {Number(project.price) > 0 ? "Buy now" : "Get it free"}
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

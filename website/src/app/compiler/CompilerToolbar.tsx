@@ -47,6 +47,7 @@ export function CompilerToolbar({
   onReset,
   onRun,
   busy,
+  signInRequired = false,
 }: {
   languages: LanguageDef[];
   languageId: string;
@@ -65,6 +66,7 @@ export function CompilerToolbar({
   onReset: () => void;
   onRun: () => void;
   busy: boolean;
+  signInRequired?: boolean;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -179,9 +181,9 @@ export function CompilerToolbar({
         <button
           type="button"
           onClick={onRun}
-          disabled={busy}
-          title="Run code"
-          aria-label="Run code"
+          disabled={busy || signInRequired}
+          title={signInRequired ? "Sign in to run code" : "Run code"}
+          aria-label={signInRequired ? "Sign in to run code" : "Run code"}
           aria-keyshortcuts="Control+Enter"
           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-600 active:scale-[.98] disabled:pointer-events-none disabled:opacity-60 motion-reduce:transform-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >

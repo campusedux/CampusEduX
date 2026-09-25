@@ -1,3 +1,5 @@
+import { userScopedKey } from "@/lib/queryClient";
+import { assertResumeSize } from "@/lib/resumeFile";
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import * as DocumentPicker from "expo-document-picker";
@@ -8,7 +10,6 @@ import type { JobFilters, JobAlertPreferences } from "@/types";
 
 export const jobQueryKeys = {
   all: (filters: Partial<JobFilters>, academic = "") => ["jobs", "all", academic, filters] as const,
-  search: (query: string) => ["jobs", "search", query] as const,
   recommended: (academic = "") => ["jobs", "recommended", academic] as const,
   companies: (query: string) => ["companies", query] as const,
   companyDetail: (companyId: string) => ["companies", "detail", companyId] as const,
@@ -16,6 +17,8 @@ export const jobQueryKeys = {
   detail: (jobId: string) => ["jobs", "detail", jobId] as const,
   recruiter: (jobId: string) => ["jobs", "recruiter", jobId] as const,
   saved: ["jobs", "saved"] as const,
+  categoryCounts: ["jobs", "category-counts"] as const,
+  dashboardStats: ["jobs", "dashboard-stats"] as const,
   resumes: ["resumes"] as const,
   applied: ["applications"] as const,
   applicationDetail: (id: string) => ["applications", "detail", id] as const,
@@ -32,9 +35,6 @@ export const useAllJobs = (filters: Partial<JobFilters>) => {
   });
 };
 
-export const useSearchJobs = (query: string) =>
-  useQuery({ queryKey: jobQueryKeys.search(query), queryFn: () => jobService.searchJobs(query), enabled: query.trim().length > 1 });
-
 export const useRecommendedJobs = () => {
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
@@ -44,6 +44,12 @@ export const useRecommendedJobs = () => {
     enabled: !!userId,
   });
 };
+
+export const useJobCategoryCounts = () =>
+  useQuery({ queryKey: jobQueryKeys.categoryCounts, queryFn: jobService.getCategoryCounts, staleTime: 60_000 });
+
+export const useJobDashboardStats = () =>
+  useQuery({ queryKey: jobQueryKeys.dashboardStats, queryFn: jobService.getDashboardStats, staleTime: 60_000 });
 
 export const useCompanies = (query = "") =>
   useQuery({ queryKey: jobQueryKeys.companies(query), queryFn: () => jobService.getCompanies(query) });
@@ -56,7 +62,7 @@ export const useCompanyJobs = (companyId: string) =>
 
 export const useJobDetail = (jobId: string) => {
   const userId = useAuthStore((s) => s.user?.id);
-  return useQuery({ queryKey: jobQueryKeys.detail(jobId), queryFn: () => jobService.getJobDetail(jobId, userId), enabled: !!jobId });
+  return useQuery({ queryKey: userScopedKey(jobQueryKeys.detail(jobId), userId), queryFn: () => jobService.getJobDetail(jobId, userId), enabled: !!jobId });
 };
 
 export const useRecruiterForJob = (jobId: string) =>
@@ -76,12 +82,12 @@ export const useToggleSavedJob = (jobId: string) => {
 
 export const useSavedJobs = () => {
   const userId = useAuthStore((s) => s.user?.id);
-  return useQuery({ queryKey: jobQueryKeys.saved, queryFn: () => jobService.getSavedJobs(userId as string), enabled: !!userId });
+  return useQuery({ queryKey: userScopedKey(jobQueryKeys.saved, userId), queryFn: () => jobService.getSavedJobs(userId as string), enabled: !!userId });
 };
 
 export const useResumes = () => {
   const userId = useAuthStore((s) => s.user?.id);
-  return useQuery({ queryKey: jobQueryKeys.resumes, queryFn: () => jobService.getResumes(userId as string), enabled: !!userId });
+  return useQuery({ queryKey: userScopedKey(jobQueryKeys.resumes, userId), queryFn: () => jobService.getResumes(userId as string), enabled: !!userId });
 };
 
 /**
@@ -101,9 +107,10 @@ export function usePickAndUploadResume() {
     if (result.canceled || !result.assets?.[0]) return null;
 
     const file = result.assets[0];
+    assertResumeSize(file.size);
     setIsUploading(true);
     try {
-      const uploaded = await jobService.uploadResume(userId as string, file.uri, file.name);
+      const uploaded = await jobService.uploadResume(userId as string, file.uri, file.name, file.mimeType);
       queryClient.invalidateQueries({ queryKey: jobQueryKeys.resumes });
       return uploaded;
     } finally {
@@ -128,20 +135,22 @@ export const useApplyToJob = (jobId: string) => {
 
 export const useAppliedJobs = () => {
   const userId = useAuthStore((s) => s.user?.id);
-  return useQuery({ queryKey: jobQueryKeys.applied, queryFn: () => jobService.getAppliedJobs(userId as string), enabled: !!userId });
+  return useQuery({ queryKey: userScopedKey(jobQueryKeys.applied, userId), queryFn: () => jobService.getAppliedJobs(userId as string), enabled: !!userId });
 };
 
-export const useApplicationDetail = (applicationId: string) =>
-  useQuery({
-    queryKey: jobQueryKeys.applicationDetail(applicationId),
+export const useApplicationDetail = (applicationId: string) => {
+  const userId = useAuthStore((s) => s.user?.id);
+  return useQuery({
+    queryKey: userScopedKey(jobQueryKeys.applicationDetail(applicationId), userId),
     queryFn: () => jobService.getApplicationDetail(applicationId),
     enabled: !!applicationId,
   });
+};
 
 export const useJobAlertPreferences = () => {
   const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: jobQueryKeys.jobAlerts,
+    queryKey: userScopedKey(jobQueryKeys.jobAlerts, userId),
     queryFn: () => jobService.getJobAlertPreferences(userId as string),
     enabled: !!userId,
   });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -8,6 +8,8 @@ import { z } from "zod";
 import { Screen, Input, Button, AuthHeader } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { goBackSafely } from "@/navigation/safeNavigation";
+import { describeAuthError } from "@/auth/authErrors";
+import { useResendCooldown } from "@/auth/useResendCooldown";
 import type { AuthStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, "Login">;
@@ -20,10 +22,22 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, resendVerificationEmail } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Set when the failure was "Email not confirmed": holds the address to re-send to.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendNote, setResendNote] = useState<string | null>(null);
+  const resend = useResendCooldown();
+  // The navigator swaps this screen out as soon as login succeeds, so guard late state updates.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const {
     control,
@@ -41,6 +55,8 @@ export function LoginScreen() {
   const onSubmit = async (values: LoginForm) => {
     setSubmitting(true);
     setFormError(null);
+    setUnverifiedEmail(null);
+    setResendNote(null);
     try {
       await login(values);
       // No navigation here: RootNavigator swaps to ProfileSetup or Main
@@ -48,13 +64,26 @@ export function LoginScreen() {
       // setup only when course/branch/year are missing, so a returning user
       // is never asked for them again.
     } catch (error: any) {
+      if (!mounted.current) return;
       // Rendered inline rather than via Alert.alert: Alert is a no-op stub in
       // react-native-web, so on Expo Web the failure was invisible.
-      setFormError(
-        error?.message ?? "Please check your credentials and try again."
-      );
+      const friendly = describeAuthError(error, "Please check your credentials and try again.");
+      setFormError(friendly.message);
+      const email = typeof error?.email === "string" && error.email ? error.email : values.identifier.trim();
+      if (friendly.canResendVerification && /\S+@\S+\.\S+/.test(email)) setUnverifiedEmail(email);
     } finally {
-      setSubmitting(false);
+      if (mounted.current) setSubmitting(false);
+    }
+  };
+
+  const onResend = async () => {
+    if (!unverifiedEmail || !resend.canResend) return;
+    resend.start();
+    try {
+      await resendVerificationEmail(unverifiedEmail);
+      if (mounted.current) setResendNote("Verification email sent. Check your inbox (and spam).");
+    } catch (error) {
+      if (mounted.current) setResendNote(describeAuthError(error).message);
     }
   };
 
@@ -64,9 +93,10 @@ export function LoginScreen() {
     try {
       await loginWithGoogle();
     } catch (error: any) {
-      setFormError(error?.message ?? "Google sign-in failed. Please try again.");
+      if (!mounted.current) return;
+      setFormError(describeAuthError(error, "Google sign-in failed. Please try again.").message);
     } finally {
-      setGoogleSubmitting(false);
+      if (mounted.current) setGoogleSubmitting(false);
     }
   };
 
@@ -116,6 +146,14 @@ export function LoginScreen() {
       {formError ? (
         <View className="mb-4 rounded-xl border border-danger bg-red-50 px-4 py-3">
           <Text className="text-danger text-sm">{formError}</Text>
+          {unverifiedEmail ? (
+            <Pressable onPress={onResend} disabled={!resend.canResend} accessibilityRole="button" className="mt-2">
+              <Text className="text-primary font-medium text-sm">
+                {resend.canResend ? "Resend verification email" : `Resend available in ${resend.secondsLeft}s`}
+              </Text>
+            </Pressable>
+          ) : null}
+          {resendNote ? <Text className="text-gray-600 text-sm mt-1">{resendNote}</Text> : null}
         </View>
       ) : null}
 

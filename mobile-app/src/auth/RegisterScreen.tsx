@@ -1,6 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable } from "react-native";
-import { notify, notifyThen } from "@/lib/notify";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Controller, useForm } from "react-hook-form";
@@ -10,6 +9,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen, Input, Button, AuthHeader } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { goBackSafely } from "@/navigation/safeNavigation";
+import { describeAuthError, interpretSignUp } from "@/auth/authErrors";
+import { useResendCooldown } from "@/auth/useResendCooldown";
 import type { AuthStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, "Register">;
@@ -36,8 +37,19 @@ type RegisterForm = z.infer<typeof registerSchema>;
 export function RegisterScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Rte>();
-  const { register } = useAuth();
+  const { register, resendVerificationEmail } = useAuth();
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ kind: "verify_email" | "already_registered"; message: string; email: string } | null>(null);
+  const [resendNote, setResendNote] = useState<string | null>(null);
+  const resend = useResendCooldown();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const {
     control,
@@ -65,14 +77,34 @@ export function RegisterScreen() {
 
   const onSubmit = async (values: RegisterForm) => {
     setSubmitting(true);
+    setFormError(null);
+    setNotice(null);
+    setResendNote(null);
     try {
-      await register(values);
-      notifyThen("Verify your email",
-        "We've sent a verification link to your email. Please verify before logging in.", () => (navigation as any).navigate("Login"));
+      const data = await register(values);
+      if (!mounted.current) return;
+      const outcome = interpretSignUp(data);
+      // "signed_in": email confirmation is off, a session exists and the auth
+      // listener moves RootNavigator on — nothing to tell the user here.
+      if (outcome.kind !== "signed_in") {
+        setNotice({ kind: outcome.kind, message: outcome.message, email: values.email.trim() });
+        if (outcome.kind === "verify_email") resend.start();
+      }
     } catch (error: any) {
-      notify("Registration failed", error.message ?? "Please try again.");
+      if (mounted.current) setFormError(describeAuthError(error, "Registration failed. Please try again.").message);
     } finally {
-      setSubmitting(false);
+      if (mounted.current) setSubmitting(false);
+    }
+  };
+
+  const onResend = async () => {
+    if (!notice || !resend.canResend) return;
+    resend.start();
+    try {
+      await resendVerificationEmail(notice.email);
+      if (mounted.current) setResendNote("Verification email sent again. Check your inbox (and spam).");
+    } catch (error) {
+      if (mounted.current) setResendNote(describeAuthError(error).message);
     }
   };
 
@@ -186,6 +218,29 @@ export function RegisterScreen() {
         </Text>
       </Pressable>
       {errors.agreeToTerms && <Text className="text-danger text-xs -mt-4 mb-4">{errors.agreeToTerms.message}</Text>}
+
+      {formError ? (
+        <View className="mb-4 rounded-xl border border-danger bg-red-50 px-4 py-3">
+          <Text className="text-danger text-sm">{formError}</Text>
+        </View>
+      ) : null}
+
+      {notice ? (
+        <View className="mb-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+          <Text className="text-gray-800 text-sm">{notice.message}</Text>
+          {notice.kind === "verify_email" ? (
+            <Pressable onPress={onResend} disabled={!resend.canResend} accessibilityRole="button" className="mt-2">
+              <Text className="text-primary font-medium text-sm">
+                {resend.canResend ? "Resend verification email" : `Resend available in ${resend.secondsLeft}s`}
+              </Text>
+            </Pressable>
+          ) : null}
+          {resendNote ? <Text className="text-gray-600 text-sm mt-1">{resendNote}</Text> : null}
+          <Pressable onPress={() => (navigation as any).navigate("Login")} accessibilityRole="button" className="mt-2">
+            <Text className="text-primary font-semibold text-sm">Go to Login</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <Button label="Register" loading={submitting} onPress={handleSubmit(onSubmit)} />
 
