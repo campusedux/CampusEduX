@@ -1,5 +1,9 @@
 import { revalidatePath, revalidateTag } from "next/cache";
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { isAllowedLearningTag, learningTag } from "@/lib/learningTags";
+
+export const runtime = "nodejs";
 
 /**
  * On-demand cache invalidation for the public catalog + Learning pages.
@@ -15,6 +19,10 @@ import { NextResponse } from "next/server";
  *   { "tags": ["projects"] }                 // bust cached project data everywhere
  *   { "path": "/projects/tr-2" }             // re-render one page
  *   { "path": "/learning", "type": "layout" }// re-render a subtree
+ *
+ * Granular Learning tags (see `lib/learningTags.ts`): learning:list,
+ * learning:sitemap, learning:grid:<grid>, learning:topic:<grid>:<topic>,
+ * learning:coding:<slug>. `learning:sitemap` also re-renders /sitemap.xml.
  *
  * Known tags: projects, jobs, categories, companies, home, learning, practice,
  * premium, resume-templates, cms, blog, interview-questions.
@@ -38,10 +46,20 @@ const ALLOWED_TAGS = new Set([
   "interview-questions",
 ]);
 
+/** Constant-time comparison; a length mismatch is rejected up front. */
+function tokenMatches(given: string | null, expected: string): boolean {
+  if (!given) return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+const MAX_TAGS = 50;
+
 export async function POST(req: Request) {
   const secret = process.env.REVALIDATE_SECRET;
   if (!secret) return NextResponse.json({ error: "not enabled" }, { status: 404 });
-  if (req.headers.get("x-revalidate-secret") !== secret) {
+  if (!tokenMatches(req.headers.get("x-revalidate-secret"), secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -55,10 +73,14 @@ export async function POST(req: Request) {
   const done: { tags: string[]; paths: string[] } = { tags: [], paths: [] };
 
   if (Array.isArray(body.tags)) {
-    for (const t of body.tags) {
-      if (typeof t === "string" && ALLOWED_TAGS.has(t)) {
+    for (const t of body.tags.slice(0, MAX_TAGS)) {
+      if (typeof t === "string" && (ALLOWED_TAGS.has(t) || isAllowedLearningTag(t))) {
         revalidateTag(t);
         done.tags.push(t);
+        if (t === learningTag.sitemap) {
+          revalidatePath("/sitemap.xml");
+          done.paths.push("/sitemap.xml");
+        }
       }
     }
   }
