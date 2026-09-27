@@ -2,7 +2,9 @@
 -- custom_project_0124_0126_checks.sql  --  READ-ONLY (SELECT only). Paste into the Supabase SQL editor.
 -- Verifies migrations 0124/096 (balance payment), 0125/097 (delivery gate) and 0126/098 (referral RPCs)
 -- are really live by inspecting the objects they create (columns, constraints, functions, triggers,
--- policies, grants, bucket limit) — not the migrations table. Also checks the prerequisites 0128 needs.
+-- policies, grants, bucket limit) — not the migrations table. Also checks the prerequisites 0128 needs,
+-- and reports (INFO only) whether the objects of the untracked 0127_restore_resume_admin_tables already
+-- exist and which admin policies guard them.
 -- One row per check; `result` is PASS / FAIL / INFO. Scan for FAIL.
 -- ============================================================================
 with
@@ -112,6 +114,30 @@ select '0124-i2', 'token-paid requests with amount_paid = 0 (0124 backfill)', 'I
                      where token_payment_status = ''paid'' and amount_paid = 0 and token_amount > 0',
                    false, true, '')))[1]::text || ' row(s) — expected 0'
             else 'n/a (amount_paid column missing)' end
+union all
+-- ---------------------------------------------------------------- 0127 (restore resume admin tables)
+select '0127-i1', 'resume_ai_prompts table (admin 034 / 0127)', 'INFO',
+       case when to_regclass('public.resume_ai_prompts') is null then 'absent'
+            else 'present, ' || (xpath('/row/n/text()', query_to_xml(
+                   'select count(*) as n from public.resume_ai_prompts', false, true, '')))[1]::text || ' row(s)' end
+union all
+select '0127-i2', 'resume_share_reports table (admin 035 / 0127)', 'INFO',
+       case when to_regclass('public.resume_share_reports') is null then 'absent' else 'present' end
+union all
+select '0127-i3', 'report_shared_resume(text,text) (admin 035 / 0127)', 'INFO',
+       case when to_regprocedure('public.report_shared_resume(text,text)') is null then 'absent'
+            when has_function_privilege('anon', 'public.report_shared_resume(text,text)'::regprocedure, 'execute')
+              then 'present, anon may execute' else 'present, anon may NOT execute' end
+union all
+select '0127-i4', 'admin write policies on resume_ai_prompts / resume_shares / resume_share_reports', 'INFO',
+       coalesce((select string_agg(tablename || '.' || policyname || ' [' || cmd || ', '
+                   || case when coalesce(qual, '') || coalesce(with_check, '') like '%has_permission%' then 'permission-matrix'
+                           when coalesce(qual, '') || coalesce(with_check, '') like '%is_admin%' then 'BROAD is_admin'
+                           else 'other' end || ']', '; ' order by tablename, policyname)
+                   from pg_policies
+                  where schemaname = 'public' and cmd <> 'SELECT'
+                    and tablename in ('resume_ai_prompts', 'resume_shares', 'resume_share_reports')
+                    and coalesce(qual, '') || coalesce(with_check, '') ~ '(is_admin|has_permission)'), 'none')
 union all
 select '0128-i1', 'migration 0128 objects', 'INFO',
        case when to_regprocedure('public._custom_project_amounts(uuid)') is not null
