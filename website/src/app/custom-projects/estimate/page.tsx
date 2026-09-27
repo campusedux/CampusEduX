@@ -390,7 +390,7 @@ function EstimateBody({
       <div className="lg:col-span-2">
         <BottomBar
           step={3}
-          sticky={true}
+          sticky={false}
           left={
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <Link
