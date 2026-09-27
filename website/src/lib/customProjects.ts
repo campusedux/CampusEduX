@@ -40,6 +40,45 @@ export const CUSTOM_PROJECT_PROGRESS: Record<CustomProjectStatus, number> = {
   cancelled: 0,
 };
 
+/**
+ * Customer-facing tracking steps — mirrors TIMELINE_STEPS in
+ * mobile-app/src/customProjects/CustomProjectDetailScreen.tsx. A request only
+ * appears once the token is paid, so the first three steps are always reached
+ * for a listed request; the rest follow the admin-driven `status`.
+ */
+export const TRACKING_STEPS = [
+  { key: "configured", label: "Project configured", minStatus: -1 },
+  { key: "token_paid", label: "Token paid", minStatus: -1 },
+  { key: "created", label: "Request created", minStatus: -1 },
+  { key: "in_development", label: "Development started", minStatus: 1 },
+  { key: "testing", label: "Testing", minStatus: 2 },
+  { key: "ready", label: "Ready", minStatus: 3 },
+  { key: "delivered", label: "Delivered", minStatus: 4 },
+] as const;
+
+const TRACKING_STATUS_ORDER: CustomProjectStatus[] = ["new", "in_development", "testing", "ready", "delivered"];
+
+export type TrackingStepState = "done" | "current" | "upcoming";
+
+/** Per-step state for a request status. `cancelled` reports every step as upcoming (the page shows a banner instead). */
+export function trackingStepStates(
+  status: string,
+  tokenPaid = true,
+): { key: string; label: string; state: TrackingStepState }[] {
+  const idx = TRACKING_STATUS_ORDER.indexOf(status as CustomProjectStatus);
+  const cancelled = status === "cancelled" || idx < 0;
+  const reached = TRACKING_STEPS.map((step) =>
+    cancelled ? false : step.key === "token_paid" || step.key === "created" ? tokenPaid : idx >= step.minStatus,
+  );
+  const lastDone = reached.lastIndexOf(true);
+  return TRACKING_STEPS.map((step, i) => ({
+    key: step.key,
+    label: step.label,
+    // The final step is "done" outright once delivered; otherwise the step after the last reached one is "current".
+    state: reached[i] ? "done" : i === lastDone + 1 && !cancelled ? "current" : "upcoming",
+  }));
+}
+
 export const TYPE_LABELS: Record<ProjectType, string> = {
   academic: "Academic",
   personal: "Personal",

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, Download, ExternalLink } from "lucide-react";
 import { StatusBadge } from "../../_builder/StatusBadge";
+import { TrackingStepper } from "../../_builder/TrackingStepper";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
@@ -131,6 +132,7 @@ export default async function Page({ params }: Params) {
           </div>
           <StatusBadge status={request.status} />
         </div>
+        <TrackingStepper status={request.status} />
         {request.status !== "cancelled" && (
           <div className="mt-5">
             <div className="flex justify-between text-xs font-medium text-ink-muted">

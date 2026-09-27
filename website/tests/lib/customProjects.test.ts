@@ -13,6 +13,7 @@ import {
   type FeatureRow,
   type PlatformRow,
   type PricingRow,
+  trackingStepStates,
 } from "@/lib/customProjects";
 
 const PRICING: PricingRow[] = [
@@ -296,5 +297,28 @@ describe("Academic Extra Feature pricing — website ↔ Edge Function parity", 
     const source = fs.readFileSync(edgeFnPath, "utf8");
     const edgeMap = extractPriceMapLiteral(source, "ACADEMIC_EXTRA_FEATURE_PRICES");
     expect(edgeMap).toEqual(ACADEMIC_EXTRA_FEATURE_PRICES);
+  });
+});
+
+describe("trackingStepStates (customer tracking timeline)", () => {
+  const states = (status: string) => trackingStepStates(status).map((s) => s.state);
+
+  it("a freshly paid request has three done steps and Development as the current step", () => {
+    expect(states("new")).toEqual(["done", "done", "done", "current", "upcoming", "upcoming", "upcoming"]);
+  });
+
+  it("advances one step per admin status", () => {
+    expect(states("in_development")).toEqual(["done", "done", "done", "done", "current", "upcoming", "upcoming"]);
+    expect(states("testing")).toEqual(["done", "done", "done", "done", "done", "current", "upcoming"]);
+    expect(states("ready")).toEqual(["done", "done", "done", "done", "done", "done", "current"]);
+  });
+
+  it("delivered completes every step", () => {
+    expect(states("delivered").every((s) => s === "done")).toBe(true);
+  });
+
+  it("cancelled or unknown statuses claim no progress", () => {
+    expect(states("cancelled").every((s) => s === "upcoming")).toBe(true);
+    expect(states("bogus").every((s) => s === "upcoming")).toBe(true);
   });
 });
