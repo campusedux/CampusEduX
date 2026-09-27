@@ -1,6 +1,6 @@
 import React, { type ReactNode } from "react";
 import { View, Text, ScrollView, Pressable, Linking, StyleSheet } from "react-native";
-import { compilerUrl, isRunnableLang } from "@/lib/compilerLink";
+import { canRunInCompiler, compilerUrl } from "@/lib/compilerLink";
 import { notify } from "@/lib/notify";
 
 /**
@@ -104,7 +104,7 @@ function renderBlocks(src: string, enableRunOnWeb = false): ReactNode[] {
       }
       i += 1;
       const codeText = buf.join("\n");
-      const showRun = enableRunOnWeb && isRunnableLang(lang);
+      const showRun = enableRunOnWeb && canRunInCompiler(lang, codeText);
       out.push(
         <View key={`b${k++}`} style={styles.codeBlock}>
           {lang ? <Text style={styles.codeLang}>{lang.toUpperCase()}</Text> : null}

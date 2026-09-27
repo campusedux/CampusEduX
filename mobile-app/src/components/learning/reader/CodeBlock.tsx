@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { PressableScale } from "@/components/ui/PressableScale";
 import { RADII, SPACE, TOUCH, useTheme } from "@/theme";
-import { compilerUrl, isRunnableLang } from "@/lib/compilerLink";
+import { canRunInCompiler, compilerUrl } from "@/lib/compilerLink";
 import { notify } from "@/lib/notify";
 import { tokenize, type TokenKind } from "@/learning/reader/highlight";
 import { useReaderCtx } from "./readerContext";
@@ -32,7 +32,8 @@ export const CodeBlock = React.memo(function CodeBlock({ code, lang }: { code: s
   const tokens = useMemo(() => (code.length > MAX_HIGHLIGHT_CHARS ? [{ text: code, kind: "plain" as TokenKind }] : tokenize(code, lang)), [code, lang]);
   const lineCount = useMemo(() => code.split("\n").length, [code]);
   const showNumbers = lineCount >= LINE_NUMBERS_FROM;
-  const canRun = enableRun && isRunnableLang(lang);
+  // The website compiler has only the JDK: Java that needs a framework or library can't run there.
+  const canRun = enableRun && canRunInCompiler(lang, code);
 
   const color: Record<TokenKind, string> = {
     plain: colors.codeText,

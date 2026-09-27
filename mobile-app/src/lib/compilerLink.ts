@@ -41,6 +41,45 @@ export function isRunnableLang(tag: string | null | undefined): boolean {
   return resolveCompilerLanguage(tag) !== null;
 }
 
+/** JDK annotations usable without an import (java.lang and the java.lang.annotation meta-annotations). */
+const JDK_ANNOTATIONS = new Set([
+  "Override", "FunctionalInterface", "SuppressWarnings", "Deprecated", "SafeVarargs",
+  "Retention", "Target", "Documented", "Inherited", "Repeatable", "Native",
+]);
+/** One left-to-right pass, so `"/*"` in a string or a `'"'` char literal is read the way javac reads it. */
+const COMMENTS_AND_LITERALS = /"""[\s\S]*?"""|\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g;
+const IMPORT = /\bimport\s+(?:static\s+)?([\w.*]+)\s*;/g;
+/** A third-party package name used in code, not preceded by a dot (so `java.net.http` is fine). */
+const THIRD_PARTY_NAME = /(?:^|[^\w.])(?:org|com|jakarta|javax|io|net|lombok|tools)\.[a-z_]\w*\./;
+
+/**
+ * Whether a Java snippet needs nothing beyond the JDK — the website compiler
+ * runs one file with no other library. Every import must start with `java.`;
+ * no annotation other than the JDK's own, and no fully-qualified third-party
+ * name. Comments and string literals are ignored. Same rule as the website's
+ * `usesOnlyJdk` (`website/src/lib/compiler/languages.ts`).
+ */
+export function usesOnlyJdk(code: string): boolean {
+  const src = code
+    .replace(COMMENTS_AND_LITERALS, " ")
+    .replace(/^\s*package\s+[\w.]+\s*;/gm, " "); // the snippet's own package is not a dependency
+  const imports = Array.from(src.matchAll(IMPORT), (m) => m[1]);
+  if (!imports.every((name) => name.startsWith("java."))) return false;
+  const body = src.replace(IMPORT, " ");
+  const declared = new Set(Array.from(body.matchAll(/@\s*interface\s+([A-Za-z_]\w*)/g), (m) => m[1]));
+  const annotationOk = (name: string) =>
+    name === "interface" || (name.includes(".") ? name.startsWith("java.") : JDK_ANNOTATIONS.has(name) || declared.has(name));
+  if (!Array.from(body.matchAll(/@\s*([A-Za-z_][\w.]*)/g), (m) => m[1]).every(annotationOk)) return false;
+  return !THIRD_PARTY_NAME.test(body);
+}
+
+/** Whether a fenced snippet can run on the website compiler: a supported language, and for Java, JDK-only code. */
+export function canRunInCompiler(tag: string | null | undefined, code: string): boolean {
+  const language = resolveCompilerLanguage(tag);
+  if (!language) return false;
+  return language !== "java" || usesOnlyJdk(code);
+}
+
 /** Reusable base URL for the website compiler — real domain, from BRAND config. */
 export const COMPILER_URL = `${BRAND.website.replace(/\/$/, "")}/compiler`;
 
