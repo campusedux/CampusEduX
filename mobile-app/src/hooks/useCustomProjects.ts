@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
 import { customProjectsService } from "@/services/customProjects.service";
 import { useAuthStore } from "@/store/authStore";
-import type { CustomProjectBuilderConfig } from "@/types";
+import type { CustomProjectBuilderConfig, CustomProjectRequestEdit } from "@/types";
 
 export const customProjectKeys = {
   pricing: ["custom-projects", "pricing"] as const,
@@ -94,6 +94,53 @@ export const useSendCustomMessage = (requestId: string) => {
       queryClient.invalidateQueries({ queryKey: customProjectKeys.detail(requestId) });
     },
   });
+};
+
+/**
+ * Owner edits + extra features (migration 0128). Every mutation refetches the detail so the price
+ * breakdown always comes back from custom_project_amounts() — never patched locally.
+ */
+export const useCustomProjectEdits = (requestId: string) => {
+  const userId = useAuthStore((s) => s.user?.id);
+  const queryClient = useQueryClient();
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: customProjectKeys.detail(requestId) });
+    queryClient.invalidateQueries({ queryKey: customProjectKeys.myRequests });
+  };
+  const opts = { onSuccess: refresh };
+  return {
+    updateRequest: useMutation({
+      mutationFn: (changes: CustomProjectRequestEdit) => customProjectsService.updateRequest(requestId, changes),
+      ...opts,
+    }),
+    addAttachment: useMutation({
+      mutationFn: (file: { uri: string; name: string; mimeType?: string }) =>
+        customProjectsService.addAttachment(requestId, userId as string, file),
+      ...opts,
+    }),
+    removeAttachment: useMutation({
+      mutationFn: (fileId: string) => customProjectsService.removeAttachment(fileId),
+      ...opts,
+    }),
+    createAddon: useMutation({
+      mutationFn: (v: { title: string; description: string }) =>
+        customProjectsService.createAddon(requestId, v.title, v.description),
+      ...opts,
+    }),
+    updateAddon: useMutation({
+      mutationFn: (v: { addonId: string; title: string; description: string }) =>
+        customProjectsService.updateAddon(v.addonId, v.title, v.description),
+      ...opts,
+    }),
+    deleteAddon: useMutation({
+      mutationFn: (addonId: string) => customProjectsService.deleteAddon(addonId),
+      ...opts,
+    }),
+    acceptAddon: useMutation({
+      mutationFn: (addonId: string) => customProjectsService.acceptAddon(addonId),
+      ...opts,
+    }),
+  };
 };
 
 type SubmitResult =

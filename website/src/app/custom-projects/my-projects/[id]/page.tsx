@@ -7,7 +7,7 @@ import { TrackingStepper } from "../../_builder/TrackingStepper";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
-import { formatINR, timeAgo } from "@/lib/format";
+import { formatINR, formatINRExact, timeAgo } from "@/lib/format";
 import {
   CP_DELIVERIES_BUCKET,
   CP_SIGNED_URL_TTL,
@@ -15,12 +15,18 @@ import {
   CUSTOM_PROJECT_PROGRESS,
   PLATFORM_LABELS,
   STATUS_LABELS,
-  remainingBalance,
+  isRequestEditable,
+  parseAmounts,
+  type AddonStatus,
+  type CustomProjectAddon,
   type CustomProjectStatus,
   type Platform,
 } from "@/lib/customProjects";
 import MessageThread from "./MessageThread";
 import PayRemainingButton from "./PayRemainingButton";
+import { PriceBreakdown } from "./PriceBreakdown";
+import AddonsPanel from "./AddonsPanel";
+import EditRequestPanel from "./EditRequestPanel";
 
 // Per-user data: never statically rendered or cached across users.
 export const dynamic = "force-dynamic";
@@ -39,7 +45,7 @@ export default async function Page({ params }: Params) {
   const { data: request } = await supabase
     .from("custom_project_requests")
     .select(
-      "id,request_code,title,objective,problem_statement,description,target_users,technology_preference,project_type,project_level,platform,custom_requirements,base_price,platform_charge,feature_total,estimated_total,final_price,amount_paid,token_amount,status,created_at",
+      "id,request_code,title,objective,problem_statement,description,target_users,technology_preference,project_type,project_level,platform,custom_requirements,base_price,platform_charge,feature_total,estimated_total,token_amount,deadline,status,created_at",
     )
     .eq("id", params.id)
     // RLS lets admins read every row; this keeps the student page owner-only.
@@ -47,7 +53,15 @@ export default async function Page({ params }: Params) {
     .maybeSingle();
   if (!request) notFound();
 
-  const [{ data: features }, { data: files }, { data: history }, { data: delivery }, { data: messages }] = await Promise.all([
+  const [
+    { data: features },
+    { data: files },
+    { data: history },
+    { data: delivery },
+    { data: messages },
+    { data: amountsRaw },
+    { data: addonRows },
+  ] = await Promise.all([
     supabase
       .from("custom_project_request_features")
       .select("feature_id,feature_name,feature_price,category")
@@ -73,7 +87,25 @@ export default async function Page({ params }: Params) {
       .select("id,sender_role,body,created_at")
       .eq("request_id", params.id)
       .order("created_at", { ascending: true }),
+    // The ONE due calculation (migration 0128) — never recomputed on this page.
+    supabase.rpc("custom_project_amounts", { p_request_id: params.id }),
+    supabase
+      .from("custom_project_addons")
+      .select("id,title,description,status,price,created_at")
+      .eq("project_id", params.id)
+      .order("created_at", { ascending: true }),
   ]);
+  const amounts = parseAmounts(amountsRaw);
+  const addons: CustomProjectAddon[] = (addonRows ?? []).map((a) => ({
+    id: a.id,
+    title: a.title,
+    description: a.description ?? "",
+    status: a.status as AddonStatus,
+    price: a.price != null ? Number(a.price) : null,
+    createdAt: a.created_at,
+  }));
+  const due = amounts?.due ?? 0;
+  const canPay = amounts != null && due > 0 && request.status !== "cancelled";
 
   // Signed URLs for reference files (private uploads bucket) — one batched
   // Storage call for all of them instead of one round-trip per file.
@@ -148,37 +180,66 @@ export default async function Page({ params }: Params) {
         )}
       </header>
 
-      {/* pricing snapshot */}
+      {/* pricing: original estimate snapshot, then the live breakdown */}
       <section className="card mt-5 p-5 text-sm sm:p-6" aria-label="Pricing">
-        <dl className="space-y-2 text-ink-muted">
-          <div className="flex justify-between"><dt>Base price</dt><dd className="text-ink">{formatINR(request.base_price)}</dd></div>
-          <div className="flex justify-between"><dt>Platform charge</dt><dd className="text-ink">{Number(request.platform_charge) > 0 ? formatINR(request.platform_charge) : "Included"}</dd></div>
-          <div className="flex justify-between"><dt>Features</dt><dd className="text-ink">{formatINR(request.feature_total)}</dd></div>
-          <div className="flex justify-between border-t border-line pt-2 text-ink"><dt>Estimated total</dt><dd>{formatINR(request.estimated_total)}</dd></div>
-          {request.final_price != null ? (
-            <>
-              <div className="flex justify-between font-semibold text-ink"><dt>Final price</dt><dd>{formatINR(request.final_price)}</dd></div>
-              {Number(request.final_price) !== Number(request.estimated_total) && (
-                <p className="text-xs text-ink-faint">Adjusted from the estimate after review.</p>
-              )}
-            </>
+        <details className="text-ink-muted">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-ink-faint">Original estimate</summary>
+          <dl className="mt-2 space-y-1.5">
+            <div className="flex justify-between"><dt>Base price</dt><dd className="text-ink">{formatINR(request.base_price)}</dd></div>
+            <div className="flex justify-between"><dt>Platform charge</dt><dd className="text-ink">{Number(request.platform_charge) > 0 ? formatINR(request.platform_charge) : "Included"}</dd></div>
+            <div className="flex justify-between"><dt>Features</dt><dd className="text-ink">{formatINR(request.feature_total)}</dd></div>
+            <div className="flex justify-between"><dt>Estimated total</dt><dd className="text-ink">{formatINR(request.estimated_total)}</dd></div>
+          </dl>
+        </details>
+        <div className="mt-4">
+          {amounts ? (
+            <PriceBreakdown
+              amounts={amounts}
+              acceptedAddons={addons.filter((a) => a.status === "accepted")}
+              estimatedTotal={Number(request.estimated_total)}
+            />
           ) : (
-            <div className="flex justify-between font-semibold text-ink"><dt>Project price</dt><dd>{formatINR(request.estimated_total)}</dd></div>
+            <p className="text-sm text-danger">Couldn&apos;t load the payment summary. Refresh the page to try again.</p>
           )}
-          <div className="flex justify-between rounded-xl bg-success/10 px-3 py-2 font-semibold text-success"><dt>Amount paid</dt><dd>{formatINR(request.amount_paid)}</dd></div>
-          {remainingBalance(request) > 0 && (
-            <div className="flex justify-between"><dt>Remaining</dt><dd className="font-semibold text-ink">{formatINR(remainingBalance(request))}</dd></div>
-          )}
-        </dl>
-        {remainingBalance(request) > 0 && request.status !== "cancelled" && (
+        </div>
+        {canPay && (
           <div className="mt-4">
-            <PayRemainingButton requestId={request.id} remaining={remainingBalance(request)} />
+            <PayRemainingButton requestId={request.id} remaining={due} />
           </div>
         )}
       </section>
 
       {/* details */}
       <section className="card mt-5 space-y-4 p-5 text-sm sm:p-6" aria-label="Project details">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className={sectionTitle}>Project details</h2>
+          {!isRequestEditable(request.status) && (
+            <p className="text-xs text-ink-faint">Details are locked now that work has started — add an extra feature or message the team.</p>
+          )}
+        </div>
+        {isRequestEditable(request.status) && (
+          <EditRequestPanel
+            requestId={request.id}
+            userId={user.id}
+            initial={{
+              title: request.title ?? "",
+              objective: request.objective ?? "",
+              problem_statement: request.problem_statement ?? "",
+              description: request.description ?? "",
+              target_users: request.target_users ?? "",
+              technology_preference: request.technology_preference ?? "",
+              custom_requirements: customRequirements.map((r) => r.text),
+              deadline: request.deadline ?? null,
+            }}
+            attachments={fileRows.map((f) => ({ id: f.id, name: f.file_name || f.label, sizeMb: Number(f.size_mb) || 0 }))}
+          />
+        )}
+        {request.deadline && (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Deadline</div>
+            <p className="mt-1 text-ink">{new Date(`${request.deadline}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
+          </div>
+        )}
         {[
           ["Objective", request.objective],
           ["Problem statement", request.problem_statement],
@@ -219,6 +280,11 @@ export default async function Page({ params }: Params) {
           </ul>
         </section>
       )}
+
+      <section className="card mt-5 p-5 sm:p-6" aria-label="Extra features">
+        <h2 className={sectionTitle}>Extra features</h2>
+        <AddonsPanel requestId={request.id} addons={addons} canAdd={request.status !== "cancelled"} />
+      </section>
 
       {fileLinks.length > 0 && (
         <section className="card mt-5 p-5 sm:p-6">
@@ -261,16 +327,16 @@ export default async function Page({ params }: Params) {
         </section>
       )}
 
-      {/* delivery — only visible once status = delivered (RLS). Downloads are never gated on payment;
+      {/* delivery — visible once delivered (RLS: status delivered or delivered_at set). Downloads are never gated on payment;
           when a balance is still owed, this section also shows it (not just the Pricing card above)
           so it's visible right alongside the files themselves. */}
       {delivery && (
         <section className="mt-5 rounded-2xl border border-success/40 bg-success/[0.06] p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className={sectionTitle}>Delivery</h2>
-            {remainingBalance(request) > 0 && (
+            {due > 0 && (
               <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">
-                Balance due · {formatINR(remainingBalance(request))}
+                Balance due · {formatINRExact(due)}
               </span>
             )}
           </div>
@@ -301,9 +367,9 @@ export default async function Page({ params }: Params) {
               ))}
             </ul>
           )}
-          {remainingBalance(request) > 0 && request.status !== "cancelled" && (
+          {canPay && (
             <div className="mt-4 border-t border-success/20 pt-4">
-              <PayRemainingButton requestId={request.id} remaining={remainingBalance(request)} />
+              <PayRemainingButton requestId={request.id} remaining={due} />
             </div>
           )}
         </section>

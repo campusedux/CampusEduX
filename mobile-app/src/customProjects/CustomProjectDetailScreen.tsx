@@ -5,9 +5,17 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState } from "@/components/ui";
 import { notify } from "@/lib/notify";
-import { customProjectsService, remainingBalance } from "@/services/customProjects.service";
-import { useCustomProjectDetail, useSendCustomMessage, useCustomProjectBalance } from "@/hooks/useCustomProjects";
-import { rupees } from "./components/format";
+import { customProjectsService } from "@/services/customProjects.service";
+import {
+  useCustomProjectDetail,
+  useSendCustomMessage,
+  useCustomProjectBalance,
+  useCustomProjectEdits,
+} from "@/hooks/useCustomProjects";
+import { money, rupees } from "./components/format";
+import { ProjectValueCard } from "./components/ProjectValueCard";
+import { AddonsSection } from "./components/AddonsSection";
+import { EditRequestSheet } from "./components/EditRequestSheet";
 import {
   CUSTOM_PLATFORM_LABELS,
   CUSTOM_PROJECT_PROGRESS,
@@ -65,6 +73,8 @@ export function CustomProjectDetailScreen() {
   const { data, isLoading, isError, refetch } = useCustomProjectDetail(params.requestId);
   const sendMessage = useSendCustomMessage(params.requestId);
   const { pay: payBalance, isProcessing: isPayingBalance } = useCustomProjectBalance(params.requestId);
+  const edits = useCustomProjectEdits(params.requestId);
+  const [editing, setEditing] = useState(false);
   const [msg, setMsg] = useState("");
   const [openingPath, setOpeningPath] = useState<string | null>(null);
 
@@ -86,6 +96,10 @@ export function CustomProjectDetailScreen() {
   const paid = data.tokenPaymentStatus === "paid";
   const statusIdx = STATUS_ORDER.indexOf(data.status);
   const pct = CUSTOM_PROJECT_PROGRESS[data.status] ?? 0;
+  // Every money figure comes from custom_project_amounts() (migration 0128) — never computed here.
+  const due = data.amounts?.due ?? 0;
+  const canPay = data.amounts != null && due > 0 && data.status !== "cancelled";
+  const editable = data.status === "new";
 
   const openStorage = async (path: string, bucket: "uploads" | "deliveries") => {
     setOpeningPath(path);
@@ -167,56 +181,53 @@ export function CustomProjectDetailScreen() {
           </View>
         </Section>
 
-        {data.description || data.objective || data.problemStatement || data.targetUsers ? (
-          <Section title="Brief">
-            <View className="rounded-2xl border border-gray-100 p-4">
-              {data.objective ? <KV k="Objective" v={data.objective} /> : null}
-              {data.problemStatement ? <KV k="Problem" v={data.problemStatement} /> : null}
-              {data.description ? <KV k="Description" v={data.description} /> : null}
-              {data.targetUsers ? <KV k="Target users" v={data.targetUsers} /> : null}
-            </View>
-          </Section>
-        ) : null}
-
-        <Section title="Pricing">
+        <Section title="Brief">
           <View className="rounded-2xl border border-gray-100 p-4">
-            <KV k="Base price" v={rupees(data.basePrice)} />
-            <KV k="Add-ons" v={rupees(data.featureTotal)} />
-            <KV k="Platform charges" v={rupees(data.platformCharge)} />
-            <View className="flex-row justify-between border-t border-gray-100 pt-2 mt-1">
-              <Text className="text-gray-500">Estimated project price</Text>
-              <Text className="text-gray-900">{rupees(data.estimatedTotal)}</Text>
-            </View>
-            {data.finalPrice != null ? (
-              <>
-                <View className="flex-row justify-between mt-1">
-                  <Text className="font-bold text-gray-900">Final price</Text>
-                  <Text className="font-bold text-gray-900">{rupees(data.finalPrice)}</Text>
-                </View>
-                {data.finalPrice !== data.estimatedTotal ? (
-                  <Text className="text-gray-400 text-xs mt-0.5">
-                    Adjusted from the estimate after review.
-                  </Text>
-                ) : null}
-              </>
-            ) : (
-              <View className="flex-row justify-between mt-1">
-                <Text className="font-bold text-gray-900">Project price</Text>
-                <Text className="font-bold text-gray-900">{rupees(data.estimatedTotal)}</Text>
-              </View>
-            )}
-            <View className="flex-row justify-between mt-1">
-              <Text className="text-primary font-semibold">Amount paid</Text>
-              <Text className="text-primary font-semibold">{rupees(data.amountPaid)}</Text>
-            </View>
-            {remainingBalance(data) > 0 ? (
-              <View className="flex-row justify-between mt-1">
-                <Text className="text-gray-500">Remaining</Text>
-                <Text className="text-gray-900 font-semibold">{rupees(remainingBalance(data))}</Text>
-              </View>
+            {data.objective ? <KV k="Objective" v={data.objective} /> : null}
+            {data.problemStatement ? <KV k="Problem" v={data.problemStatement} /> : null}
+            {data.description ? <KV k="Description" v={data.description} /> : null}
+            {data.targetUsers ? <KV k="Target users" v={data.targetUsers} /> : null}
+            {data.deadline ? <KV k="Deadline" v={new Date(`${data.deadline}T00:00:00`).toLocaleDateString()} /> : null}
+            {!(data.objective || data.problemStatement || data.description || data.targetUsers || data.deadline) ? (
+              <Text className="text-gray-400">No brief added.</Text>
             ) : null}
           </View>
-          {remainingBalance(data) > 0 && data.status !== "cancelled" ? (
+          {editable ? (
+            <Pressable
+              onPress={() => setEditing(true)}
+              accessibilityRole="button"
+              className="mt-2 flex-row items-center self-start rounded-xl border border-gray-200 px-3 py-2.5"
+            >
+              <Ionicons name="create-outline" size={16} color="#4F39F6" />
+              <Text className="text-primary font-semibold ml-1.5">Edit request</Text>
+            </Pressable>
+          ) : (
+            <Text className="text-gray-400 text-xs mt-2">
+              Details are locked now that work has started — add an extra feature or message the team.
+            </Text>
+          )}
+        </Section>
+
+        <Section title="Pricing">
+          <View className="rounded-2xl border border-gray-100 p-4 mb-3">
+            <Text className="text-gray-400 text-xs font-semibold mb-1">ORIGINAL ESTIMATE</Text>
+            <KV k="Base price" v={rupees(data.basePrice)} />
+            <KV k="Features" v={rupees(data.featureTotal)} />
+            <KV k="Platform charges" v={rupees(data.platformCharge)} />
+            <KV k="Estimated total" v={rupees(data.estimatedTotal)} />
+          </View>
+          {data.amounts ? (
+            <ProjectValueCard
+              amounts={data.amounts}
+              acceptedAddons={data.addons.filter((a) => a.status === "accepted")}
+              estimatedTotal={data.estimatedTotal}
+            />
+          ) : (
+            <Text className="text-sm" style={{ color: "#DC2626" }}>
+              Couldn&apos;t load the payment summary. Pull to refresh or reopen this screen.
+            </Text>
+          )}
+          {canPay ? (
             <Pressable
               onPress={handlePayBalance}
               disabled={isPayingBalance}
@@ -226,10 +237,21 @@ export function CustomProjectDetailScreen() {
               {isPayingBalance ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-white font-bold">Pay remaining {rupees(remainingBalance(data))}</Text>
+                <Text className="text-white font-bold">Pay remaining {money(due)}</Text>
               )}
             </Pressable>
           ) : null}
+        </Section>
+
+        <Section title="Extra features">
+          <AddonsSection
+            addons={data.addons}
+            canAdd={data.status !== "cancelled"}
+            create={edits.createAddon}
+            update={edits.updateAddon}
+            remove={edits.deleteAddon}
+            accept={edits.acceptAddon}
+          />
         </Section>
 
         {data.features.some((f) => f.isIncluded) ? (
@@ -248,7 +270,7 @@ export function CustomProjectDetailScreen() {
         ) : null}
 
         {data.features.some((f) => !f.isIncluded) ? (
-          <Section title="Add-on features">
+          <Section title="Paid features (original request)">
             <View className="rounded-2xl border border-gray-100 p-4">
               {data.features
                 .filter((f) => !f.isIncluded)
@@ -312,11 +334,11 @@ export function CustomProjectDetailScreen() {
           </Section>
         ) : null}
 
-        {data.delivery && data.status === "delivered" ? (
+        {data.delivery ? (
           <Section title="Delivery">
-            {remainingBalance(data) > 0 ? (
+            {due > 0 ? (
               <View className="flex-row items-center justify-between rounded-xl bg-amber-50 px-3 py-2 mb-3">
-                <Text className="text-amber-800 text-xs font-semibold">Balance due · {rupees(remainingBalance(data))}</Text>
+                <Text className="text-amber-800 text-xs font-semibold">Balance due · {money(due)}</Text>
               </View>
             ) : null}
             {data.delivery.notes ? (
@@ -356,7 +378,7 @@ export function CustomProjectDetailScreen() {
                 )}
               </Pressable>
             ))}
-            {remainingBalance(data) > 0 ? (
+            {canPay ? (
               <Pressable
                 onPress={handlePayBalance}
                 disabled={isPayingBalance}
@@ -366,7 +388,7 @@ export function CustomProjectDetailScreen() {
                 {isPayingBalance ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text className="text-white font-bold">Pay remaining {rupees(remainingBalance(data))}</Text>
+                  <Text className="text-white font-bold">Pay remaining {money(due)}</Text>
                 )}
               </Pressable>
             ) : null}
@@ -439,6 +461,16 @@ export function CustomProjectDetailScreen() {
           </View>
         </Section>
       </ScrollView>
+      {editable ? (
+        <EditRequestSheet
+          visible={editing}
+          onClose={() => setEditing(false)}
+          detail={data}
+          updateRequest={edits.updateRequest}
+          addAttachment={edits.addAttachment}
+          removeAttachment={edits.removeAttachment}
+        />
+      ) : null}
     </Screen>
   );
 }

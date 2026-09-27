@@ -5,10 +5,10 @@ import {
   calculateEstimate,
   getFeaturesFor,
   splitFeaturesFor,
-  remainingBalance,
+  mapAmounts,
 } from "@/services/customProjects.service";
 import { CUSTOM_PROJECT_TOKENS } from "@/types";
-import { resetSupabaseMock, setTableResult, setFunctionResult, supabase } from "../../mocks/supabase.mock";
+import { resetSupabaseMock, setTableResult, setFunctionResult, setRpcResult, supabase } from "../../mocks/supabase.mock";
 import type { CustomFeature, CustomPlatformPricing, CustomProjectPricing } from "@/types";
 
 beforeEach(() => resetSupabaseMock());
@@ -255,21 +255,52 @@ describe("customProjectsService.verifyPayment", () => {
   });
 });
 
-describe("remainingBalance (Bug 3)", () => {
-  it("uses estimatedTotal when no final price is set", () => {
-    expect(remainingBalance({ estimatedTotal: 10000, finalPrice: null, amountPaid: 3000 })).toBe(7000);
+describe("mapAmounts (custom_project_amounts RPC, migration 0128)", () => {
+  const row = {
+    request_id: "r-1", base_value: 10000.5, addons_total: 1500, project_value: 11500.5,
+    payments_total: "4734.81", credits_total: 0, settled_total: 4734.81, due: 6765.69,
+    payment_status: "partially_paid", pending_addons: 1, priced_addons: 0,
+  };
+
+  it("maps the DB figures as-is (paise kept, numeric strings accepted)", () => {
+    expect(mapAmounts(row)).toEqual({
+      baseValue: 10000.5, addonsTotal: 1500, projectValue: 11500.5, paymentsTotal: 4734.81, creditsTotal: 0,
+      settledTotal: 4734.81, due: 6765.69, paymentStatus: "partially_paid", pendingAddons: 1, pricedAddons: 0,
+    });
   });
 
-  it("prefers the admin-set final price once it exists", () => {
-    expect(remainingBalance({ estimatedTotal: 10000, finalPrice: 8000, amountPaid: 3000 })).toBe(5000);
+  it("never shows a negative due", () => {
+    expect(mapAmounts({ ...row, due: -1, payment_status: "paid" })?.due).toBe(0);
   });
 
-  it("never goes negative on an overpaid/rounding edge case", () => {
-    expect(remainingBalance({ estimatedTotal: 10000, finalPrice: null, amountPaid: 10000.004 })).toBe(0);
+  it("returns null instead of guessing when the result is missing or malformed", () => {
+    expect(mapAmounts(null)).toBeNull();
+    expect(mapAmounts({ ...row, payment_status: "?" })).toBeNull();
+  });
+});
+
+describe("customProjectsService edits + extra features (migration 0128)", () => {
+  it("updateRequest sends the changes to custom_project_update_request", async () => {
+    setRpcResult("custom_project_update_request", { data: { changed: ["title"] } });
+    await customProjectsService.updateRequest("r-1", { title: "New" });
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_update_request", { p_request_id: "r-1", p_changes: { title: "New" } });
   });
 
-  it("is 0 once fully paid", () => {
-    expect(remainingBalance({ estimatedTotal: 10000, finalPrice: 8000, amountPaid: 8000 })).toBe(0);
+  it("surfaces the DB lock message when work has started", async () => {
+    setRpcResult("custom_project_update_request", {
+      data: null,
+      error: { message: "This request can no longer be edited because work has started." },
+    });
+    await expect(customProjectsService.updateRequest("r-1", { title: "x" })).rejects.toThrow("no longer be edited");
+  });
+
+  it("create / accept / delete add-ons go through their RPCs (no price is ever sent)", async () => {
+    await customProjectsService.createAddon("r-1", "Dark mode", "Toggle");
+    await customProjectsService.acceptAddon("ad-1");
+    await customProjectsService.deleteAddon("ad-2");
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_addon_create", { p_project_id: "r-1", p_title: "Dark mode", p_description: "Toggle" });
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_addon_accept", { p_addon_id: "ad-1" });
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_addon_delete", { p_addon_id: "ad-2" });
   });
 });
 
@@ -313,6 +344,5 @@ describe("customProjectsService balance payment (Bug 3)", () => {
     });
     expect(req.finalPrice).toBe(30000);
     expect(req.amountPaid).toBe(30000);
-    expect(remainingBalance(req)).toBe(0);
   });
 });

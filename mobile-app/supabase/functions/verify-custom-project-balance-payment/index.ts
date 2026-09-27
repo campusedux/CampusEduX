@@ -70,14 +70,17 @@ Deno.serve(async (req) => {
     if (!request) return json({ error: "Request not found." }, 404);
 
     // already settled (success or the manual-refund path) -> idempotent
-    if (payment.status !== "created") return json(request);
+    if (payment.status === "paid" || payment.status === "refund_due") return json(request);
 
     const valid = await verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
 
     if (!valid) {
-      await db.from("custom_project_payments").update({ status: "failed" }).eq("id", paymentId);
+      await db.from("custom_project_payments").update({ status: "failed" }).eq("id", paymentId).eq("status", "created");
       return json({ error: "Payment signature verification failed.", request }, 400);
     }
+    // A 'failed' row is still settled here: Razorpay lets the customer retry inside the same order, and the
+    // webhook's payment.failed for the first attempt must not swallow the successful retry that this
+    // (signature-verified) call proves.
 
     // The trigger (custom_project_apply_balance_payment) does the crediting; this call only settles
     // the ledger row. Re-read the request afterwards so the response reflects the real amount_paid.

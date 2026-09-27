@@ -14,9 +14,9 @@
 //     remaining: number           // rupees, informational
 //   }
 //
-// SECURITY (Bug 3): the remaining balance is ALWAYS
-//   coalesce(final_price, estimated_total) - amount_paid
-// computed here from the DB. The client never sends, and this function never
+// SECURITY (Bug 3): the remaining balance is ALWAYS the `due` of
+//   public.custom_project_amounts(request)  (migration 0128)
+// read from the DB. The client never sends, and this function never
 // trusts, an amount. Refuses when the token isn't paid yet, the request is
 // cancelled, the balance is already 0, or a balance checkout is already open
 // (migration 0124's admin RPC guard mirrors that same "open checkout" window).
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
 
     const { data: request, error: reqError } = await db
       .from("custom_project_requests")
-      .select("id, user_id, request_code, title, project_type, estimated_total, final_price, amount_paid, token_payment_status, status")
+      .select("id, user_id, request_code, title, project_type, token_payment_status, status")
       .eq("id", requestId)
       .maybeSingle();
     if (reqError) throw reqError;
@@ -74,11 +74,16 @@ Deno.serve(async (req) => {
       .eq("kind", "balance")
       .eq("status", "created")
       .gt("created_at", new Date(Date.now() - 30 * 60 * 1000).toISOString())
-      .maybeSingle();
-    if (open) return json({ error: "A payment for this request is already in progress. Please wait a few minutes." }, 409);
+      .limit(1);
+    if (open && open.length > 0) {
+      return json({ error: "A payment for this request is already in progress. Please wait a few minutes." }, 409);
+    }
 
-    const total = request.final_price != null ? Number(request.final_price) : Number(request.estimated_total) || 0;
-    const remaining = round2(total - (Number(request.amount_paid) || 0));
+    // The due comes from the one DB calculation (migration 0128): base value + accepted add-ons
+    // - paid ledger rows - credits. Never recomputed here.
+    const { data: amounts, error: amountsError } = await db.rpc("custom_project_amounts", { p_request_id: request.id });
+    if (amountsError) throw amountsError;
+    const remaining = round2(Number(amounts?.due) || 0);
     if (remaining <= 0) return json({ error: "There is nothing left to pay on this request." }, 400);
 
     const amountPaise = Math.round(remaining * 100);

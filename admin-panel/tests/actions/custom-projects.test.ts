@@ -31,6 +31,11 @@ import {
   createFeatureCategory,
   deleteFeatureCategory,
   updatePricingRow,
+  adminUpdateRequest,
+  setAddonPrice,
+  rejectAddon,
+  addCredit,
+  removeCredit,
 } from '@/app/(panel)/custom-projects/actions';
 
 beforeEach(() => {
@@ -464,5 +469,67 @@ describe('updatePricingRow', () => {
     const update = callsFor('custom_project_pricing').find((c) => c.verb === 'update');
     expect((update?.args[0] as Record<string, unknown>).base_price).toBe(21999);
     expect(res).toEqual({ ok: true });
+  });
+});
+
+describe('project value: request edits, add-ons, credits (migration 0128)', () => {
+  it('adminUpdateRequest sends only the whitelisted fields, requirements as {text} and a null deadline', async () => {
+    setRpcResult('admin_update_custom_project_request', { data: { changed: ['title'] }, error: null });
+    const res = await adminUpdateRequest(
+      'req-1',
+      { ok: false },
+      form({ title: 'New', custom_requirements: 'A\n\n B ', deadline: '', final_price: '1' }),
+    );
+    expect(requirePermission).toHaveBeenCalledWith('custom_projects', 'edit');
+    expect(rpcCall('admin_update_custom_project_request')?.args[0]).toEqual({
+      p_request_id: 'req-1',
+      p_changes: { title: 'New', custom_requirements: [{ text: 'A' }, { text: 'B' }], deadline: null },
+    });
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('setAddonPrice validates the price before calling the RPC', async () => {
+    const bad = await setAddonPrice('ad-1', 'req-1', { ok: false }, form({ price: '-5' }));
+    expect(bad).toEqual({ ok: false, error: 'Enter a valid price.' });
+    expect(rpcCall('admin_custom_project_addon_set_price')).toBeUndefined();
+
+    setRpcResult('admin_custom_project_addon_set_price', { data: null, error: null });
+    const ok = await setAddonPrice('ad-1', 'req-1', { ok: false }, form({ price: '1500.50', note: 'two screens' }));
+    expect(rpcCall('admin_custom_project_addon_set_price')?.args[0]).toEqual({
+      p_addon_id: 'ad-1',
+      p_price: 1500.5,
+      p_note: 'two screens',
+    });
+    expect(ok).toEqual({ ok: true });
+  });
+
+  it('surfaces the RPC error (e.g. re-pricing an accepted add-on)', async () => {
+    setRpcResult('admin_custom_project_addon_reject', {
+      data: null,
+      error: { message: 'Only pending or priced add-ons can be rejected.' },
+    });
+    const res = await rejectAddon('ad-1', 'req-1', '');
+    expect(res).toEqual({ ok: false, error: 'Only pending or priced add-ons can be rejected.' });
+  });
+
+  it('addCredit refuses a zero amount and passes kind + note through', async () => {
+    expect(await addCredit('req-1', { ok: false }, form({ amount: '0', kind: 'discount' }))).toEqual({
+      ok: false,
+      error: 'Enter an amount greater than 0.',
+    });
+    setRpcResult('admin_add_custom_project_credit', { data: { due: 0 }, error: null });
+    await addCredit('req-1', { ok: false }, form({ amount: '2000', kind: 'offline_payment', note: 'UPI 123' }));
+    expect(rpcCall('admin_add_custom_project_credit')?.args[0]).toEqual({
+      p_request_id: 'req-1',
+      p_amount: 2000,
+      p_kind: 'offline_payment',
+      p_note: 'UPI 123',
+    });
+  });
+
+  it('removeCredit requires edit permission', async () => {
+    requirePermission.mockRejectedValueOnce(new Error('forbidden'));
+    await expect(removeCredit('cr-1', 'req-1')).rejects.toThrow('forbidden');
+    expect(rpcCall('admin_remove_custom_project_credit')).toBeUndefined();
   });
 });

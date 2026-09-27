@@ -6,7 +6,7 @@ import { Lock } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { loadRazorpayScript } from "@/lib/razorpay";
 import { interpretVerifyResponse } from "@/lib/payments";
-import { formatINR } from "@/lib/format";
+import { formatINRExact } from "@/lib/format";
 import { Button } from "@/components/ui";
 
 /**
@@ -79,7 +79,7 @@ export default function PayRemainingButton({ requestId, remaining }: { requestId
         disabled={status === "processing"}
         loading={status === "processing"}
       >
-        {status === "processing" ? "Opening checkout…" : `Pay remaining ${formatINR(remaining)}`}
+        {status === "processing" ? "Opening checkout…" : `Pay remaining ${formatINRExact(remaining)}`}
       </Button>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>

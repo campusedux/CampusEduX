@@ -70,6 +70,115 @@ export async function setFinalPrice(id: string, _prev: Result, fd: FormData): Pr
   return { ok: true };
 }
 
+// --- request edits, add-ons, credits (migration 0128 / 099) -----------------------------
+// Each RPC re-checks custom_projects:edit, validates, writes custom_project_changes and notifies the student.
+
+export async function adminUpdateRequest(id: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const changes: Record<string, unknown> = {};
+  for (const key of ['title', 'objective', 'problem_statement', 'description', 'target_users', 'technology_preference']) {
+    if (fd.has(key)) changes[key] = String(fd.get(key) ?? '');
+  }
+  if (fd.has('deadline')) changes.deadline = str(fd, 'deadline') || null;
+  if (fd.has('custom_requirements')) {
+    changes.custom_requirements = String(fd.get('custom_requirements') ?? '')
+      .split('\n')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((text) => ({ text }));
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('admin_update_custom_project_request', { p_request_id: id, p_changes: changes });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.request.update',
+    module: 'custom_projects',
+    resourceType: 'custom_project_requests',
+    resourceId: id,
+    details: { changed: (data as { changed?: string[] } | null)?.changed ?? [] },
+  });
+  revalidatePath(`/custom-projects/${id}`);
+  return { ok: true };
+}
+
+export async function setAddonPrice(addonId: string, requestId: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const raw = str(fd, 'price');
+  const price = Number(raw);
+  if (!raw || !Number.isFinite(price) || price < 0) return { ok: false, error: 'Enter a valid price.' };
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_custom_project_addon_set_price', {
+    p_addon_id: addonId,
+    p_price: price,
+    p_note: str(fd, 'note') || null,
+  });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.addon.price',
+    module: 'custom_projects',
+    resourceType: 'custom_project_addons',
+    resourceId: addonId,
+    details: { price, request_id: requestId },
+  });
+  revalidatePath(`/custom-projects/${requestId}`);
+  return { ok: true };
+}
+
+export async function rejectAddon(addonId: string, requestId: string, note: string): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_custom_project_addon_reject', { p_addon_id: addonId, p_note: note || null });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.addon.reject',
+    module: 'custom_projects',
+    resourceType: 'custom_project_addons',
+    resourceId: addonId,
+    details: { request_id: requestId },
+  });
+  revalidatePath(`/custom-projects/${requestId}`);
+  return { ok: true };
+}
+
+export async function addCredit(requestId: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const amount = Number(str(fd, 'amount'));
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than 0.' };
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_add_custom_project_credit', {
+    p_request_id: requestId,
+    p_amount: amount,
+    p_kind: str(fd, 'kind') || 'adjustment',
+    p_note: str(fd, 'note') || null,
+  });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.credit.add',
+    module: 'custom_projects',
+    resourceType: 'custom_project_credits',
+    resourceId: requestId,
+    details: { amount, kind: str(fd, 'kind') },
+  });
+  revalidatePath(`/custom-projects/${requestId}`);
+  return { ok: true };
+}
+
+export async function removeCredit(creditId: string, requestId: string): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_remove_custom_project_credit', { p_credit_id: creditId, p_note: null });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.credit.remove',
+    module: 'custom_projects',
+    resourceType: 'custom_project_credits',
+    resourceId: creditId,
+    details: { request_id: requestId },
+  });
+  revalidatePath(`/custom-projects/${requestId}`);
+  return { ok: true };
+}
+
 export async function saveRequestAdminNotes(id: string, _prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('custom_projects', 'edit');
   const supabase = createClient();

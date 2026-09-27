@@ -7,7 +7,11 @@ import {
   resolveContentType,
 } from "@/lib/uploadMime";
 import {
+  type CustomAddonStatus,
   type CustomFeature,
+  type CustomProjectAddon,
+  type CustomProjectAmounts,
+  type CustomProjectRequestEdit,
   type CustomPlatformPricing,
   type CustomProjectBuilderConfig,
   type CustomProjectDelivery,
@@ -316,13 +320,47 @@ export function calculateEstimate(
 }
 
 /**
- * What the student still owes on an existing, token-paid request (Bug 3).
- * Same rule as migration 0124's trigger/RPC: coalesce(finalPrice, estimatedTotal) - amountPaid,
- * floored at 0 so a rounding artifact never shows a negative "remaining".
+ * Maps public.custom_project_amounts() (migration 0128) — THE due calculation:
+ * base value + accepted add-ons − paid ledger rows − credits, never negative. Never recomputed here.
  */
-export function remainingBalance(request: Pick<CustomProjectRequest, "estimatedTotal" | "finalPrice" | "amountPaid">): number {
-  const total = request.finalPrice ?? request.estimatedTotal;
-  return Math.max(0, round2(total - request.amountPaid));
+export function mapAmounts(raw: unknown): CustomProjectAmounts | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const n = (k: string) => {
+    const v = Number(o[k]);
+    return Number.isFinite(v) ? round2(v) : 0;
+  };
+  const status = o.payment_status;
+  if (status !== "paid" && status !== "partially_paid" && status !== "unpaid") return null;
+  return {
+    baseValue: n("base_value"),
+    addonsTotal: n("addons_total"),
+    projectValue: n("project_value"),
+    paymentsTotal: n("payments_total"),
+    creditsTotal: n("credits_total"),
+    settledTotal: n("settled_total"),
+    due: Math.max(0, n("due")),
+    paymentStatus: status,
+    pendingAddons: n("pending_addons"),
+    pricedAddons: n("priced_addons"),
+  };
+}
+
+function mapAddonRow(row: any): CustomProjectAddon {
+  return {
+    id: row.id,
+    title: row.title ?? "",
+    description: row.description ?? "",
+    status: row.status as CustomAddonStatus,
+    price: row.price != null ? Number(row.price) : null,
+    createdAt: row.created_at,
+  };
+}
+
+async function rpcOrThrow<T = unknown>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) throw new Error(error.message);
+  return data as T;
 }
 
 // --- service -----------------------------------------------------------
@@ -540,7 +578,7 @@ export const customProjectsService = {
     requestId: string,
     userId: string
   ): Promise<CustomProjectRequestDetail> {
-    const [reqRes, featRes, fileRes, histRes, deliveryRes, msgRes] = await Promise.all([
+    const [reqRes, featRes, fileRes, histRes, deliveryRes, msgRes, amountsRes, addonRes] = await Promise.all([
       supabase
         .from("custom_project_requests")
         .select("*")
@@ -571,6 +609,12 @@ export const customProjectsService = {
         .from("custom_project_messages")
         .select("id, sender_role, body, created_at")
         .eq("request_id", requestId)
+        .order("created_at", { ascending: true }),
+      supabase.rpc("custom_project_amounts", { p_request_id: requestId }),
+      supabase
+        .from("custom_project_addons")
+        .select("id, title, description, status, price, created_at")
+        .eq("project_id", requestId)
         .order("created_at", { ascending: true }),
     ]);
 
@@ -607,6 +651,7 @@ export const customProjectsService = {
       problemStatement: reqRes.data.problem_statement ?? "",
       description: reqRes.data.description ?? "",
       targetUsers: reqRes.data.target_users ?? "",
+      deadline: reqRes.data.deadline ?? null,
       customRequirements: Array.isArray(reqRes.data.custom_requirements)
         ? (reqRes.data.custom_requirements as CustomRequirement[])
         : [],
@@ -631,7 +676,56 @@ export const customProjectsService = {
       })),
       delivery,
       messages: (msgRes.data ?? []).map(mapMessageRow),
+      amounts: amountsRes.error ? null : mapAmounts(amountsRes.data),
+      addons: (addonRes.data ?? []).map(mapAddonRow),
     };
+  },
+
+  // --- owner edits + extra features (migration 0128 RPCs enforce every rule) ---
+
+  async updateRequest(requestId: string, changes: CustomProjectRequestEdit): Promise<void> {
+    await rpcOrThrow("custom_project_update_request", { p_request_id: requestId, p_changes: changes });
+  },
+
+  async addAttachment(
+    requestId: string,
+    userId: string,
+    file: { uri: string; name: string; mimeType?: string }
+  ): Promise<void> {
+    const uploaded = await customProjectsService.uploadReferenceFile(userId, file.uri, file.name, file.mimeType);
+    try {
+      await rpcOrThrow("custom_project_add_attachment", {
+        p_request_id: requestId,
+        p_storage_path: uploaded.path,
+        p_file_name: uploaded.name,
+        p_size_mb: uploaded.sizeMb,
+        p_label: "",
+      });
+    } catch (e) {
+      await supabase.storage.from(UPLOADS_BUCKET).remove([uploaded.path]);
+      throw e;
+    }
+  },
+
+  async removeAttachment(fileId: string): Promise<void> {
+    const path = await rpcOrThrow<string | null>("custom_project_remove_attachment", { p_file_id: fileId });
+    if (path) await supabase.storage.from(UPLOADS_BUCKET).remove([path]);
+  },
+
+  async createAddon(requestId: string, title: string, description: string): Promise<void> {
+    await rpcOrThrow("custom_project_addon_create", { p_project_id: requestId, p_title: title, p_description: description });
+  },
+
+  async updateAddon(addonId: string, title: string, description: string): Promise<void> {
+    await rpcOrThrow("custom_project_addon_update", { p_addon_id: addonId, p_title: title, p_description: description });
+  },
+
+  async deleteAddon(addonId: string): Promise<void> {
+    await rpcOrThrow("custom_project_addon_delete", { p_addon_id: addonId });
+  },
+
+  async acceptAddon(addonId: string): Promise<void> {
+    await rpcOrThrow("custom_project_addon_accept", { p_addon_id: addonId });
   },
 
   // --- messaging (spec §30) -----------------------------------

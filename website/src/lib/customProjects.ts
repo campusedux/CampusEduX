@@ -413,14 +413,74 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/**
- * What the student still owes on an existing, token-paid request (Bug 3).
- * Same rule as migration 0124's trigger/RPC: coalesce(finalPrice, estimatedTotal) - amountPaid,
- * floored at 0 so a rounding artifact never shows a negative "remaining".
- */
-export function remainingBalance(request: { estimated_total: number; final_price: number | null; amount_paid: number }): number {
-  const total = request.final_price ?? request.estimated_total;
-  return Math.max(0, round2(total - request.amount_paid));
+// --- money on an existing request: computed ONLY by public.custom_project_amounts() (migration 0128) ---
+export type PaymentStatus = "paid" | "partially_paid" | "unpaid";
+
+export type CustomProjectAmounts = {
+  baseValue: number;
+  addonsTotal: number;
+  projectValue: number;
+  paymentsTotal: number;
+  creditsTotal: number;
+  settledTotal: number;
+  due: number;
+  paymentStatus: PaymentStatus;
+  pendingAddons: number;
+  pricedAddons: number;
+};
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  paid: "Paid",
+  partially_paid: "Partially paid",
+  unpaid: "Unpaid",
+};
+
+/** Maps the RPC's jsonb; never recomputes anything. Null when the RPC returned nothing usable. */
+export function parseAmounts(raw: unknown): CustomProjectAmounts | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const n = (k: string) => {
+    const v = Number(o[k]);
+    return Number.isFinite(v) ? round2(v) : 0;
+  };
+  const status = o.payment_status;
+  if (status !== "paid" && status !== "partially_paid" && status !== "unpaid") return null;
+  return {
+    baseValue: n("base_value"),
+    addonsTotal: n("addons_total"),
+    projectValue: n("project_value"),
+    paymentsTotal: n("payments_total"),
+    creditsTotal: n("credits_total"),
+    settledTotal: n("settled_total"),
+    due: Math.max(0, n("due")),
+    paymentStatus: status,
+    pendingAddons: n("pending_addons"),
+    pricedAddons: n("priced_addons"),
+  };
+}
+
+// --- add-ons (custom_project_addons, migration 0128) ---------------------
+export type AddonStatus = "pending" | "priced" | "accepted" | "rejected";
+
+export const ADDON_STATUS_LABELS: Record<AddonStatus, string> = {
+  pending: "Waiting for price",
+  priced: "Priced — awaiting your OK",
+  accepted: "Accepted",
+  rejected: "Not accepted",
+};
+
+export type CustomProjectAddon = {
+  id: string;
+  title: string;
+  description: string;
+  status: AddonStatus;
+  price: number | null;
+  createdAt: string;
+};
+
+/** Owners may edit the request itself only before work starts; add-ons are allowed at any stage. */
+export function isRequestEditable(status: string): boolean {
+  return status === "new";
 }
 
 /**

@@ -11,23 +11,24 @@ import { setFinalPrice } from '../actions';
 type Result = { ok: boolean; error?: string };
 
 /**
- * Bug 3: the admin's control for overriding the estimate. Blocked entirely
- * once the balance is fully paid — the RPC (migration 0124) is the real
- * enforcement point (below-amount-paid / locked / open-checkout), this is
- * just the read-only fallback so a locked request doesn't show a live form.
+ * The admin's control for the BASE project value (accepted add-ons are added on top by the DB).
+ * `locked` / `minBase` come from custom_project_amounts(); the RPC (migration 0124 → 0128) is the real
+ * enforcement point (below-amount-paid / locked / open-checkout), this only avoids showing a live form
+ * that would be refused.
  */
 export function FinalPriceForm({
   requestId,
   estimatedTotal,
   finalPrice,
-  amountPaid,
+  locked,
+  minBase,
 }: {
   requestId: string;
   estimatedTotal: number;
   finalPrice: number | null;
-  amountPaid: number;
+  locked: boolean;
+  minBase: number;
 }) {
-  const locked = amountPaid >= (finalPrice ?? estimatedTotal);
   const [state, formAction] = useFormState(setFinalPrice.bind(null, requestId), { ok: false });
   const { toast } = useToast();
   const router = useRouter();
@@ -35,9 +36,9 @@ export function FinalPriceForm({
   useEffect(() => {
     if (state === seen.current) return;
     seen.current = state;
-    if (state.error) toast({ title: 'Could not set final price', description: state.error, variant: 'error' });
+    if (state.error) toast({ title: 'Could not set the base value', description: state.error, variant: 'error' });
     else if (state.ok) {
-      toast({ title: 'Final price updated', variant: 'success' });
+      toast({ title: 'Base value updated — the student was notified', variant: 'success' });
       router.refresh();
     }
   }, [state, toast, router]);
@@ -47,7 +48,7 @@ export function FinalPriceForm({
   if (locked) {
     return (
       <p className="text-xs text-ink-faint">
-        The balance is fully paid, so the price is locked at {finalPrice != null ? `₹${finalPrice}` : 'the estimate'}.
+        Fully paid, so the base value is locked at {finalPrice != null ? `₹${finalPrice}` : 'the estimate'}.
       </p>
     );
   }
@@ -55,27 +56,27 @@ export function FinalPriceForm({
   return (
     <form action={formAction} className="space-y-2">
       <div>
-        <Label htmlFor="final_price">Final price (₹)</Label>
+        <Label htmlFor="final_price">Base project value (₹)</Label>
         <Input
           id="final_price"
           name="final_price"
           type="number"
-          min={amountPaid}
+          min={minBase}
           step="0.01"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={String(estimatedTotal)}
         />
         <p className="mt-1 text-xs text-ink-faint">
-          Cannot be below the amount already paid (₹{amountPaid}). Overrides the estimated total everywhere the
-          student sees a price.
+          Replaces the estimated total. Accepted add-ons are added on top. With accepted add-ons, cannot go below
+          ₹{minBase} (the amount already paid).
         </p>
       </div>
       <div>
         <Label htmlFor="note">Note (optional, recorded in history)</Label>
         <Textarea id="note" name="note" rows={2} placeholder="e.g. agreed after adding two extra features" />
       </div>
-      <SubmitButton pendingLabel="Saving…">Set final price</SubmitButton>
+      <SubmitButton pendingLabel="Saving…">Set base value</SubmitButton>
     </form>
   );
 }

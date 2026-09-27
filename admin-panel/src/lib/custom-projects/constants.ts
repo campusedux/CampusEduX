@@ -4,13 +4,82 @@
 export const CUSTOM_PROJECTS_PAGE_SIZE = 20;
 
 /**
- * What the student still owes (Bug 3). Same rule as migration 0124's trigger/RPC:
- * coalesce(final_price, estimated_total) - amount_paid, floored at 0.
+ * Money on a request comes ONLY from public.custom_project_amounts() / custom_project_amounts_bulk()
+ * (migration 0128/099): base value + accepted add-ons − paid ledger rows − credits, never negative.
+ * This only maps the RPC's jsonb; it never recomputes anything.
  */
-export function remainingBalance(request: { estimated_total: number; final_price: number | null; amount_paid: number }): number {
-  const total = request.final_price ?? request.estimated_total;
-  return Math.max(0, Math.round((total - request.amount_paid) * 100) / 100);
+export type PaymentStatus = 'paid' | 'partially_paid' | 'unpaid';
+export interface CustomProjectAmounts {
+  requestId: string;
+  baseValue: number;
+  addonsTotal: number;
+  projectValue: number;
+  paymentsTotal: number;
+  creditsTotal: number;
+  settledTotal: number;
+  due: number;
+  paymentStatus: PaymentStatus;
+  pendingAddons: number;
+  pricedAddons: number;
 }
+
+export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  paid: 'Paid',
+  partially_paid: 'Partially paid',
+  unpaid: 'Unpaid',
+};
+
+export function parseAmounts(raw: unknown): CustomProjectAmounts | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const n = (k: string) => {
+    const v = Number(o[k]);
+    return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
+  };
+  const s = o.payment_status;
+  if (s !== 'paid' && s !== 'partially_paid' && s !== 'unpaid') return null;
+  return {
+    requestId: String(o.request_id ?? ''),
+    baseValue: n('base_value'),
+    addonsTotal: n('addons_total'),
+    projectValue: n('project_value'),
+    paymentsTotal: n('payments_total'),
+    creditsTotal: n('credits_total'),
+    settledTotal: n('settled_total'),
+    due: Math.max(0, n('due')),
+    paymentStatus: s,
+    pendingAddons: n('pending_addons'),
+    pricedAddons: n('priced_addons'),
+  };
+}
+
+export type AddonStatus = 'pending' | 'priced' | 'accepted' | 'rejected';
+export const ADDON_STATUS_LABEL: Record<AddonStatus, string> = {
+  pending: 'Needs price',
+  priced: 'Priced · awaiting student',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+};
+
+export const CREDIT_KINDS = ['offline_payment', 'discount', 'referral', 'goodwill', 'adjustment'] as const;
+export type CreditKind = (typeof CREDIT_KINDS)[number];
+export const CREDIT_KIND_LABEL: Record<CreditKind, string> = {
+  offline_payment: 'Offline payment (UPI / bank / cash)',
+  discount: 'Discount',
+  referral: 'Referral credit',
+  goodwill: 'Goodwill',
+  adjustment: 'Adjustment',
+};
+
+/** Request fields both the student and an admin may edit (the RPCs enforce the same whitelist). */
+export const EDITABLE_REQUEST_FIELDS = [
+  { key: 'title', label: 'Title', max: 200, rows: 0 },
+  { key: 'objective', label: 'Objective', max: 5000, rows: 3 },
+  { key: 'problem_statement', label: 'Problem statement', max: 5000, rows: 3 },
+  { key: 'description', label: 'Description', max: 10000, rows: 5 },
+  { key: 'target_users', label: 'Target users', max: 2000, rows: 2 },
+  { key: 'technology_preference', label: 'Tech stack', max: 500, rows: 0 },
+] as const;
 
 export const CUSTOM_PROJECT_STATUSES = [
   'new',
