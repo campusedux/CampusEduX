@@ -8,6 +8,8 @@ import {
   interviewCategoryTitle,
   interviewTopicTitle,
   jobTitle,
+  lessonSeoSubject,
+  lessonSuffixOrder,
   lessonTitle,
   plainTitle,
   problemLanguage,
@@ -158,5 +160,60 @@ describe("fitTitle / truncateAtWord", () => {
   it("truncates without leaving a dangling joiner", () => {
     expect(truncateAtWord("Environment, CLI & Packaging Tools", 20)).toBe("Environment, CLI…");
     expect(truncateAtWord("short", 20)).toBe("short");
+  });
+});
+
+describe("lesson title variety and duplicate-title subjects", () => {
+  const java = (topicTitle: string, topicSlug: string) =>
+    lessonTitle({ topicTitle, gridSlug: "java-tutorial", courseName: "Java Tutorial", topicSlug });
+
+  it("rotates Java suffixes deterministically by slug", () => {
+    const slugs = ["variables", "data-types", "comments", "arrays", "string", "while-loop", "inheritance", "hashmap"];
+    const titles = slugs.map((s) => java(s.replace(/-/g, " "), s));
+    expect(titles).toEqual(slugs.map((s) => java(s.replace(/-/g, " "), s)));
+    const styles = new Set(
+      titles.map((t) => (t.includes("(with Examples)") ? "with" : t.includes("Explained with Examples") ? "explained" : t.includes(": Syntax & Examples") ? "syntax" : "none")),
+    );
+    expect(styles.size).toBe(3);
+    for (const t of titles) expect(t.length).toBeLessThanOrEqual(TITLE_MAX);
+    expect(java("Variables", "variables")).toBe("Variables in Java (with Examples) | CampusEduX");
+    expect(java("Comments", "comments")).toBe("Comments in Java: Syntax & Examples | CampusEduX");
+    expect(java("Data Types", "data-types")).toBe("Data Types in Java Explained with Examples | CampusEduX");
+  });
+
+  it("never gives overview / comparison topics the Syntax style", () => {
+    for (const [title, slug] of [["Introduction to Java", "introduction-to-java"], ["Java vs C/C++", "java-vs-c-c"], ["JDK, JRE and JVM", "jdk-jre-and-jvm"], ["Features of Java", "features-of-java"]]) {
+      expect(lessonSuffixOrder("java-tutorial", slug, title)).not.toContain("syntax");
+    }
+  });
+
+  it("falls back to another style, then no suffix, when the preferred one is too long", () => {
+    const t = java("Arithmetic Operators", "arithmetic-operators");
+    expect(t.length).toBeLessThanOrEqual(TITLE_MAX);
+    expect(java("Keywords and Identifiers", "keywords-and-identifiers")).toBe("Keywords and Identifiers in Java | CampusEduX");
+  });
+
+  it("keeps one style outside Java and without a slug", () => {
+    expect(lessonSuffixOrder("python-tutorial", "functions", "Functions")).toEqual(["with"]);
+    expect(lessonTitle({ topicTitle: "Variables", gridSlug: "java-tutorial", courseName: "Java Tutorial" })).toBe(
+      "Variables in Java (with Examples) | CampusEduX",
+    );
+  });
+
+  it("gives every duplicate-titled DBMS lesson a distinct subject", () => {
+    const slugs = [
+      "cardinality", "cardinality-ratio", "index-cardinality", "foreign-key", "foreign-key-constraint-syntax",
+      "natural-join", "natural-join-sql", "primary-key", "primary-key-constraint-syntax", "rename",
+      "rename-statement", "union", "union-sql",
+    ];
+    const titles = slugs.map((topicSlug) =>
+      lessonTitle({ topicTitle: "Cardinality", gridSlug: "dbms-sql-tutorial", courseName: "DBMS & SQL Tutorial", topicSlug }),
+    );
+    expect(new Set(titles).size).toBe(slugs.length);
+    for (const t of titles) expect(t.length).toBeLessThanOrEqual(TITLE_MAX);
+    expect(titles[0]).toBe("Relation Cardinality in DBMS (with Examples) | CampusEduX");
+    expect(titles[5]).toBe("Natural Join in Relational Algebra | CampusEduX");
+    expect(lessonSeoSubject("dbms-sql-tutorial", "union-sql")).toBe("UNION in SQL");
+    expect(lessonSeoSubject("dbms-sql-tutorial", "inner-join")).toBeNull();
   });
 });

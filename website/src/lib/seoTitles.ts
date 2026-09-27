@@ -121,13 +121,90 @@ export function courseLanguage(gridSlug: string, courseName: string, topicTitle:
 // Page-type title builders
 // ---------------------------------------------------------------------------
 
-/** "<Topic> in <Language> (with Examples) | CampusEduX", degrading to fit. */
-export function lessonTitle(input: { topicTitle: string; gridSlug: string; courseName: string }): string {
+/**
+ * Search subjects for lessons whose own title is shared with another lesson of
+ * the same course (duplicate `<title>`s in the SEO report: the relational-
+ * algebra vs SQL-syntax pairs and the three "Cardinality" lessons). Keyed
+ * `<gridSlug>/<topicSlug>`; each value replaces "<Topic> in <Language>" in the
+ * title, description and headline. The on-page H1 keeps the authored title.
+ */
+const LESSON_SEO_SUBJECTS: Record<string, string> = {
+  "dbms-sql-tutorial/cardinality": "Relation Cardinality in DBMS",
+  "dbms-sql-tutorial/cardinality-ratio": "Cardinality Ratio in ER Model",
+  "dbms-sql-tutorial/index-cardinality": "Index Cardinality in DBMS",
+  "dbms-sql-tutorial/foreign-key": "Foreign Key in DBMS",
+  "dbms-sql-tutorial/foreign-key-constraint-syntax": "FOREIGN KEY Constraint in SQL",
+  "dbms-sql-tutorial/primary-key": "Primary Key in DBMS",
+  "dbms-sql-tutorial/primary-key-constraint-syntax": "PRIMARY KEY Constraint in SQL",
+  "dbms-sql-tutorial/natural-join": "Natural Join in Relational Algebra",
+  "dbms-sql-tutorial/natural-join-sql": "NATURAL JOIN in SQL",
+  "dbms-sql-tutorial/rename": "Rename Operation in Relational Algebra",
+  "dbms-sql-tutorial/rename-statement": "RENAME Table and Column in SQL",
+  "dbms-sql-tutorial/union": "Union in Relational Algebra",
+  "dbms-sql-tutorial/union-sql": "UNION in SQL",
+};
+
+/** The fixed search subject for a lesson with a duplicated title, or `null`. */
+export function lessonSeoSubject(gridSlug: string, topicSlug: string | null | undefined): string | null {
+  return topicSlug ? LESSON_SEO_SUBJECTS[`${gridSlug}/${topicSlug}`] ?? null : null;
+}
+
+/**
+ * Courses whose lesson titles rotate between suffix styles, so a 150-lesson
+ * course doesn't read as one repeated pattern in search results. (Python's 30
+ * lessons are broad chapters — "Git & GitHub", "Deep Learning" — where
+ * "Syntax & Examples" reads wrong, so it keeps the single style.)
+ */
+const ROTATING_SUFFIX_COURSES = new Set(["java-tutorial"]);
+
+type LessonSuffix = "with" | "explained" | "syntax";
+
+/** Overview / comparison topics ("Introduction to Java", "Java vs C/C++", "JDK, JRE and JVM") have no syntax to show. */
+const CONCEPTUAL_TOPIC =
+  /^(introduction|intro|history|features?|overview|what|why|how|when|difference|differences|advantages|benefits|basics|types|comparison|setting up|installing|installation|jdk|jre|jvm)\b|\bvs\.?(\s|$)/i;
+
+/** 32-bit FNV-1a — a stable, build-independent hash of the lesson slug. */
+function stableHash(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h;
+}
+
+/** The suffix styles to try for a lesson, preferred one first. */
+export function lessonSuffixOrder(gridSlug: string, topicSlug: string | null | undefined, topicTitle: string): LessonSuffix[] {
+  if (!topicSlug || !ROTATING_SUFFIX_COURSES.has(gridSlug)) return ["with"];
+  const styles: LessonSuffix[] = CONCEPTUAL_TOPIC.test(clean(topicTitle)) ? ["with", "explained"] : ["with", "explained", "syntax"];
+  const start = stableHash(topicSlug) % styles.length;
+  return [...styles.slice(start), ...styles.slice(0, start)];
+}
+
+function withSuffix(subject: string, suffix: LessonSuffix): string {
+  if (suffix === "explained") return `${subject} Explained with Examples`;
+  if (suffix === "syntax") return `${subject}: Syntax & Examples`;
+  return `${subject} (with Examples)`;
+}
+
+/**
+ * "<Topic> in <Language> (with Examples) | CampusEduX", degrading to fit.
+ * Java lessons rotate the suffix by slug between "(with Examples)",
+ * "Explained with Examples" and ": Syntax & Examples"; when the preferred one
+ * is too long, the other styles are tried before dropping the suffix.
+ */
+export function lessonTitle(input: {
+  topicTitle: string;
+  gridSlug: string;
+  courseName: string;
+  topicSlug?: string | null;
+}): string {
   const topic = clean(input.topicTitle);
-  const language = courseLanguage(input.gridSlug, input.courseName, topic);
-  const candidates = language
-    ? [`${topic} in ${language} (with Examples)`, `${topic} in ${language}`, topic]
-    : [`${topic} (with Examples)`, topic];
+  const override = lessonSeoSubject(input.gridSlug, input.topicSlug);
+  const language = override ? null : courseLanguage(input.gridSlug, input.courseName, topic);
+  const subject = override ?? (language ? `${topic} in ${language}` : topic);
+  const suffixed = lessonSuffixOrder(input.gridSlug, input.topicSlug, topic).map((s) => withSuffix(subject, s));
+  const candidates = Array.from(new Set([...suffixed, subject, topic]));
   return fitTitle(candidates, () => topic);
 }
 

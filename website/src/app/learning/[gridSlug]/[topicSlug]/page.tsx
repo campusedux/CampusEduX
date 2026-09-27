@@ -9,7 +9,7 @@ import { LessonBlock } from "@/components/learning/LessonBlock";
 import { buildTopicLinkIndex } from "@/lib/topicLinks";
 import { isTemplatedGenerativeAiBody } from "@/lib/contentQuality";
 import { lessonDescription } from "@/lib/metaDescription";
-import { courseLanguage, lessonTitle } from "@/lib/seoTitles";
+import { courseLanguage, lessonSeoSubject, lessonTitle } from "@/lib/seoTitles";
 import { lessonFaqPairs } from "@/lib/lessonFaq";
 import JsonLd from "@/components/JsonLd";
 import { BRAND } from "@/lib/brand";
@@ -54,11 +54,14 @@ function shortDescriptionDuplicates(tree: LearningTree | null, shortDescription:
 /** Meta description for a lesson — shared by generateMetadata and the TechArticle JSON-LD. */
 function describeLesson(page: LearningTopicPage, tree: LearningTree | null): string {
   const { topic, grid, section } = page;
+  // A lesson whose title is shared with another lesson is described by its
+  // fixed search subject (already "<X> in <Language>"), so no language is added.
+  const seoSubject = lessonSeoSubject(grid.slug, topic.slug);
   return lessonDescription({
-    topicTitle: topic.title,
+    topicTitle: seoSubject ?? topic.title,
     shortDescription: topic.short_description,
     shortDescriptionDuplicates: shortDescriptionDuplicates(tree, topic.short_description),
-    language: courseLanguage(grid.slug, grid.name, topic.title),
+    language: seoSubject ? null : courseLanguage(grid.slug, grid.name, topic.title),
     courseName: grid.name,
     sectionName: section.name,
     blocks: page.locked ? [] : page.contents,
@@ -78,7 +81,7 @@ export async function generateMetadata({
   if (!page) return { title: "Topic not found", robots: { index: false, follow: false } };
   const { topic, grid } = page;
   const bodyText = page.contents.map((c) => c.body).join(" ").replace(/[#>*`_|\-]+/g, " ").trim();
-  const title = lessonTitle({ topicTitle: topic.title, gridSlug: grid.slug, courseName: grid.name });
+  const title = lessonTitle({ topicTitle: topic.title, gridSlug: grid.slug, courseName: grid.name, topicSlug: topic.slug });
   const description = describeLesson(page, tree);
   const url = absoluteUrl(`/learning/${grid.slug}/${topic.slug}`);
   // Generative AI tutorial topics (migration 0069/041) are a mail-merge
@@ -158,7 +161,7 @@ export default async function TopicPage({
       />
       <JsonLd
         data={techArticleJsonLd({
-          headline: topic.title,
+          headline: lessonSeoSubject(grid.slug, topic.slug) ?? topic.title,
           description: describeLesson(page, tree),
           path: lessonPath,
           courseName: grid.name,
