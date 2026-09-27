@@ -24,7 +24,7 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-line/70 bg-card/80 backdrop-blur-xl supports-[backdrop-filter]:bg-card/70">
       <div className="container-page flex h-16 items-center gap-3">
         <Link href="/" className="flex h-11 shrink-0 items-center rounded-xl transition-opacity hover:opacity-90" aria-label={`${BRAND.name} home`}>
-          <BrandMark compactBelow360 />
+          <BrandMark />
         </Link>
 
         <div className="flex min-w-0 flex-1 justify-center">
