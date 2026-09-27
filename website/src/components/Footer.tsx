@@ -149,9 +149,9 @@ export default function Footer() {
       </div>
 
       <div className="container-page py-10 sm:py-12">
-        <div className="grid grid-cols-1 gap-x-8 gap-y-0 sm:grid-cols-3 sm:gap-y-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-x-10">
-          {/* Brand — always visible above the link groups. */}
-          <div className="pb-8 sm:col-span-3 sm:pb-0 lg:col-span-1">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3 sm:gap-x-8 sm:gap-y-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-x-10">
+          {/* Brand — always visible above the link groups, full width at every breakpoint. */}
+          <div className="col-span-2 pb-8 sm:col-span-3 sm:pb-0 lg:col-span-1">
             <BrandMark />
 
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-muted">
@@ -183,23 +183,31 @@ export default function Footer() {
           </div>
 
           {/* One plain, always-expanded column per group — same markup at
-           *  every viewport. A top border separates stacked sections on
-           *  mobile only; from `sm` up the grid's own column gap does that
-           *  job, so the border/padding are removed. */}
-          {NAV_GROUPS.map((group) => (
-            <nav
-              key={group.id}
-              aria-labelledby={`footer-nav-${group.id}`}
-              className="border-t border-line pt-6 sm:border-0 sm:pt-0"
-            >
-              <h2 id={`footer-nav-${group.id}`} className={headingCls}>
-                {group.title}
-              </h2>
-              <div className="mt-4">
-                <FooterLinkList links={group.links} />
-              </div>
-            </nav>
-          ))}
+           *  every viewport. Mobile is a 2-col grid: the first row (indices
+           *  0-1) sits side by side with no divider, the last group spans
+           *  both columns as its own full-width row below (and gets the
+           *  divider that separates it from the first row). From `sm` up
+           *  the grid's own column gap does that job instead, so the
+           *  border/padding are removed. */}
+          {NAV_GROUPS.map((group, index) => {
+            const isLastRowOnMobile = index === NAV_GROUPS.length - 1;
+            return (
+              <nav
+                key={group.id}
+                aria-labelledby={`footer-nav-${group.id}`}
+                className={`sm:border-0 sm:pt-0 ${
+                  isLastRowOnMobile ? "col-span-2 border-t border-line pt-6 sm:col-span-1" : ""
+                }`}
+              >
+                <h2 id={`footer-nav-${group.id}`} className={headingCls}>
+                  {group.title}
+                </h2>
+                <div className="mt-4">
+                  <FooterLinkList links={group.links} />
+                </div>
+              </nav>
+            );
+          })}
         </div>
 
         {/* Bottom bar. */}
