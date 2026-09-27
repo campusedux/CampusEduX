@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
-import type { WalletTransaction, WalletSummary, WalletTopUpOrder } from "@/types";
+import type { WalletTransaction, WalletSummary, WalletTopUpOrder, WithdrawalStatus } from "@/types";
 
 function mapTransactionRow(row: any): WalletTransaction {
   return {
@@ -11,6 +11,31 @@ function mapTransactionRow(row: any): WalletTransaction {
     description: row.description,
     createdAt: row.created_at,
   };
+}
+
+/** Same pattern the request_withdrawal RPC enforces (migration 0144); the DB is authoritative. */
+const UPI_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,63}@[a-z][a-z0-9]{1,31}$/;
+
+export function isValidUpiId(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  return v.length <= 100 && UPI_ID_PATTERN.test(v);
+}
+
+/**
+ * Attaches each withdrawal hold debit's request status (RLS: own rows only).
+ * Display-only: balances come from the ledger alone, so a failed status
+ * lookup leaves the transactions unlabelled rather than failing the screen.
+ */
+async function withWithdrawalStatus(userId: string, transactions: WalletTransaction[]): Promise<WalletTransaction[]> {
+  if (!transactions.some((t) => t.category === "withdrawal" && t.type === "debit")) return transactions;
+  const { data, error } = await supabase
+    .from("withdrawal_requests")
+    .select("status, wallet_transaction_id")
+    .eq("user_id", userId)
+    .not("wallet_transaction_id", "is", null);
+  if (error || !data) return transactions;
+  const byTxn = new Map<string, WithdrawalStatus>(data.map((r: any) => [r.wallet_transaction_id, r.status]));
+  return transactions.map((t) => (byTxn.has(t.id) ? { ...t, withdrawalStatus: byTxn.get(t.id) } : t));
 }
 
 export const walletService = {
@@ -26,7 +51,7 @@ export const walletService = {
       .order("created_at", { ascending: false });
     if (res.error) throw new Error(res.error.message);
 
-    const transactions = (res.data ?? []).map(mapTransactionRow);
+    const transactions = await withWithdrawalStatus(userId, (res.data ?? []).map(mapTransactionRow));
 
     const sumBy = (predicate: (t: WalletTransaction) => boolean) =>
       transactions.filter(predicate).reduce((sum, t) => sum + t.amount, 0);
@@ -65,7 +90,7 @@ export const walletService = {
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return (data ?? []).map(mapTransactionRow);
+    return withWithdrawalStatus(userId, (data ?? []).map(mapTransactionRow));
   },
 
   /** Creates a Razorpay order for topping up the wallet (server-side, via Edge Function). */
@@ -107,14 +132,14 @@ export const walletService = {
 
   /**
    * Withdrawals aren't instant (no payout/KYC integration in this build) —
-   * this debits the wallet immediately and records a pending withdrawal
-   * transaction that support processes manually, rather than pretending
-   * money was transferred.
+   * this holds the amount (debit) and queues a pending withdrawal_requests row
+   * that the admin team approves / rejects (refunded) / marks paid, rather
+   * than pretending money was transferred.
    */
   async requestWithdrawal(userId: string, amount: number, upiId: string): Promise<void> {
     // Money movement: a failure here must never look like success. The balance
     // check, concurrency guard and ledger insert all happen server-side in one
-    // transaction (request_withdrawal RPC, migration 0038) — the client can no
+    // transaction (request_withdrawal RPC, migrations 0038/0144) — the client can no
     // longer insert a withdrawal row directly, so it can't over-withdraw or
     // race two requests against the same balance. The RPC uses auth.uid()
     // server-side; userId is kept in the signature for the caller/hook.

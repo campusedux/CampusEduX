@@ -18,6 +18,8 @@ export type WalletTransactionCategory =
   | "cashback"
   | "withdrawal";
 
+export type WithdrawalStatus = "pending" | "approved" | "rejected" | "paid";
+
 export interface WalletTransaction {
   id: string;
   type: "credit" | "debit";
@@ -25,6 +27,8 @@ export interface WalletTransaction {
   amount: number;
   description: string;
   createdAt: string;
+  /** Set on the withdrawal hold debit from its withdrawal_requests row (migration 0144). */
+  withdrawalStatus?: WithdrawalStatus;
 }
 
 export interface WalletSummary {

@@ -20,6 +20,7 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: () => supabase }));
 import {
   decideRefund,
   decideWithdrawal,
+  settleWithdrawal,
   createCoupon,
   deleteCoupon,
   saveOrderNotes,
@@ -95,6 +96,32 @@ describe('decideWithdrawal', () => {
     expect(await decideWithdrawal('wd-9', 'approve', '')).toEqual({
       ok: false,
       error: 'insufficient platform balance',
+    });
+  });
+});
+
+describe('settleWithdrawal', () => {
+  it('maps "approve" on an approved request to the paid decision with the payout reference', async () => {
+    setRpcResult('admin_process_withdrawal', { error: null });
+    expect(await settleWithdrawal('wd-3', 'approve', 'UTR123')).toEqual({ ok: true });
+    expect(rpcCall('admin_process_withdrawal')?.args[0]).toEqual({
+      p_request_id: 'wd-3',
+      p_decision: 'paid',
+      p_note: 'UTR123',
+    });
+  });
+
+  it('passes "reject" through so the RPC refunds the held amount', async () => {
+    setRpcResult('admin_process_withdrawal', { error: null });
+    await settleWithdrawal('wd-3', 'reject', 'payout failed');
+    expect(rpcCall('admin_process_withdrawal')?.args[0]).toMatchObject({ p_decision: 'reject' });
+  });
+
+  it('surfaces the RPC refusal (e.g. paid without approval)', async () => {
+    setRpcResult('admin_process_withdrawal', { error: { message: 'only an approved withdrawal can be marked paid' } });
+    expect(await settleWithdrawal('wd-3', 'approve', 'UTR1')).toEqual({
+      ok: false,
+      error: 'only an approved withdrawal can be marked paid',
     });
   });
 });

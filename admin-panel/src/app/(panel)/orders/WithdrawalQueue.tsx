@@ -8,7 +8,7 @@ import { Card, StatusPill, EmptyState } from '@/components/ui/primitives';
 import { DecisionButtons } from '@/components/ui/DecisionButtons';
 import { formatINR, formatDateTime } from '@/lib/utils';
 import { listWithdrawalRequests, WITHDRAWAL_PAGE_SIZE } from '@/lib/wallet/withdrawals';
-import { decideWithdrawal } from './actions';
+import { decideWithdrawal, settleWithdrawal } from './actions';
 
 /** Shared "Wallet Requests" screen — rendered from both Module 8 and Module 9. */
 export async function WithdrawalQueue({
@@ -25,7 +25,7 @@ export async function WithdrawalQueue({
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Wallet Requests" subtitle="Withdrawal queue — approving debits the user’s wallet in one transaction." />
+      <PageHeader title="Wallet Requests" subtitle="UPI withdrawal queue — the amount is held from the user’s wallet on request; rejecting refunds it. Payouts are sent manually, then marked paid with the UTR." />
 
       <SearchFilterBar
         placeholder="(filter by status)"
@@ -37,6 +37,7 @@ export async function WithdrawalQueue({
               { value: 'pending', label: 'Pending' },
               { value: 'approved', label: 'Approved' },
               { value: 'rejected', label: 'Rejected' },
+              { value: 'paid', label: 'Paid' },
             ]}
           />
         }
@@ -77,10 +78,11 @@ export async function WithdrawalQueue({
                     <td className="py-2.5">
                       <StatusPill status={r.status} />
                       {r.decision_note ? <p className="mt-1 text-xs text-ink-faint">{r.decision_note}</p> : null}
+                      {r.payout_reference ? <p className="mt-1 text-xs text-ink-faint">UTR: {r.payout_reference}</p> : null}
                     </td>
                     <td className="py-2.5 text-ink-muted">{formatDateTime(r.created_at)}</td>
                     <td className="py-2.5 text-right">
-                      {r.status === 'pending' ? (
+                      {r.status === 'pending' || r.status === 'approved' ? (
                         <div className="flex justify-end">
                           {/* action needs orders:edit; RPC needs referrals:edit + super_admin/admin */}
                           <PermissionGate
@@ -91,12 +93,26 @@ export async function WithdrawalQueue({
                             roles={MONEY_RPC_ROLES}
                             mode="disable"
                           >
-                            <DecisionButtons action={decideWithdrawal.bind(null, r.id)} />
+                            {r.status === 'pending' ? (
+                              <DecisionButtons action={decideWithdrawal.bind(null, r.id)} rejectLabel="Reject & refund" />
+                            ) : (
+                              <DecisionButtons
+                                action={settleWithdrawal.bind(null, r.id)}
+                                approveLabel="Mark paid"
+                                rejectLabel="Reject & refund"
+                                requireApproveNote
+                                approveNotePlaceholder="Payout reference / UTR (required)"
+                              />
+                            )}
                           </PermissionGate>
                         </div>
                       ) : (
                         <span className="text-xs text-ink-faint">
-                          {r.decided_at ? `decided ${formatDateTime(r.decided_at)}` : '—'}
+                          {r.paid_at
+                            ? `paid ${formatDateTime(r.paid_at)}`
+                            : r.decided_at
+                              ? `decided ${formatDateTime(r.decided_at)}`
+                              : '—'}
                         </span>
                       )}
                     </td>

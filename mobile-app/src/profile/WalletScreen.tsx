@@ -6,9 +6,17 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
 import { useWalletSummary, useWalletTopUp, useRequestWithdrawal, useWalletTransactions } from "@/hooks/useWallet";
-import type { ProfileStackParamList, WalletTransaction } from "@/types";
+import { isValidUpiId } from "@/services/wallet.service";
+import type { ProfileStackParamList, WalletTransaction, WithdrawalStatus } from "@/types";
 
 type Nav = NativeStackNavigationProp<ProfileStackParamList, "Wallet">;
+
+const WITHDRAWAL_STATUS_LABEL: Record<WithdrawalStatus, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected · refunded",
+  paid: "Paid",
+};
 
 const CATEGORY_META: Record<WalletTransaction["category"], { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
   referral_bonus: { icon: "gift-outline", label: "Referral Bonus" },
@@ -62,12 +70,16 @@ export function WalletScreen() {
       notify("UPI ID required", "Please enter the UPI ID to withdraw to.");
       return;
     }
+    if (!isValidUpiId(upiId)) {
+      notify("Invalid UPI ID", "Enter a valid UPI ID, for example name@bank.");
+      return;
+    }
     try {
       await requestWithdrawal.mutateAsync({ amount, upiId: upiId.trim() });
       setWithdrawVisible(false);
       setAmountText("");
       setUpiId("");
-      notify("Withdrawal requested", "Your request will be processed within 3-5 business days.");
+      notify("Withdrawal requested", "The amount is on hold and will be sent to your UPI ID after review (3-5 business days).");
     } catch (error: any) {
       notify("Couldn't request withdrawal", error.message ?? "Please try again.");
     }
@@ -124,7 +136,10 @@ export function WalletScreen() {
                     <Ionicons name={meta.icon} size={18} color="#4F39F6" />
                     <View className="ml-3 flex-1">
                       <Text className="text-gray-900 font-medium text-sm">{meta.label}</Text>
-                      <Text className="text-gray-400 text-xs mt-0.5">{new Date(tx.createdAt).toLocaleDateString()}</Text>
+                      <Text className="text-gray-400 text-xs mt-0.5">
+                        {new Date(tx.createdAt).toLocaleDateString()}
+                        {tx.withdrawalStatus ? ` · ${WITHDRAWAL_STATUS_LABEL[tx.withdrawalStatus]}` : ""}
+                      </Text>
                     </View>
                   </View>
                   <Text className={`font-semibold ${tx.type === "credit" ? "text-green-600" : "text-danger"}`}>

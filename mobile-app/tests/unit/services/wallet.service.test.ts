@@ -1,8 +1,8 @@
 jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModule());
 jest.mock("react-native-razorpay", () => ({ __esModule: true, default: { open: jest.fn() } }));
 
-import { walletService } from "@/services/wallet.service";
-import { resetSupabaseMock, setTableResult, setFunctionResult, supabase } from "../../mocks/supabase.mock";
+import { walletService, isValidUpiId } from "@/services/wallet.service";
+import { resetSupabaseMock, setTableResult, setFunctionResult, setRpcResult, supabase } from "../../mocks/supabase.mock";
 import { walletTransactionRows } from "../../mocks/users.mock";
 
 beforeEach(() => resetSupabaseMock());
@@ -56,6 +56,44 @@ describe("walletService.getWalletSummary", () => {
     setTableResult("wallet_transactions", { error: { message: "relation does not exist" } });
 
     await expect(walletService.getAllTransactions("u-1")).rejects.toThrow("relation does not exist");
+  });
+});
+
+describe("withdrawal status + UPI validation", () => {
+  const holdRow = { id: "tx-w", type: "debit", category: "withdrawal", amount: 200, description: "Withdrawal requested to a@ybl", created_at: "2026-09-27T00:00:00Z" };
+
+  it("labels the hold debit with its withdrawal request status", async () => {
+    setTableResult("wallet_transactions", { data: [holdRow] });
+    setTableResult("withdrawal_requests", { data: [{ status: "pending", wallet_transaction_id: "tx-w" }] });
+
+    const [tx] = await walletService.getAllTransactions("u-1");
+
+    expect(tx.withdrawalStatus).toBe("pending");
+  });
+
+  it("keeps the ledger (unlabelled) when the status lookup fails", async () => {
+    setTableResult("wallet_transactions", { data: [holdRow] });
+    setTableResult("withdrawal_requests", { error: { message: "boom" } });
+
+    const summary = await walletService.getWalletSummary("u-1");
+
+    expect(summary.balance).toBe(0);
+    expect(summary.recentTransactions[0].withdrawalStatus).toBeUndefined();
+  });
+
+  it("validates UPI IDs like the request_withdrawal RPC", () => {
+    expect(isValidUpiId(" Name.Pay@OkAxis ")).toBe(true);
+    expect(isValidUpiId("9876543210@ybl")).toBe(true);
+    expect(isValidUpiId("not-a-upi")).toBe(false);
+    expect(isValidUpiId("a@b")).toBe(false);
+    expect(isValidUpiId("name@bank.com")).toBe(false);
+  });
+});
+
+describe("walletService.requestWithdrawal", () => {
+  it("surfaces an RPC refusal instead of reporting success", async () => {
+    setRpcResult("request_withdrawal", { error: { message: "You already have a pending withdrawal request." } });
+    await expect(walletService.requestWithdrawal("u-1", 200, "a@ybl")).rejects.toThrow("pending withdrawal request");
   });
 });
 

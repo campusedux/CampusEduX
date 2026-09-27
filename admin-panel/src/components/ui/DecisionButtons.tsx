@@ -17,10 +17,18 @@ export function DecisionButtons({
   action,
   requireRejectNote = true,
   size = 'sm',
+  approveLabel = 'Approve',
+  rejectLabel = 'Reject',
+  requireApproveNote = false,
+  approveNotePlaceholder = 'Note (optional)',
 }: {
   action: (decision: 'approve' | 'reject', note: string) => Promise<Result>;
   requireRejectNote?: boolean;
   size?: 'sm' | 'md';
+  approveLabel?: string;
+  rejectLabel?: string;
+  requireApproveNote?: boolean;
+  approveNotePlaceholder?: string;
 }) {
   const [pending, start] = useTransition();
   const [mode, setMode] = useState<null | 'approve' | 'reject'>(null);
@@ -35,7 +43,7 @@ export function DecisionButtons({
         toast({ title: 'Could not process', description: res.error, variant: 'error' });
         return;
       }
-      toast({ title: decision === 'approve' ? 'Approved' : 'Rejected', variant: 'success' });
+      toast({ title: decision === 'approve' ? (approveLabel === 'Approve' ? 'Approved' : 'Done') : 'Rejected', variant: 'success' });
       setMode(null);
       setNote('');
       router.refresh();
@@ -50,7 +58,7 @@ export function DecisionButtons({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={2}
-          placeholder={mode === 'reject' ? 'Reason (required)' : 'Note (optional)'}
+          placeholder={mode === 'reject' ? 'Reason (required)' : approveNotePlaceholder}
         />
         <div className="flex justify-end gap-1.5">
           <button
@@ -61,13 +69,17 @@ export function DecisionButtons({
           </button>
           <button
             onClick={() => run(mode)}
-            disabled={pending || (mode === 'reject' && requireRejectNote && !note.trim())}
+            disabled={
+              pending ||
+              (mode === 'reject' && requireRejectNote && !note.trim()) ||
+              (mode === 'approve' && requireApproveNote && !note.trim())
+            }
             className={`${h} inline-flex items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-white disabled:opacity-50 ${
               mode === 'approve' ? 'bg-success hover:opacity-90' : 'bg-danger hover:opacity-90'
             }`}
           >
             {pending ? <Loader2 size={14} className="animate-spin" /> : null}
-            Confirm {mode}
+            Confirm {mode === 'approve' ? approveLabel.toLowerCase() : rejectLabel.toLowerCase()}
           </button>
         </div>
       </div>
@@ -81,14 +93,14 @@ export function DecisionButtons({
         disabled={pending}
         className={`${h} inline-flex items-center gap-1 rounded-lg bg-success px-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50`}
       >
-        <Check size={14} /> Approve
+        <Check size={14} /> {approveLabel}
       </button>
       <button
         onClick={() => setMode('reject')}
         disabled={pending}
         className={`${h} inline-flex items-center gap-1 rounded-lg border border-danger/30 px-2.5 text-sm font-medium text-danger hover:bg-danger/10 disabled:opacity-50`}
       >
-        <X size={14} /> Reject
+        <X size={14} /> {rejectLabel}
       </button>
     </div>
   );

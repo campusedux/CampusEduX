@@ -156,7 +156,7 @@ export async function decideRefund(id: string, decision: 'approve' | 'reject', n
   return { ok: true };
 }
 
-export async function decideWithdrawal(id: string, decision: 'approve' | 'reject', note: string): Promise<Result> {
+export async function decideWithdrawal(id: string, decision: 'approve' | 'reject' | 'paid', note: string): Promise<Result> {
   await requirePermission('orders', 'edit');
   const supabase = createClient();
   const { error } = await supabase.rpc('admin_process_withdrawal', {
@@ -170,4 +170,13 @@ export async function decideWithdrawal(id: string, decision: 'approve' | 'reject
   revalidatePath('/referrals/wallet-requests');
   revalidatePath('/referrals/wallet');
   return { ok: true };
+}
+
+/**
+ * Approved withdrawal: "approve" = mark paid (note = payout reference / UTR), "reject" = refund the hold.
+ * TODO(payout-provider): no payout provider is configured — the admin sends the UPI transfer manually and
+ * records it here. See admin_process_withdrawal (migration 0144/115) for the integration point.
+ */
+export async function settleWithdrawal(id: string, decision: 'approve' | 'reject', note: string): Promise<Result> {
+  return decideWithdrawal(id, decision === 'approve' ? 'paid' : 'reject', note);
 }
