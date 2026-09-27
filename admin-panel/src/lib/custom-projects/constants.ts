@@ -177,6 +177,8 @@ export const DELIVERY_ASSET_KINDS = [
   'source_code',
   'documentation',
   'demo',
+  'pdf',
+  'ppt',
   'other',
 ] as const;
 export type DeliveryAssetKind = (typeof DELIVERY_ASSET_KINDS)[number];
@@ -187,5 +189,27 @@ export const DELIVERY_ASSET_LABEL: Record<DeliveryAssetKind, string> = {
   source_code: 'Source code',
   documentation: 'Documentation',
   demo: 'Demo',
+  pdf: 'PDF',
+  ppt: 'PPT',
   other: 'Other',
 };
+
+/**
+ * Bug 4: the three dedicated delivery slots. Size limits enforced client-side (fast feedback) and
+ * server-side in addDeliveryAssets (the real boundary — a client check can always be bypassed).
+ * The 'custom-project-deliveries' bucket's own file_size_limit (migration 0125/097) is the outer
+ * ceiling (100MB, i.e. the ZIP limit); PDF/PPT's tighter 25MB is enforced only at these two layers.
+ */
+export interface DeliverySlot {
+  kind: DeliveryAssetKind;
+  label: string;
+  accept: string;
+  maxSizeBytes: number;
+  extensions: string[];
+}
+
+export const DELIVERY_SLOTS: DeliverySlot[] = [
+  { kind: 'source_code', label: 'Source code (ZIP)', accept: '.zip', maxSizeBytes: 100 * 1024 * 1024, extensions: ['.zip'] },
+  { kind: 'pdf', label: 'PDF (optional)', accept: '.pdf', maxSizeBytes: 25 * 1024 * 1024, extensions: ['.pdf'] },
+  { kind: 'ppt', label: 'PPT (optional)', accept: '.ppt,.pptx', maxSizeBytes: 25 * 1024 * 1024, extensions: ['.ppt', '.pptx'] },
+];

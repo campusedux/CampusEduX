@@ -1,57 +1,122 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useFormState } from 'react-dom';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2, Info } from 'lucide-react';
 import { Label, Input, Textarea, Select } from '@/components/ui/primitives';
-import { SubmitButton } from '@/components/auth/SubmitButton';
+import { Button } from '@/components/ui/Button';
 import { UploadDropzone } from '@/components/ui/UploadDropzone';
 import { useToast } from '@/components/ui/toast';
-import { addDeliveryAssets, saveDelivery } from '../../actions';
-import { DELIVERY_ASSET_KINDS, DELIVERY_ASSET_LABEL } from '@/lib/custom-projects/constants';
+import { addDeliveryAssets, saveDelivery, saveAndDeliver } from '../../actions';
+import { DELIVERY_ASSET_KINDS, DELIVERY_ASSET_LABEL, DELIVERY_SLOTS } from '@/lib/custom-projects/constants';
 
 type Result = { ok: boolean; error?: string };
 
+/**
+ * Bug 4: has both the original "Save details" (no status change — lets the admin save partial
+ * progress without delivering) and the new combined "Save & Deliver". Fields are controlled so both
+ * buttons submit the same current values from one form. custom_project_set_status() is the actual
+ * "at least one deliverable" enforcement point (migration 0125/097) — this component just surfaces
+ * whatever error it returns.
+ */
 export function DeliveryDetailsForm({
   requestId,
   initial,
+  hasDeliverable,
 }: {
   requestId: string;
   initial: { demo_url: string | null; notes: string };
+  hasDeliverable: boolean;
 }) {
-  const [state, formAction] = useFormState(saveDelivery.bind(null, requestId), { ok: false });
-  const { toast } = useToast();
+  const [demoUrl, setDemoUrl] = useState(initial.demo_url ?? '');
+  const [notes, setNotes] = useState(initial.notes);
+  const [pending, start] = useTransition();
   const router = useRouter();
-  const seen = useRef(state);
-  useEffect(() => {
-    if (state === seen.current) return;
-    seen.current = state;
-    if (state.error) toast({ title: 'Could not save', description: state.error, variant: 'error' });
-    else if (state.ok) {
-      toast({ title: 'Delivery saved', variant: 'success' });
-      router.refresh();
-    }
-  }, [state, toast, router]);
+  const { toast } = useToast();
+
+  function fd() {
+    const f = new FormData();
+    f.set('demo_url', demoUrl);
+    f.set('notes', notes);
+    return f;
+  }
+
+  const runSave = () =>
+    start(async () => {
+      const res = await saveDelivery(requestId, { ok: false }, fd());
+      if (!res.ok) toast({ title: 'Could not save', description: res.error, variant: 'error' });
+      else {
+        toast({ title: 'Delivery saved', variant: 'success' });
+        router.refresh();
+      }
+    });
+
+  const runSaveAndDeliver = () =>
+    start(async () => {
+      const res = await saveAndDeliver(requestId, { ok: false }, fd());
+      if (!res.ok) toast({ title: 'Could not deliver', description: res.error, variant: 'error' });
+      else {
+        toast({ title: 'Delivered to the student', variant: 'success' });
+        router.refresh();
+      }
+    });
 
   return (
-    <form action={formAction} className="space-y-4">
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 rounded-card border border-border bg-surface-subtle p-3 text-xs text-ink-muted">
+        <Info size={14} className="mt-0.5 flex-shrink-0" />
+        <p>
+          Files and the demo URL stay hidden from the student until this request is marked{' '}
+          <span className="font-medium text-ink">Delivered</span>.
+        </p>
+      </div>
       <div>
-        <Label htmlFor="demo_url">Demo URL</Label>
-        <Input id="demo_url" name="demo_url" defaultValue={initial.demo_url ?? ''} placeholder="https://…" />
+        <Label htmlFor="demo_url">Demo URL (optional)</Label>
+        <Input id="demo_url" name="demo_url" value={demoUrl} onChange={(e) => setDemoUrl(e.target.value)} placeholder="https://…" />
       </div>
       <div>
         <Label htmlFor="notes">Delivery notes (shown to the student)</Label>
-        <Textarea id="notes" name="notes" rows={3} defaultValue={initial.notes} />
+        <Textarea id="notes" name="notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </div>
-      <div className="flex justify-end">
-        <div className="w-36">
-          <SubmitButton pendingLabel="Saving…">Save delivery</SubmitButton>
-        </div>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={runSave} disabled={pending}>
+          {pending ? <Loader2 size={14} className="animate-spin" /> : null} Save details
+        </Button>
+        <Button type="button" onClick={runSaveAndDeliver} disabled={pending} title={!hasDeliverable ? 'Add a demo URL or at least one file first' : undefined}>
+          {pending ? <Loader2 size={14} className="animate-spin" /> : null} Save &amp; Deliver
+        </Button>
       </div>
-    </form>
+      {!hasDeliverable && (
+        <p className="text-right text-xs text-ink-faint">Add a demo URL or at least one file below before delivering.</p>
+      )}
+    </div>
   );
 }
 
+/** The three dedicated slots (Bug 4): Source Code ZIP, PDF, PPT — one file each, kind fixed. */
+export function DeliverySlotUploaders({ requestId, studentId }: { requestId: string; studentId: string }) {
+  return (
+    <div className="space-y-4">
+      {DELIVERY_SLOTS.map((slot) => (
+        <div key={slot.kind}>
+          <Label>{slot.label}</Label>
+          <div className="mt-1">
+            <UploadDropzone
+              bucket="custom-project-deliveries"
+              pathPrefix={`${studentId}/${requestId}`}
+              accept={slot.accept}
+              maxSizeBytes={slot.maxSizeBytes}
+              hint={`${slot.extensions.join('/')} · up to ${(slot.maxSizeBytes / (1024 * 1024)).toFixed(0)} MB`}
+              action={(files) => addDeliveryAssets(requestId, slot.kind, slot.label, files) as Promise<Result>}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The original flexible uploader — screenshots, APK, extra docs/demos, or anything else. */
 export function DeliveryAssetUploader({
   requestId,
   studentId,
@@ -84,7 +149,7 @@ export function DeliveryAssetUploader({
         bucket="custom-project-deliveries"
         pathPrefix={`${studentId}/${requestId}`}
         multiple
-        hint="Screenshots, APK, source zip, docs — uploaded to the student's private folder"
+        hint="Screenshots, APK, extra docs or demos — uploaded to the student's private folder"
         action={(files) => addDeliveryAssets(requestId, kind, label, files) as Promise<Result>}
       />
     </div>

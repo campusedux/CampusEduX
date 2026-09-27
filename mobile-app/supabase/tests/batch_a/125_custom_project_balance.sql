@@ -172,6 +172,8 @@ begin
   insert into custom_project_requests(user_id,title,project_type,project_level,platform,
                                       estimated_total,token_amount,token_payment_status)
     values (a,'A2','personal','standard','web',6000,3000,'paid') returning id into r;
+  -- migration 0125's delivery gate requires an actual deliverable before 'delivered' is reachable.
+  insert into custom_project_deliveries(request_id, demo_url) values (r, 'https://example.com/a2-demo');
   perform test_as(adm);
   perform custom_project_set_status(r, 'in_development', null);
   perform custom_project_set_status(r, 'testing', null);

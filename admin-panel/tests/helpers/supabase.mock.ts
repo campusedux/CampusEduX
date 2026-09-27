@@ -30,6 +30,14 @@ export const supabase = {
   auth: {
     getUser: vi.fn(() => Promise.resolve({ data: { user: state.user }, error: null })),
   },
+  storage: {
+    from: vi.fn((bucket: string) => ({
+      remove: vi.fn((paths: string[]) => {
+        supabase.calls.push({ table: `storage:${bucket}`, verb: 'remove', args: [paths] });
+        return Promise.resolve({ data: [], error: null });
+      }),
+    })),
+  },
 };
 
 export function resetSupabaseMock() {
@@ -40,6 +48,7 @@ export function resetSupabaseMock() {
   supabase.from.mockClear();
   supabase.rpc.mockClear();
   supabase.auth.getUser.mockClear();
+  supabase.storage.from.mockClear();
 }
 
 export function setUser(user: unknown) {

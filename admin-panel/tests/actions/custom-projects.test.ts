@@ -20,6 +20,9 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: () => supabase }));
 import {
   setRequestStatus,
   setFinalPrice,
+  saveDelivery,
+  saveAndDeliver,
+  addDeliveryAssets,
   saveRequestAdminNotes,
   createFeature,
   updateFeature,
@@ -89,6 +92,108 @@ describe('setFinalPrice', () => {
       "You don't have permission to edit in custom_projects.",
     );
     expect(rpcCall('admin_set_custom_project_final_price')).toBeUndefined();
+  });
+});
+
+describe('saveAndDeliver', () => {
+  it('saves the delivery details and calls custom_project_set_status(\'delivered\') in one go', async () => {
+    setTableResult('custom_project_deliveries', { data: null, error: null });
+    setRpcResult('custom_project_set_status', { data: null, error: null });
+
+    const res = await saveAndDeliver('req-1', { ok: false }, form({ demo_url: 'https://example.com/demo', notes: 'all done' }));
+
+    expect(requirePermission).toHaveBeenCalledWith('custom_projects', 'edit');
+    expect(callsFor('custom_project_deliveries').some((c) => c.verb === 'upsert')).toBe(true);
+    expect(rpcCall('custom_project_set_status')?.args[0]).toEqual({
+      p_request_id: 'req-1',
+      p_new_status: 'delivered',
+      p_note: null,
+    });
+    expect(res).toEqual({ ok: true });
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'custom_project.delivery.save_and_deliver', module: 'custom_projects' }),
+    );
+  });
+
+  it('rejects an unsafe demo_url before ever calling the RPC (same guard as saveDelivery)', async () => {
+    const res = await saveAndDeliver('req-1', { ok: false }, form({ demo_url: 'javascript:alert(1)' }));
+    expect(res.ok).toBe(false);
+    expect(rpcCall('custom_project_set_status')).toBeUndefined();
+  });
+
+  it("surfaces the RPC's 'no deliverable' rejection (the real enforcement point, migration 0125/097)", async () => {
+    setTableResult('custom_project_deliveries', { data: null, error: null });
+    setRpcResult('custom_project_set_status', {
+      data: null,
+      error: { message: 'Add a demo URL or at least one file before marking this request Delivered.' },
+    });
+
+    const res = await saveAndDeliver('req-1', { ok: false }, form({}));
+
+    expect(res).toEqual({ ok: false, error: 'Add a demo URL or at least one file before marking this request Delivered.' });
+    expect(logActivity).not.toHaveBeenCalled();
+  });
+
+  it('is blocked when the caller lacks custom_projects:edit', async () => {
+    requirePermission.mockRejectedValueOnce(new Error("You don't have permission to edit in custom_projects."));
+    await expect(saveAndDeliver('req-1', { ok: false }, form({ demo_url: '' }))).rejects.toThrow(
+      "You don't have permission to edit in custom_projects.",
+    );
+    expect(rpcCall('custom_project_set_status')).toBeUndefined();
+  });
+});
+
+describe('addDeliveryAssets (Bug 4 — ZIP/PDF/PPT slot validation)', () => {
+  const zipFile = { path: 'u1/req-1/1-abc-source.zip', url: 'https://x/1', name: 'source.zip', size: 10 * 1024 * 1024 };
+
+  it('accepts a correctly-sized, correctly-named file for its slot', async () => {
+    setTableResult('custom_project_deliveries', { data: { id: 'd-1' }, error: null });
+    setTableResult('custom_project_delivery_assets', { data: [], error: null });
+
+    const res = await addDeliveryAssets('req-1', 'source_code', 'Source', [zipFile]);
+
+    expect(res).toEqual({ ok: true });
+    expect(callsFor('custom_project_delivery_assets').some((c) => c.verb === 'insert')).toBe(true);
+  });
+
+  it('rejects the wrong extension for a dedicated slot and removes the already-uploaded file', async () => {
+    const wrongExt = { ...zipFile, name: 'source.rar' };
+
+    const res = await addDeliveryAssets('req-1', 'source_code', 'Source', [wrongExt]);
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/not a valid Source code \(ZIP\) upload/);
+    expect(supabase.storage.from).toHaveBeenCalledWith('custom-project-deliveries');
+    // no DB row written for the rejected file
+    expect(callsFor('custom_project_delivery_assets').some((c) => c.verb === 'insert')).toBe(false);
+  });
+
+  it('rejects an oversized file for a dedicated slot (server-side, independent of the client pre-check)', async () => {
+    const tooBig = { ...zipFile, name: 'source.zip', size: 200 * 1024 * 1024 };
+
+    const res = await addDeliveryAssets('req-1', 'source_code', 'Source', [tooBig]);
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/up to 100 MB/);
+  });
+
+  it('rejects an oversized PDF against its own tighter 25MB limit', async () => {
+    const bigPdf = { path: 'u1/req-1/1-abc-doc.pdf', url: 'https://x/1', name: 'doc.pdf', size: 30 * 1024 * 1024 };
+
+    const res = await addDeliveryAssets('req-1', 'pdf', 'PDF', [bigPdf]);
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/up to 25 MB/);
+  });
+
+  it('kinds without a dedicated slot (screenshot/apk/other/…) are not subject to slot validation', async () => {
+    setTableResult('custom_project_deliveries', { data: { id: 'd-1' }, error: null });
+    setTableResult('custom_project_delivery_assets', { data: [], error: null });
+    const anyFile = { path: 'u1/req-1/1-abc-home.png', url: 'https://x/1', name: 'home.png', size: 500 * 1024 * 1024 };
+
+    const res = await addDeliveryAssets('req-1', 'screenshot', 'Home', [anyFile]);
+
+    expect(res).toEqual({ ok: true });
   });
 });
 
