@@ -9,6 +9,8 @@
 // `next dev` (Fast Refresh / HMR / webpack eval source-maps) evaluates code
 // with eval(), so 'unsafe-eval' is required in development only. A production
 // build never needs it, so it stays out of the deployed policy.
+const contentRedirects = require("./src/lib/contentRedirects.json");
+
 const isDev = process.env.NODE_ENV !== "production";
 const scriptSrc = [
   "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com",
@@ -92,6 +94,11 @@ const nextConfig = {
       // "Run this code" hand-off (buildCompilerHref). Consolidated the same
       // direction, never the reverse.
       { source: "/practice/compiler", destination: "/compiler", permanent: true },
+      // Duplicate lessons / problems merged into their stronger twin
+      // (website/seo-report.md §d, owner-approved). Shared with the sitemap and
+      // related-lesson code via src/lib/contentRedirects.ts. A literal 301, as
+      // requested, rather than Next's default 308 for `permanent: true`.
+      ...contentRedirects.map((r) => ({ source: r.source, destination: r.destination, statusCode: 301 })),
     ];
   },
   async headers() {

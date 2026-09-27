@@ -1,4 +1,5 @@
 import { isTemplatedGenerativeAiBody, isThinCodingProblemRow } from "@/lib/contentQuality";
+import { isRedirectedPath } from "@/lib/contentRedirects";
 
 /**
  * Pure sitemap logic (no I/O): which public URLs go into which child sitemap,
@@ -339,10 +340,15 @@ export function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-/** De-duplicates by path (first occurrence wins) so a URL is never listed twice. */
+/**
+ * De-duplicates by path (first occurrence wins) so a URL is never listed twice,
+ * and drops paths that 301 to another page (src/lib/contentRedirects.ts).
+ */
 export function dedupeEntries(entries: SitemapEntry[]): SitemapEntry[] {
   const seen = new Set<string>();
-  return entries.filter((e) => (seen.has(e.path) ? false : (seen.add(e.path), true)));
+  return entries.filter((e) =>
+    seen.has(e.path) || isRedirectedPath(e.path) ? false : (seen.add(e.path), true),
+  );
 }
 
 export function renderUrlset(siteUrl: string, entries: SitemapEntry[]): string {

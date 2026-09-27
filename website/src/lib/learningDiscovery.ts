@@ -12,6 +12,7 @@
  */
 
 import type { LearningTree, LearningTreeTopic } from "@/lib/learning.types";
+import { isRedirectedPath } from "@/lib/contentRedirects";
 
 export interface GridTechProfile {
   /** Human label for headings + anchor text ("Java", "C++", "AI/ML"). */
@@ -244,6 +245,7 @@ export function selectRelatedLessons(
   const scored: { f: (typeof flat)[number]; score: number; dist: number; order: number }[] = [];
   flat.forEach((f, order) => {
     if (order === idx || f.topic.is_premium || exclude.has(f.topic.slug) || f.topic.slug === current.topic.slug) return;
+    if (isRedirectedPath(`/learning/${tree.grid.slug}/${f.topic.slug}`)) return;
     const shared = tokensShared(mine, tokensOf(f.topic));
     const sameSection = f.section.id === current.section.id;
     if (shared === 0 && !sameSection) return;

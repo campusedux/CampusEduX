@@ -1624,7 +1624,10 @@ Remember: problem first, technique second, evaluation always.
 -4  Add input validation and error handling to your {TOPIC} implementation, then test one failure case.
 ```
 
-## (d) Proposed redirects — PENDING OWNER APPROVAL — not implemented
+## (d) Proposed redirects
+
+> **Status 2026-09-27:** the owner approved **Tier 1** and **`/learning/java-tutorial/garbage-collector` → `/learning/java-tutorial/garbage-collection`**. These are implemented as literal **301**s in `next.config.js`, sourced from `src/lib/contentRedirects.json`, which the sitemap and the Related-lessons block also read, so a redirected URL is never listed or linked from there. The source rows are still in the database: mobile keeps showing them, and the web course outline still lists them. Hiding them in admin is optional and does not affect the redirect. **Tiers 2 and 3 (except garbage-collector) remain pending.**
+
 
 > **Nothing below has been applied.** `next.config.js` was not edited. Every source and destination URL was verified to return HTTP 200 on production today.
 
