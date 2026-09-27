@@ -24,8 +24,8 @@ export default async function Page() {
   const user = await requireUser();
   const { draft, estimate } = await loadDraftWithEstimate(user.id);
 
-  const included = estimate.selectedFeatures.filter((f) => f.price === 0 || draft.aiRecommendedFeatureIds.includes(f.id));
-  const extra = estimate.selectedFeatures.filter((f) => f.price > 0 && !draft.aiRecommendedFeatureIds.includes(f.id));
+  const included = estimate.selectedFeatures.filter((f) => f.isIncluded || f.price === 0 || draft.aiRecommendedFeatureIds.includes(f.id));
+  const extra = estimate.selectedFeatures.filter((f) => !f.isIncluded && f.price > 0 && !draft.aiRecommendedFeatureIds.includes(f.id));
 
   return (
     <div className="container-prose py-10 sm:py-12">

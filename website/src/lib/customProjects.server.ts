@@ -49,7 +49,7 @@ export async function loadCatalog(): Promise<{
       pub.from("custom_project_platform_pricing").select("platform,label,charge,sort_order").eq("is_active", true).order("sort_order"),
       pub
         .from("custom_project_features")
-        .select("id,name,description,category,project_types,project_levels,price,sort_order,icon,dependencies,conflicts")
+        .select("id,name,description,category,project_types,project_levels,included_in_levels,price,sort_order,icon,dependencies,conflicts")
         .eq("is_active", true),
     ]);
     pricing = (pr.data ?? []) as PricingRow[];
@@ -58,6 +58,7 @@ export async function loadCatalog(): Promise<{
       ...f,
       dependencies: f.dependencies ?? [],
       conflicts: f.conflicts ?? [],
+      included_in_levels: f.included_in_levels ?? [],
     }));
   }
   return { pricing, platforms, features, catalogAvailable: !!pub };

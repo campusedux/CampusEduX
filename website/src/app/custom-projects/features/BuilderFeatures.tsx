@@ -17,6 +17,7 @@ import {
   featuresForTier,
   findConflict,
   groupByCategory,
+  isIncludedForTier,
   priceForFeature,
   resolveDependencies,
   type FeatureRow,
@@ -62,15 +63,26 @@ export default function BuilderFeatures({
   );
   const featureById = useMemo(() => new Map(features.map((f) => [f.id, f])), [features]);
 
-  // Included = free for this tier, or AI flagged it as genuinely necessary
-  // (even if paid). Extra = everything else paid — optional enhancements.
+  // Admin-set "Included by default" for this type:level — always delivered, never charged.
+  const tierIncluded = useMemo(
+    () => new Set(eligible.filter((f) => isIncludedForTier(f, draft.projectType, draft.projectLevel)).map((f) => f.id)),
+    [eligible, draft.projectType, draft.projectLevel],
+  );
+  // Included = admin-included for this tier, free, or AI flagged it as
+  // genuinely necessary (even if paid). Extra = everything else paid.
   const includedBucket = useMemo(
-    () => eligible.filter((f) => Number(f.price) === 0 || draft.aiRecommendedFeatureIds.includes(f.id)),
-    [eligible, draft.aiRecommendedFeatureIds],
+    () =>
+      eligible.filter(
+        (f) => tierIncluded.has(f.id) || Number(f.price) === 0 || draft.aiRecommendedFeatureIds.includes(f.id),
+      ),
+    [eligible, tierIncluded, draft.aiRecommendedFeatureIds],
   );
   const extraBucket = useMemo(
-    () => eligible.filter((f) => Number(f.price) > 0 && !draft.aiRecommendedFeatureIds.includes(f.id)),
-    [eligible, draft.aiRecommendedFeatureIds],
+    () =>
+      eligible.filter(
+        (f) => !tierIncluded.has(f.id) && Number(f.price) > 0 && !draft.aiRecommendedFeatureIds.includes(f.id),
+      ),
+    [eligible, tierIncluded, draft.aiRecommendedFeatureIds],
   );
   const defaultExtras = useMemo(() => {
     if (draft.aiSuggestedExtraFeatureIds.length === 0) return extraBucket;
@@ -267,15 +279,19 @@ export default function BuilderFeatures({
             <div className="mt-4 space-y-3">
               {groupedIncluded.map(([category, rows]) => (
                 <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={rows.length === 1 ? "feature" : "features"}>
-                  {rows.map((f) => (
-                    <FeatureCard
-                      key={f.id}
-                      feature={f}
-                      checked={selectedSet.has(f.id)}
-                      onToggle={() => toggle(f.id)}
-                      recommended={MANDATORY_FEATURE_IDS.includes(f.id) || draft.aiRecommendedFeatureIds.includes(f.id)}
-                    />
-                  ))}
+                  {rows.map((f) =>
+                    tierIncluded.has(f.id) ? (
+                      <FeatureCard key={f.id} feature={{ ...f, price: 0 }} checked readOnly />
+                    ) : (
+                      <FeatureCard
+                        key={f.id}
+                        feature={f}
+                        checked={selectedSet.has(f.id)}
+                        onToggle={() => toggle(f.id)}
+                        recommended={MANDATORY_FEATURE_IDS.includes(f.id) || draft.aiRecommendedFeatureIds.includes(f.id)}
+                      />
+                    ),
+                  )}
                 </CollapsibleCategory>
               ))}
             </div>
@@ -420,7 +436,9 @@ export default function BuilderFeatures({
           <dl className="mt-4 space-y-2.5 text-sm">
             <div className="flex items-center justify-between gap-3">
               <dt className="text-ink-muted">Included features</dt>
-              <dd className="font-medium text-ink">{includedBucket.filter((f) => selectedSet.has(f.id)).length}</dd>
+              <dd className="font-medium text-ink">
+                {includedBucket.filter((f) => tierIncluded.has(f.id) || selectedSet.has(f.id)).length}
+              </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-ink-muted">Extra features</dt>

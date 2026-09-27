@@ -7,6 +7,7 @@ import {
   emptyDraft,
   normalizeDraft,
   featuresForTier,
+  isIncludedForTier,
   findConflict,
   priceForFeature,
   resolveDependencies,
@@ -370,5 +371,30 @@ describe("isRequestEditable", () => {
     expect(isRequestEditable("new")).toBe(true);
     expect(isRequestEditable("in_development")).toBe(false);
     expect(isRequestEditable("delivered")).toBe(false);
+  });
+});
+
+describe("included_in_levels (admin \"Included by default\")", () => {
+  const INCLUDED: FeatureRow = { id: "notif-inapp", name: "In-app notifications", description: "", category: "Notifications", project_types: ["academic", "business"], project_levels: ["standard", "advanced"], included_in_levels: ["academic:advanced"], price: 800, sort_order: 5, icon: null, dependencies: [], conflicts: [] };
+
+  it("matches only the exact type:level key", () => {
+    expect(isIncludedForTier(INCLUDED, "academic", "advanced")).toBe(true);
+    expect(isIncludedForTier(INCLUDED, "academic", "standard")).toBe(false);
+    expect(isIncludedForTier(INCLUDED, null, "advanced")).toBe(false);
+    expect(isIncludedForTier({}, "academic", "advanced")).toBe(false);
+  });
+
+  it("is always in the estimate at price 0 for that tier, even if not toggled on", () => {
+    const draft = { ...emptyDraft(), projectType: "academic" as const, projectLevel: "advanced" as const, platform: "web" as const, title: "T", featureIds: ["f-paid"] };
+    const est = computeEstimate(draft, PRICING, PLATFORMS, [...FEATURES, INCLUDED]);
+    expect(est.selectedFeatures.find((f) => f.id === "notif-inapp")).toMatchObject({ price: 0, isIncluded: true });
+    expect(est.featureTotal).toBe(800); // only f-paid is charged
+  });
+
+  it("stays a paid add-on for a tier it is not included in", () => {
+    const draft = { ...emptyDraft(), projectType: "business" as const, projectLevel: "standard" as const, platform: "web" as const, title: "T", featureIds: ["notif-inapp"] };
+    const est = computeEstimate(draft, PRICING, PLATFORMS, [...FEATURES, INCLUDED]);
+    expect(est.selectedFeatures).toEqual([{ id: "notif-inapp", name: "In-app notifications", price: 800, category: "Notifications", isIncluded: false }]);
+    expect(est.featureTotal).toBe(800);
   });
 });

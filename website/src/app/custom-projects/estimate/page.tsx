@@ -106,12 +106,14 @@ function EstimateBody({
 }) {
   const included = estimate.selectedFeatures.filter(
     (f) =>
+      f.isIncluded ||
       f.price === 0 ||
       draft.aiRecommendedFeatureIds.includes(f.id),
   );
 
   const additional = estimate.selectedFeatures.filter(
     (f) =>
+      !f.isIncluded &&
       f.price > 0 &&
       !draft.aiRecommendedFeatureIds.includes(f.id),
   );

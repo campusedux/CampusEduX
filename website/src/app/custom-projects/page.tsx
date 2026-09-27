@@ -41,7 +41,7 @@ export default async function CustomProjectsPage() {
       // Platform is an add-on charge on top of the base price — 0 for web.
       supabase.from("custom_project_platform_pricing").select("platform,label,charge").eq("is_active", true).order("sort_order"),
       // Feature catalog — 0034_custom_feature_catalog.sql (category is free text).
-      supabase.from("custom_project_features").select("id,name,category,price").eq("is_active", true).order("sort_order").limit(60),
+      supabase.from("custom_project_features").select("id,name,category,price").eq("is_active", true).order("sort_order"),
     ]);
 
     const byType = new Map<string, { from: number; token: number }>();

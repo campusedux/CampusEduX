@@ -249,6 +249,8 @@ export type FeatureRow = {
   icon: string | null;
   dependencies: string[];
   conflicts: string[];
+  /** "<type>:<level>" keys this feature comes free with (admin "Included by default", migration 0115). */
+  included_in_levels?: string[];
 };
 
 /**
@@ -344,6 +346,19 @@ export function featuresForTier(
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 }
 
+/**
+ * Whether `feature` is included (free, always delivered) for this type + level —
+ * the same rule create-custom-project-order applies (_shared/customProjectPricing.ts).
+ */
+export function isIncludedForTier(
+  feature: Pick<FeatureRow, "included_in_levels">,
+  projectType: string | null,
+  projectLevel: string | null,
+): boolean {
+  if (!projectType || !projectLevel) return false;
+  return Array.isArray(feature.included_in_levels) && feature.included_in_levels.includes(`${projectType}:${projectLevel}`);
+}
+
 /** Group a feature list by its category, preserving catalog sort order. */
 export function groupByCategory<T extends { category: string }>(rows: T[]): [string, T[]][] {
   const map = new Map<string, T[]>();
@@ -361,7 +376,7 @@ export type Estimate = {
   featureTotal: number;
   estimatedTotal: number;
   tokenAmount: number;
-  selectedFeatures: { id: string; name: string; price: number; category: string }[];
+  selectedFeatures: { id: string; name: string; price: number; category: string; isIncluded: boolean }[];
   ready: boolean; // enough is filled in to price + pay
 };
 
@@ -387,18 +402,22 @@ export function computeEstimate(
   const platformRow = platforms.find((p) => p.platform === platform);
   const platformCharge = Number(platformRow?.charge) || 0;
 
-  // draft.featureIds is the single source of truth for what's enabled —
-  // free ("included") features are just as toggleable as paid ones; the
-  // customer's explicit choice always wins (see BuilderFeatures seeding).
+  // draft.featureIds is the source of truth for optional features. Features
+  // the admin marked included for this type:level are always delivered and
+  // never charged — create-custom-project-order snapshots them at price 0.
   const eligible = featuresForTier(features, projectType, projectLevel);
   const selectedFeatures = eligible
-    .filter((f) => draft.featureIds.includes(f.id))
-    .map((f) => ({
-      id: f.id,
-      name: f.name,
-      price: priceForFeature(f, projectType, draft.aiRecommendedFeatureIds.includes(f.id)),
-      category: f.category ?? "",
-    }));
+    .filter((f) => isIncludedForTier(f, projectType, projectLevel) || draft.featureIds.includes(f.id))
+    .map((f) => {
+      const isIncluded = isIncludedForTier(f, projectType, projectLevel);
+      return {
+        id: f.id,
+        name: f.name,
+        price: isIncluded ? 0 : priceForFeature(f, projectType, draft.aiRecommendedFeatureIds.includes(f.id)),
+        category: f.category ?? "",
+        isIncluded,
+      };
+    });
   const featureTotal = round2(selectedFeatures.reduce((s, f) => s + f.price, 0));
 
   const tokenAmount = projectType ? CUSTOM_PROJECT_TOKENS[projectType] : 0;
