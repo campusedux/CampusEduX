@@ -80,6 +80,8 @@ function mapRequestRow(row: any): CustomProjectRequest {
     platformCharge: Number(row.platform_charge) || 0,
     featureTotal: Number(row.feature_total) || 0,
     estimatedTotal: Number(row.estimated_total) || 0,
+    finalPrice: row.final_price != null ? Number(row.final_price) : null,
+    amountPaid: Number(row.amount_paid) || 0,
     tokenAmount: Number(row.token_amount) || 0,
     tokenPaymentStatus: row.token_payment_status ?? "pending",
     status: row.status ?? "new",
@@ -313,6 +315,16 @@ export function calculateEstimate(
   };
 }
 
+/**
+ * What the student still owes on an existing, token-paid request (Bug 3).
+ * Same rule as migration 0124's trigger/RPC: coalesce(finalPrice, estimatedTotal) - amountPaid,
+ * floored at 0 so a rounding artifact never shows a negative "remaining".
+ */
+export function remainingBalance(request: Pick<CustomProjectRequest, "estimatedTotal" | "finalPrice" | "amountPaid">): number {
+  const total = request.finalPrice ?? request.estimatedTotal;
+  return Math.max(0, round2(total - request.amountPaid));
+}
+
 // --- service -----------------------------------------------------------
 
 export const customProjectsService = {
@@ -469,6 +481,38 @@ export const customProjectsService = {
     razorpaySignature: string;
   }): Promise<CustomProjectRequest> {
     const { data, error } = await supabase.functions.invoke("verify-custom-project-payment", {
+      body: payload,
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return mapRequestRow(data);
+  },
+
+  // --- pay the remaining balance (Bug 3) — same create/verify pattern as the token ---
+
+  async createBalanceOrder(requestId: string): Promise<{
+    paymentId: string;
+    razorpayOrderId: string;
+    razorpayKeyId: string;
+    amount: number;
+    currency: string;
+    remaining: number;
+  }> {
+    const { data, error } = await supabase.functions.invoke("create-custom-project-balance-order", {
+      body: { requestId },
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
+  async verifyBalancePayment(payload: {
+    paymentId: string;
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+  }): Promise<CustomProjectRequest> {
+    const { data, error } = await supabase.functions.invoke("verify-custom-project-balance-payment", {
       body: payload,
     });
     if (error) throw new Error(error.message);

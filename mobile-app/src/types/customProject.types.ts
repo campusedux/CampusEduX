@@ -176,6 +176,10 @@ export interface CustomProjectRequest {
   platformCharge: number;
   featureTotal: number;
   estimatedTotal: number;
+  /** Admin-set price that overrides estimatedTotal once set (Bug 3) — null until the admin sets one. */
+  finalPrice: number | null;
+  /** Total ever credited (token + any settled balance payments). Never client-writable. */
+  amountPaid: number;
   tokenAmount: number;
   tokenPaymentStatus: CustomTokenPaymentStatus;
   status: CustomProjectStatus;

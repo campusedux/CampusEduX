@@ -3,6 +3,15 @@
 
 export const CUSTOM_PROJECTS_PAGE_SIZE = 20;
 
+/**
+ * What the student still owes (Bug 3). Same rule as migration 0124's trigger/RPC:
+ * coalesce(final_price, estimated_total) - amount_paid, floored at 0.
+ */
+export function remainingBalance(request: { estimated_total: number; final_price: number | null; amount_paid: number }): number {
+  const total = request.final_price ?? request.estimated_total;
+  return Math.max(0, Math.round((total - request.amount_paid) * 100) / 100);
+}
+
 export const CUSTOM_PROJECT_STATUSES = [
   'new',
   'in_development',

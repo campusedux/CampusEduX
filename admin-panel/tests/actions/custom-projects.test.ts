@@ -19,6 +19,7 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: () => supabase }));
 
 import {
   setRequestStatus,
+  setFinalPrice,
   saveRequestAdminNotes,
   createFeature,
   updateFeature,
@@ -42,6 +43,54 @@ function form(fields: Record<string, string>) {
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
   return fd;
 }
+
+describe('setFinalPrice', () => {
+  it('routes the change through admin_set_custom_project_final_price and logs it', async () => {
+    setRpcResult('admin_set_custom_project_final_price', { data: { changed: true, final_price: 9000 }, error: null });
+
+    const res = await setFinalPrice('req-1', { ok: false }, form({ final_price: '9000', note: 'agreed after review' }));
+
+    expect(requirePermission).toHaveBeenCalledWith('custom_projects', 'edit');
+    expect(rpcCall('admin_set_custom_project_final_price')?.args[0]).toEqual({
+      p_request_id: 'req-1',
+      p_final_price: 9000,
+      p_note: 'agreed after review',
+    });
+    expect(res).toEqual({ ok: true });
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'custom_project.final_price.set', module: 'custom_projects' }),
+    );
+  });
+
+  it('rejects a blank or non-numeric amount without calling the RPC', async () => {
+    const blank = await setFinalPrice('req-1', { ok: false }, form({ final_price: '' }));
+    const bogus = await setFinalPrice('req-1', { ok: false }, form({ final_price: 'abc' }));
+
+    expect(blank).toEqual({ ok: false, error: 'Enter a valid amount.' });
+    expect(bogus).toEqual({ ok: false, error: 'Enter a valid amount.' });
+    expect(rpcCall('admin_set_custom_project_final_price')).toBeUndefined();
+  });
+
+  it('surfaces the RPC error (e.g. below the amount already paid, or locked)', async () => {
+    setRpcResult('admin_set_custom_project_final_price', {
+      data: null,
+      error: { message: 'Final price cannot be below the amount already paid (3000).' },
+    });
+
+    const res = await setFinalPrice('req-1', { ok: false }, form({ final_price: '2000' }));
+
+    expect(res).toEqual({ ok: false, error: 'Final price cannot be below the amount already paid (3000).' });
+    expect(logActivity).not.toHaveBeenCalled();
+  });
+
+  it('is blocked when the caller lacks custom_projects:edit', async () => {
+    requirePermission.mockRejectedValueOnce(new Error("You don't have permission to edit in custom_projects."));
+    await expect(setFinalPrice('req-1', { ok: false }, form({ final_price: '9000' }))).rejects.toThrow(
+      "You don't have permission to edit in custom_projects.",
+    );
+    expect(rpcCall('admin_set_custom_project_final_price')).toBeUndefined();
+  });
+});
 
 describe('setRequestStatus', () => {
   it('routes the change through custom_project_set_status and logs it', async () => {

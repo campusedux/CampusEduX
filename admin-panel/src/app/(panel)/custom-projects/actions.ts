@@ -43,6 +43,33 @@ export async function setRequestStatus(id: string, newStatus: string, note: stri
   return { ok: true };
 }
 
+// Bug 3: admin-set final price. The RPC (migration 0124 / 096) itself re-checks
+// permission, refuses below amount_paid, refuses once the balance is fully paid,
+// refuses while a balance checkout is open, and writes its own history row — this
+// action only surfaces its error message and revalidates the page.
+export async function setFinalPrice(id: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const raw = String(fd.get('final_price') ?? '').trim();
+  const value = Number(raw);
+  if (!raw || !Number.isFinite(value)) return { ok: false, error: 'Enter a valid amount.' };
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_set_custom_project_final_price', {
+    p_request_id: id,
+    p_final_price: value,
+    p_note: String(fd.get('note') ?? '').trim() || null,
+  });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.final_price.set',
+    module: 'custom_projects',
+    resourceType: 'custom_project_requests',
+    resourceId: id,
+    details: { final_price: value },
+  });
+  revalidatePath(`/custom-projects/${id}`);
+  return { ok: true };
+}
+
 export async function saveRequestAdminNotes(id: string, _prev: Result, fd: FormData): Promise<Result> {
   await requirePermission('custom_projects', 'edit');
   const supabase = createClient();

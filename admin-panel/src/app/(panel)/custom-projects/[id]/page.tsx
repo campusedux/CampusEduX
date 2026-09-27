@@ -10,10 +10,12 @@ import {
   CUSTOM_STATUS_LABEL,
   PLATFORM_LABEL,
   PROGRESS_BY_STATUS,
+  remainingBalance,
   type CustomProjectStatus,
 } from '@/lib/custom-projects/constants';
 import { PermissionGate } from '@/components/auth/PermissionGate';
 import { StatusControl } from './StatusControl';
+import { FinalPriceForm } from './FinalPriceForm';
 import { AdminNotesForm } from './AdminNotesForm';
 import { MessageThread } from './MessageThread';
 import { saveRequestAdminNotes, replyToRequest } from '../actions';
@@ -203,12 +205,16 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
                 {history.map((h) => (
                   <li key={h.id} className="flex flex-wrap items-center gap-2">
                     <span className="text-ink-faint">{formatDateTime(h.created_at)}</span>
-                    <Badge
-                      label={`${h.old_status ? CUSTOM_STATUS_LABEL[h.old_status as CustomProjectStatus] + ' → ' : ''}${
-                        CUSTOM_STATUS_LABEL[h.new_status as CustomProjectStatus] ?? h.new_status
-                      }`}
-                      tone="neutral"
-                    />
+                    {h.event === 'price' || h.event === 'payment' ? (
+                      <Badge label={h.event === 'price' ? 'Price change' : 'Payment'} tone="neutral" />
+                    ) : (
+                      <Badge
+                        label={`${h.old_status ? CUSTOM_STATUS_LABEL[h.old_status as CustomProjectStatus] + ' → ' : ''}${
+                          CUSTOM_STATUS_LABEL[h.new_status as CustomProjectStatus] ?? h.new_status
+                        }`}
+                        tone="neutral"
+                      />
+                    )}
                     <span className="text-ink-muted">by {h.changed_by_role}</span>
                     {h.note ? <span className="text-ink">— {h.note}</span> : null}
                   </li>
@@ -267,8 +273,24 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
             <Row label="Add-ons" value={formatINR(Number(r.feature_total))} />
             <Row label="Platform charges" value={formatINR(Number(r.platform_charge))} />
             <Row label="Estimated total" value={formatINR(Number(r.estimated_total))} />
+            <Row
+              label="Final price"
+              value={r.final_price != null ? formatINR(Number(r.final_price)) : <span className="text-ink-faint">Not set</span>}
+            />
+            <Row label="Amount paid" value={formatINR(Number(r.amount_paid))} />
+            <Row label="Remaining" value={formatINR(remainingBalance(r))} />
             <Row label="Token paid" value={formatINR(Number(r.token_amount))} />
             <Row label="Payment id" value={<span className="font-mono text-xs">{r.payment_id}</span>} />
+            {admin.perms.custom_projects.edit && (
+              <div className="mt-3 border-t border-border pt-3">
+                <FinalPriceForm
+                  requestId={r.id}
+                  estimatedTotal={Number(r.estimated_total)}
+                  finalPrice={r.final_price != null ? Number(r.final_price) : null}
+                  amountPaid={Number(r.amount_paid)}
+                />
+              </div>
+            )}
           </Card>
 
           <Card>

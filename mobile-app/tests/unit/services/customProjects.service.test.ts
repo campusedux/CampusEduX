@@ -5,6 +5,7 @@ import {
   calculateEstimate,
   getFeaturesFor,
   splitFeaturesFor,
+  remainingBalance,
 } from "@/services/customProjects.service";
 import { CUSTOM_PROJECT_TOKENS } from "@/types";
 import { resetSupabaseMock, setTableResult, setFunctionResult, supabase } from "../../mocks/supabase.mock";
@@ -251,5 +252,67 @@ describe("customProjectsService.verifyPayment", () => {
     });
     expect(req.requestCode).toBe("CPR-2026-000009");
     expect(req.tokenPaymentStatus).toBe("paid");
+  });
+});
+
+describe("remainingBalance (Bug 3)", () => {
+  it("uses estimatedTotal when no final price is set", () => {
+    expect(remainingBalance({ estimatedTotal: 10000, finalPrice: null, amountPaid: 3000 })).toBe(7000);
+  });
+
+  it("prefers the admin-set final price once it exists", () => {
+    expect(remainingBalance({ estimatedTotal: 10000, finalPrice: 8000, amountPaid: 3000 })).toBe(5000);
+  });
+
+  it("never goes negative on an overpaid/rounding edge case", () => {
+    expect(remainingBalance({ estimatedTotal: 10000, finalPrice: null, amountPaid: 10000.004 })).toBe(0);
+  });
+
+  it("is 0 once fully paid", () => {
+    expect(remainingBalance({ estimatedTotal: 10000, finalPrice: 8000, amountPaid: 8000 })).toBe(0);
+  });
+});
+
+describe("customProjectsService balance payment (Bug 3)", () => {
+  it("createBalanceOrder throws on an error payload", async () => {
+    setFunctionResult("create-custom-project-balance-order", { data: { error: "There is nothing left to pay on this request." } });
+    await expect(customProjectsService.createBalanceOrder("r-1")).rejects.toThrow("nothing left to pay");
+  });
+
+  it("createBalanceOrder returns the order on success", async () => {
+    setFunctionResult("create-custom-project-balance-order", {
+      data: { paymentId: "p-1", razorpayOrderId: "order_bal", razorpayKeyId: "rzp_test_x", amount: 500000, currency: "INR", remaining: 5000 },
+    });
+    const order = await customProjectsService.createBalanceOrder("r-1");
+    expect(order.paymentId).toBe("p-1");
+    expect(order.remaining).toBe(5000);
+  });
+
+  it("verifyBalancePayment throws when the Edge Function returns an error payload", async () => {
+    setFunctionResult("verify-custom-project-balance-payment", { data: { error: "Payment signature verification failed." } });
+    await expect(
+      customProjectsService.verifyBalancePayment({
+        paymentId: "p-1",
+        razorpayOrderId: "order_bal",
+        razorpayPaymentId: "pay_x",
+        razorpaySignature: "sig_x",
+      })
+    ).rejects.toThrow("verification failed");
+  });
+
+  it("verifyBalancePayment returns the mapped, updated request on success", async () => {
+    setFunctionResult("verify-custom-project-balance-payment", {
+      data: {
+        id: "r-1", request_code: "CPR-2026-000001", title: "My CRM", project_type: "personal", project_level: "advanced",
+        platform: "web_android", estimated_total: 32999, final_price: 30000, amount_paid: 30000, token_amount: 3000,
+        token_payment_status: "paid", status: "delivered", created_at: "2026-08-29T00:00:00.000Z",
+      },
+    });
+    const req = await customProjectsService.verifyBalancePayment({
+      paymentId: "p-1", razorpayOrderId: "order_bal", razorpayPaymentId: "pay_x", razorpaySignature: "sig_x",
+    });
+    expect(req.finalPrice).toBe(30000);
+    expect(req.amountPaid).toBe(30000);
+    expect(remainingBalance(req)).toBe(0);
   });
 });

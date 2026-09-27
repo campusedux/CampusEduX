@@ -127,7 +127,7 @@ export async function getCustomRequest(id: string) {
     safe(
       supabase
         .from('custom_project_request_history')
-        .select('id, old_status, new_status, changed_by_role, note, created_at')
+        .select('id, old_status, new_status, changed_by_role, note, created_at, event, old_value, new_value')
         .eq('request_id', id)
         .order('created_at'),
       [] as {
@@ -137,6 +137,9 @@ export async function getCustomRequest(id: string) {
         changed_by_role: string;
         note: string | null;
         created_at: string;
+        event: 'status' | 'price' | 'payment';
+        old_value: string | null;
+        new_value: string | null;
       }[],
     ),
     supabase

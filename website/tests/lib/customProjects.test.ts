@@ -14,6 +14,7 @@ import {
   type PlatformRow,
   type PricingRow,
   trackingStepStates,
+  remainingBalance,
 } from "@/lib/customProjects";
 
 const PRICING: PricingRow[] = [
@@ -320,5 +321,23 @@ describe("trackingStepStates (customer tracking timeline)", () => {
   it("cancelled or unknown statuses claim no progress", () => {
     expect(states("cancelled").every((s) => s === "upcoming")).toBe(true);
     expect(states("bogus").every((s) => s === "upcoming")).toBe(true);
+  });
+});
+
+describe("remainingBalance (Bug 3)", () => {
+  it("uses estimated_total when no final price is set", () => {
+    expect(remainingBalance({ estimated_total: 10000, final_price: null, amount_paid: 3000 })).toBe(7000);
+  });
+
+  it("prefers the admin-set final_price once it exists", () => {
+    expect(remainingBalance({ estimated_total: 10000, final_price: 8000, amount_paid: 3000 })).toBe(5000);
+  });
+
+  it("never goes negative on a rounding edge case", () => {
+    expect(remainingBalance({ estimated_total: 10000, final_price: null, amount_paid: 10000.004 })).toBe(0);
+  });
+
+  it("is 0 once fully paid", () => {
+    expect(remainingBalance({ estimated_total: 10000, final_price: 8000, amount_paid: 8000 })).toBe(0);
   });
 });

@@ -15,10 +15,12 @@ import {
   CUSTOM_PROJECT_PROGRESS,
   PLATFORM_LABELS,
   STATUS_LABELS,
+  remainingBalance,
   type CustomProjectStatus,
   type Platform,
 } from "@/lib/customProjects";
 import MessageThread from "./MessageThread";
+import PayRemainingButton from "./PayRemainingButton";
 
 // Per-user data: never statically rendered or cached across users.
 export const dynamic = "force-dynamic";
@@ -37,7 +39,7 @@ export default async function Page({ params }: Params) {
   const { data: request } = await supabase
     .from("custom_project_requests")
     .select(
-      "id,request_code,title,objective,problem_statement,description,target_users,technology_preference,project_type,project_level,platform,custom_requirements,base_price,platform_charge,feature_total,estimated_total,token_amount,status,created_at",
+      "id,request_code,title,objective,problem_statement,description,target_users,technology_preference,project_type,project_level,platform,custom_requirements,base_price,platform_charge,feature_total,estimated_total,final_price,amount_paid,token_amount,status,created_at",
     )
     .eq("id", params.id)
     // RLS lets admins read every row; this keeps the student page owner-only.
@@ -152,9 +154,27 @@ export default async function Page({ params }: Params) {
           <div className="flex justify-between"><dt>Base price</dt><dd className="text-ink">{formatINR(request.base_price)}</dd></div>
           <div className="flex justify-between"><dt>Platform charge</dt><dd className="text-ink">{Number(request.platform_charge) > 0 ? formatINR(request.platform_charge) : "Included"}</dd></div>
           <div className="flex justify-between"><dt>Features</dt><dd className="text-ink">{formatINR(request.feature_total)}</dd></div>
-          <div className="flex justify-between border-t border-line pt-2 font-semibold text-ink"><dt>Estimated total</dt><dd>{formatINR(request.estimated_total)}</dd></div>
-          <div className="flex justify-between rounded-xl bg-success/10 px-3 py-2 font-semibold text-success"><dt>Token paid</dt><dd>{formatINR(request.token_amount)}</dd></div>
+          <div className="flex justify-between border-t border-line pt-2 text-ink"><dt>Estimated total</dt><dd>{formatINR(request.estimated_total)}</dd></div>
+          {request.final_price != null ? (
+            <>
+              <div className="flex justify-between font-semibold text-ink"><dt>Final price</dt><dd>{formatINR(request.final_price)}</dd></div>
+              {Number(request.final_price) !== Number(request.estimated_total) && (
+                <p className="text-xs text-ink-faint">Adjusted from the estimate after review.</p>
+              )}
+            </>
+          ) : (
+            <div className="flex justify-between font-semibold text-ink"><dt>Project price</dt><dd>{formatINR(request.estimated_total)}</dd></div>
+          )}
+          <div className="flex justify-between rounded-xl bg-success/10 px-3 py-2 font-semibold text-success"><dt>Amount paid</dt><dd>{formatINR(request.amount_paid)}</dd></div>
+          {remainingBalance(request) > 0 && (
+            <div className="flex justify-between"><dt>Remaining</dt><dd className="font-semibold text-ink">{formatINR(remainingBalance(request))}</dd></div>
+          )}
         </dl>
+        {remainingBalance(request) > 0 && request.status !== "cancelled" && (
+          <div className="mt-4">
+            <PayRemainingButton requestId={request.id} remaining={remainingBalance(request)} />
+          </div>
+        )}
       </section>
 
       {/* details */}

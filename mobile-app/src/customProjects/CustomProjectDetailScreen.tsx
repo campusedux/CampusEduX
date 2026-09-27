@@ -5,8 +5,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, LoadingState, ErrorState } from "@/components/ui";
 import { notify } from "@/lib/notify";
-import { customProjectsService } from "@/services/customProjects.service";
-import { useCustomProjectDetail, useSendCustomMessage } from "@/hooks/useCustomProjects";
+import { customProjectsService, remainingBalance } from "@/services/customProjects.service";
+import { useCustomProjectDetail, useSendCustomMessage, useCustomProjectBalance } from "@/hooks/useCustomProjects";
 import { rupees } from "./components/format";
 import {
   CUSTOM_PLATFORM_LABELS,
@@ -64,6 +64,7 @@ export function CustomProjectDetailScreen() {
   const { params } = useRoute<Rte>();
   const { data, isLoading, isError, refetch } = useCustomProjectDetail(params.requestId);
   const sendMessage = useSendCustomMessage(params.requestId);
+  const { pay: payBalance, isProcessing: isPayingBalance } = useCustomProjectBalance(params.requestId);
   const [msg, setMsg] = useState("");
   const [openingPath, setOpeningPath] = useState<string | null>(null);
 
@@ -95,6 +96,13 @@ export function CustomProjectDetailScreen() {
     } finally {
       setOpeningPath(null);
     }
+  };
+
+  const handlePayBalance = async () => {
+    const result = await payBalance();
+    if (result.status === "success") notify("Payment received", "Thanks — your balance has been updated.");
+    else if (result.status === "failed") notify("Payment not completed", result.message);
+    // "cancelled" (user dismissed checkout): silent, same as the token flow.
   };
 
   const send = async () => {
@@ -176,14 +184,52 @@ export function CustomProjectDetailScreen() {
             <KV k="Add-ons" v={rupees(data.featureTotal)} />
             <KV k="Platform charges" v={rupees(data.platformCharge)} />
             <View className="flex-row justify-between border-t border-gray-100 pt-2 mt-1">
-              <Text className="font-bold text-gray-900">Estimated project price</Text>
-              <Text className="font-bold text-gray-900">{rupees(data.estimatedTotal)}</Text>
+              <Text className="text-gray-500">Estimated project price</Text>
+              <Text className="text-gray-900">{rupees(data.estimatedTotal)}</Text>
             </View>
+            {data.finalPrice != null ? (
+              <>
+                <View className="flex-row justify-between mt-1">
+                  <Text className="font-bold text-gray-900">Final price</Text>
+                  <Text className="font-bold text-gray-900">{rupees(data.finalPrice)}</Text>
+                </View>
+                {data.finalPrice !== data.estimatedTotal ? (
+                  <Text className="text-gray-400 text-xs mt-0.5">
+                    Adjusted from the estimate after review.
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <View className="flex-row justify-between mt-1">
+                <Text className="font-bold text-gray-900">Project price</Text>
+                <Text className="font-bold text-gray-900">{rupees(data.estimatedTotal)}</Text>
+              </View>
+            )}
             <View className="flex-row justify-between mt-1">
-              <Text className="text-primary font-semibold">Token paid</Text>
-              <Text className="text-primary font-semibold">{rupees(data.tokenAmount)}</Text>
+              <Text className="text-primary font-semibold">Amount paid</Text>
+              <Text className="text-primary font-semibold">{rupees(data.amountPaid)}</Text>
             </View>
+            {remainingBalance(data) > 0 ? (
+              <View className="flex-row justify-between mt-1">
+                <Text className="text-gray-500">Remaining</Text>
+                <Text className="text-gray-900 font-semibold">{rupees(remainingBalance(data))}</Text>
+              </View>
+            ) : null}
           </View>
+          {remainingBalance(data) > 0 && data.status !== "cancelled" ? (
+            <Pressable
+              onPress={handlePayBalance}
+              disabled={isPayingBalance}
+              className="mt-3 rounded-xl py-3 items-center flex-row justify-center"
+              style={{ backgroundColor: "#4F39F6", opacity: isPayingBalance ? 0.6 : 1 }}
+            >
+              {isPayingBalance ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-white font-bold">Pay remaining {rupees(remainingBalance(data))}</Text>
+              )}
+            </Pressable>
+          ) : null}
         </Section>
 
         {data.features.some((f) => f.isIncluded) ? (

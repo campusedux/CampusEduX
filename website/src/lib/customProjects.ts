@@ -414,6 +414,16 @@ function round2(n: number): number {
 }
 
 /**
+ * What the student still owes on an existing, token-paid request (Bug 3).
+ * Same rule as migration 0124's trigger/RPC: coalesce(finalPrice, estimatedTotal) - amountPaid,
+ * floored at 0 so a rounding artifact never shows a negative "remaining".
+ */
+export function remainingBalance(request: { estimated_total: number; final_price: number | null; amount_paid: number }): number {
+  const total = request.final_price ?? request.estimated_total;
+  return Math.max(0, round2(total - request.amount_paid));
+}
+
+/**
  * Enabling `id` may require other features to be on first. Returns the
  * feature-id list with any missing dependencies added, plus the rows that
  * got auto-enabled (so the caller can show "X requires Y" once). Pure —
