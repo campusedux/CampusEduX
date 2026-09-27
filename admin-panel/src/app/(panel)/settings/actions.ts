@@ -20,6 +20,11 @@ export async function saveGeneralSettings(_p: Result, fd: FormData): Promise<Res
   await requirePermission('settings', 'edit');
   const urlErr = urlFieldError(fd, { logo_url: 'Logo URL', favicon_url: 'Favicon URL', social_twitter: 'Twitter link', social_linkedin: 'LinkedIn link', social_instagram: 'Instagram link', social_youtube: 'YouTube link' });
   if (urlErr) return { ok: false, error: urlErr };
+  // Only sent when the form rendered the field (i.e. migration 0129/100 is applied).
+  const minVersion = fd.has('min_supported_app_version') ? s(fd, 'min_supported_app_version') || '0.0.0' : null;
+  if (minVersion !== null && !/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(minVersion)) {
+    return { ok: false, error: 'Minimum app version must look like 1.2.0.' };
+  }
   const supabase = createClient();
   const {
     data: { user },
@@ -27,6 +32,7 @@ export async function saveGeneralSettings(_p: Result, fd: FormData): Promise<Res
   const { error } = await supabase
     .from('site_settings')
     .update({
+      ...(minVersion !== null ? { min_supported_app_version: minVersion } : {}),
       site_name: s(fd, 'site_name') || 'CampusEduX',
       tagline: s(fd, 'tagline'),
       admin_email: s(fd, 'admin_email'),

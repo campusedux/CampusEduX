@@ -101,6 +101,29 @@ export function GeneralSettingsForm({ settings, canEdit }: { settings: any; canE
         </div>
       </Section>
 
+      {'min_supported_app_version' in settings ? (
+        <Section title="Mobile app">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="min_supported_app_version">Minimum supported app version</Label>
+              <Input
+                id="min_supported_app_version"
+                name="min_supported_app_version"
+                defaultValue={settings.min_supported_app_version ?? '0.0.0'}
+                placeholder="0.0.0"
+                pattern="\d{1,4}\.\d{1,4}\.\d{1,4}"
+                title="Use the x.y.z format, e.g. 1.2.0"
+                disabled={!canEdit}
+              />
+              <p className="mt-1 text-xs text-ink-faint">
+                Installed apps older than this show an &ldquo;Update required&rdquo; screen linking to the Play Store.
+                0.0.0 = never block. Must match the app&rsquo;s version (x.y.z).
+              </p>
+            </div>
+          </div>
+        </Section>
+      ) : null}
+
       <Section title="Toggles">
         <div className="flex flex-col gap-3">
           <Toggle name="maintenance_mode" label="Maintenance mode (app shows a maintenance screen)" />

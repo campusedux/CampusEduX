@@ -94,3 +94,26 @@ describe('ADM-03 server-side URL validation', () => {
     expect(callsFor('site_settings')).toHaveLength(0);
   });
 });
+
+describe('site_settings.min_supported_app_version (migration 0129/100)', () => {
+  const updateArgs = () => callsFor('site_settings').find((c) => c.verb === 'update')?.args[0] as Record<string, unknown>;
+
+  it('rejects a malformed version and writes nothing', async () => {
+    const r = await saveGeneralSettings({ ok: false }, form({ min_supported_app_version: '1.2' }));
+    expect(r).toEqual({ ok: false, error: 'Minimum app version must look like 1.2.0.' });
+    expect(callsFor('site_settings')).toHaveLength(0);
+  });
+
+  it('saves a valid version; blank means 0.0.0 (never block)', async () => {
+    await saveGeneralSettings({ ok: false }, form({ min_supported_app_version: '1.4.0' }));
+    expect(updateArgs().min_supported_app_version).toBe('1.4.0');
+    resetSupabaseMock();
+    await saveGeneralSettings({ ok: false }, form({ min_supported_app_version: '' }));
+    expect(updateArgs().min_supported_app_version).toBe('0.0.0');
+  });
+
+  it('omits the column when the form did not render it (migration not applied yet)', async () => {
+    await saveGeneralSettings({ ok: false }, form({ site_name: 'CampusEduX' }));
+    expect(updateArgs()).not.toHaveProperty('min_supported_app_version');
+  });
+});
