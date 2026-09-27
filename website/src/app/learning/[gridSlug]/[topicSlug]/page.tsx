@@ -24,7 +24,7 @@ import { TopicPractice } from "./_components/TopicPractice";
 import { TopicDiscovery } from "./_components/TopicDiscovery";
 import { RecordLessonVisit } from "./RecordLessonVisit";
 
-export const revalidate = 300;
+export const revalidate = 86400;
 export const dynamicParams = true;
 
 // Returning [] (not the full topic list) still registers this route for ISR —

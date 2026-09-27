@@ -5,9 +5,10 @@ import {
   calculateEstimate,
   getFeaturesFor,
   splitFeaturesFor,
+  mapAmounts,
 } from "@/services/customProjects.service";
 import { CUSTOM_PROJECT_TOKENS } from "@/types";
-import { resetSupabaseMock, setTableResult, setFunctionResult } from "../../mocks/supabase.mock";
+import { resetSupabaseMock, setTableResult, setFunctionResult, setRpcResult, supabase } from "../../mocks/supabase.mock";
 import type { CustomFeature, CustomPlatformPricing, CustomProjectPricing } from "@/types";
 
 beforeEach(() => resetSupabaseMock());
@@ -173,6 +174,22 @@ describe("customProjectsService reads throw on error (money/owned data)", () => 
     await expect(customProjectsService.getMyRequests("u-1")).rejects.toThrow("rls");
   });
 
+  it("getMyRequests filters by the caller's user_id (admins can read every row via RLS)", async () => {
+    setTableResult("custom_project_requests", { data: [] });
+    await customProjectsService.getMyRequests("u-1");
+    const builder = (supabase.from as jest.Mock).mock.results[0].value;
+    expect(builder.eq).toHaveBeenCalledWith("user_id", "u-1");
+  });
+
+  it("getRequestDetail filters the request by user_id, so another user's id reads as not found", async () => {
+    setTableResult("custom_project_requests", { data: null });
+    await expect(customProjectsService.getRequestDetail("r-1", "u-2")).rejects.toThrow("Request not found");
+    const reqCall = (supabase.from as jest.Mock).mock.calls.findIndex((c) => c[0] === "custom_project_requests");
+    const builder = (supabase.from as jest.Mock).mock.results[reqCall].value;
+    expect(builder.eq).toHaveBeenCalledWith("id", "r-1");
+    expect(builder.eq).toHaveBeenCalledWith("user_id", "u-2");
+  });
+
   it("maps a paid request row", async () => {
     setTableResult("custom_project_requests", {
       data: [
@@ -235,5 +252,97 @@ describe("customProjectsService.verifyPayment", () => {
     });
     expect(req.requestCode).toBe("CPR-2026-000009");
     expect(req.tokenPaymentStatus).toBe("paid");
+  });
+});
+
+describe("mapAmounts (custom_project_amounts RPC, migration 0128)", () => {
+  const row = {
+    request_id: "r-1", base_value: 10000.5, addons_total: 1500, project_value: 11500.5,
+    payments_total: "4734.81", credits_total: 0, settled_total: 4734.81, due: 6765.69,
+    payment_status: "partially_paid", pending_addons: 1, priced_addons: 0,
+  };
+
+  it("maps the DB figures as-is (paise kept, numeric strings accepted)", () => {
+    expect(mapAmounts(row)).toEqual({
+      baseValue: 10000.5, addonsTotal: 1500, projectValue: 11500.5, paymentsTotal: 4734.81, creditsTotal: 0,
+      settledTotal: 4734.81, due: 6765.69, paymentStatus: "partially_paid", pendingAddons: 1, pricedAddons: 0,
+    });
+  });
+
+  it("never shows a negative due", () => {
+    expect(mapAmounts({ ...row, due: -1, payment_status: "paid" })?.due).toBe(0);
+  });
+
+  it("returns null instead of guessing when the result is missing or malformed", () => {
+    expect(mapAmounts(null)).toBeNull();
+    expect(mapAmounts({ ...row, payment_status: "?" })).toBeNull();
+  });
+});
+
+describe("customProjectsService edits + extra features (migration 0128)", () => {
+  it("updateRequest sends the changes to custom_project_update_request", async () => {
+    setRpcResult("custom_project_update_request", { data: { changed: ["title"] } });
+    await customProjectsService.updateRequest("r-1", { title: "New" });
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_update_request", { p_request_id: "r-1", p_changes: { title: "New" } });
+  });
+
+  it("surfaces the DB lock message when work has started", async () => {
+    setRpcResult("custom_project_update_request", {
+      data: null,
+      error: { message: "This request can no longer be edited because work has started." },
+    });
+    await expect(customProjectsService.updateRequest("r-1", { title: "x" })).rejects.toThrow("no longer be edited");
+  });
+
+  it("create / accept / delete add-ons go through their RPCs (no price is ever sent)", async () => {
+    await customProjectsService.createAddon("r-1", "Dark mode", "Toggle");
+    await customProjectsService.acceptAddon("ad-1");
+    await customProjectsService.deleteAddon("ad-2");
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_addon_create", { p_project_id: "r-1", p_title: "Dark mode", p_description: "Toggle" });
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_addon_accept", { p_addon_id: "ad-1" });
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_addon_delete", { p_addon_id: "ad-2" });
+  });
+});
+
+describe("customProjectsService balance payment (Bug 3)", () => {
+  it("createBalanceOrder throws on an error payload", async () => {
+    setFunctionResult("create-custom-project-balance-order", { data: { error: "There is nothing left to pay on this request." } });
+    await expect(customProjectsService.createBalanceOrder("r-1")).rejects.toThrow("nothing left to pay");
+  });
+
+  it("createBalanceOrder returns the order on success", async () => {
+    setFunctionResult("create-custom-project-balance-order", {
+      data: { paymentId: "p-1", razorpayOrderId: "order_bal", razorpayKeyId: "rzp_test_x", amount: 500000, currency: "INR", remaining: 5000 },
+    });
+    const order = await customProjectsService.createBalanceOrder("r-1");
+    expect(order.paymentId).toBe("p-1");
+    expect(order.remaining).toBe(5000);
+  });
+
+  it("verifyBalancePayment throws when the Edge Function returns an error payload", async () => {
+    setFunctionResult("verify-custom-project-balance-payment", { data: { error: "Payment signature verification failed." } });
+    await expect(
+      customProjectsService.verifyBalancePayment({
+        paymentId: "p-1",
+        razorpayOrderId: "order_bal",
+        razorpayPaymentId: "pay_x",
+        razorpaySignature: "sig_x",
+      })
+    ).rejects.toThrow("verification failed");
+  });
+
+  it("verifyBalancePayment returns the mapped, updated request on success", async () => {
+    setFunctionResult("verify-custom-project-balance-payment", {
+      data: {
+        id: "r-1", request_code: "CPR-2026-000001", title: "My CRM", project_type: "personal", project_level: "advanced",
+        platform: "web_android", estimated_total: 32999, final_price: 30000, amount_paid: 30000, token_amount: 3000,
+        token_payment_status: "paid", status: "delivered", created_at: "2026-08-29T00:00:00.000Z",
+      },
+    });
+    const req = await customProjectsService.verifyBalancePayment({
+      paymentId: "p-1", razorpayOrderId: "order_bal", razorpayPaymentId: "pay_x", razorpaySignature: "sig_x",
+    });
+    expect(req.finalPrice).toBe(30000);
+    expect(req.amountPaid).toBe(30000);
   });
 });

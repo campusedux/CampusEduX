@@ -3,6 +3,84 @@
 
 export const CUSTOM_PROJECTS_PAGE_SIZE = 20;
 
+/**
+ * Money on a request comes ONLY from public.custom_project_amounts() / custom_project_amounts_bulk()
+ * (migration 0128/099): base value + accepted add-ons − paid ledger rows − credits, never negative.
+ * This only maps the RPC's jsonb; it never recomputes anything.
+ */
+export type PaymentStatus = 'paid' | 'partially_paid' | 'unpaid';
+export interface CustomProjectAmounts {
+  requestId: string;
+  baseValue: number;
+  addonsTotal: number;
+  projectValue: number;
+  paymentsTotal: number;
+  creditsTotal: number;
+  settledTotal: number;
+  due: number;
+  paymentStatus: PaymentStatus;
+  pendingAddons: number;
+  pricedAddons: number;
+}
+
+export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  paid: 'Paid',
+  partially_paid: 'Partially paid',
+  unpaid: 'Unpaid',
+};
+
+export function parseAmounts(raw: unknown): CustomProjectAmounts | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const n = (k: string) => {
+    const v = Number(o[k]);
+    return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
+  };
+  const s = o.payment_status;
+  if (s !== 'paid' && s !== 'partially_paid' && s !== 'unpaid') return null;
+  return {
+    requestId: String(o.request_id ?? ''),
+    baseValue: n('base_value'),
+    addonsTotal: n('addons_total'),
+    projectValue: n('project_value'),
+    paymentsTotal: n('payments_total'),
+    creditsTotal: n('credits_total'),
+    settledTotal: n('settled_total'),
+    due: Math.max(0, n('due')),
+    paymentStatus: s,
+    pendingAddons: n('pending_addons'),
+    pricedAddons: n('priced_addons'),
+  };
+}
+
+export type AddonStatus = 'pending' | 'priced' | 'accepted' | 'rejected';
+export const ADDON_STATUS_LABEL: Record<AddonStatus, string> = {
+  pending: 'Needs price',
+  priced: 'Priced · awaiting student',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+};
+
+export const CREDIT_KINDS = ['offline_payment', 'discount', 'referral', 'goodwill', 'adjustment'] as const;
+export type CreditKind = (typeof CREDIT_KINDS)[number];
+export const CREDIT_KIND_LABEL: Record<CreditKind, string> = {
+  offline_payment: 'Offline payment (UPI / bank / cash)',
+  discount: 'Discount',
+  referral: 'Referral credit',
+  goodwill: 'Goodwill',
+  adjustment: 'Adjustment',
+};
+
+/** Request fields both the student and an admin may edit (the RPCs enforce the same whitelist). */
+export const EDITABLE_REQUEST_FIELDS = [
+  { key: 'title', label: 'Title', max: 200, rows: 0 },
+  { key: 'objective', label: 'Objective', max: 5000, rows: 3 },
+  { key: 'problem_statement', label: 'Problem statement', max: 5000, rows: 3 },
+  { key: 'description', label: 'Description', max: 10000, rows: 5 },
+  { key: 'target_users', label: 'Target users', max: 2000, rows: 2 },
+  { key: 'technology_preference', label: 'Tech stack', max: 500, rows: 0 },
+] as const;
+
 export const CUSTOM_PROJECT_STATUSES = [
   'new',
   'in_development',
@@ -168,6 +246,8 @@ export const DELIVERY_ASSET_KINDS = [
   'source_code',
   'documentation',
   'demo',
+  'pdf',
+  'ppt',
   'other',
 ] as const;
 export type DeliveryAssetKind = (typeof DELIVERY_ASSET_KINDS)[number];
@@ -178,5 +258,27 @@ export const DELIVERY_ASSET_LABEL: Record<DeliveryAssetKind, string> = {
   source_code: 'Source code',
   documentation: 'Documentation',
   demo: 'Demo',
+  pdf: 'PDF',
+  ppt: 'PPT',
   other: 'Other',
 };
+
+/**
+ * Bug 4: the three dedicated delivery slots. Size limits enforced client-side (fast feedback) and
+ * server-side in addDeliveryAssets (the real boundary — a client check can always be bypassed).
+ * The 'custom-project-deliveries' bucket's own file_size_limit (migration 0125/097) is the outer
+ * ceiling (100MB, i.e. the ZIP limit); PDF/PPT's tighter 25MB is enforced only at these two layers.
+ */
+export interface DeliverySlot {
+  kind: DeliveryAssetKind;
+  label: string;
+  accept: string;
+  maxSizeBytes: number;
+  extensions: string[];
+}
+
+export const DELIVERY_SLOTS: DeliverySlot[] = [
+  { kind: 'source_code', label: 'Source code (ZIP)', accept: '.zip', maxSizeBytes: 100 * 1024 * 1024, extensions: ['.zip'] },
+  { kind: 'pdf', label: 'PDF (optional)', accept: '.pdf', maxSizeBytes: 25 * 1024 * 1024, extensions: ['.pdf'] },
+  { kind: 'ppt', label: 'PPT (optional)', accept: '.ppt,.pptx', maxSizeBytes: 25 * 1024 * 1024, extensions: ['.ppt', '.pptx'] },
+];

@@ -14,6 +14,9 @@ const STATIC_ROUTES = [
   "/disclaimer", "/data-and-permissions", "/cookie-policy", "/grievance", "/delete-account",
 ];
 
+// Re-generated at most hourly (13 queries per run); `learning:sitemap` via POST /api/revalidate refreshes it on demand.
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = STATIC_ROUTES.map((path) => ({
     url: `${siteUrl}${path}`,

@@ -1,6 +1,12 @@
 import { createClient } from '@/lib/supabase/server';
 import { safe, safeCount } from '@/lib/utils';
-import { CUSTOM_PROJECTS_PAGE_SIZE, FEATURES_PAGE_SIZE } from './constants';
+import {
+  CUSTOM_PROJECTS_PAGE_SIZE,
+  FEATURES_PAGE_SIZE,
+  parseAmounts,
+  type AddonStatus,
+  type CustomProjectAmounts,
+} from './constants';
 
 const UPLOADS_BUCKET = 'custom-project-uploads';
 const DELIVERIES_BUCKET = 'custom-project-deliveries';
@@ -13,6 +19,8 @@ export interface CustomRequestRow {
   project_level: string;
   platform: string;
   estimated_total: number;
+  final_price: number | null;
+  amount_paid: number;
   token_amount: number;
   token_payment_status: string;
   status: string;
@@ -21,7 +29,7 @@ export interface CustomRequestRow {
 }
 
 const LIST_SELECT =
-  'id, request_code, title, project_type, project_level, platform, estimated_total, token_amount, ' +
+  'id, request_code, title, project_type, project_level, platform, estimated_total, final_price, amount_paid, token_amount, ' +
   'token_payment_status, status, created_at, ' +
   'profile:profiles!custom_project_requests_user_id_fkey ( id, full_name, email, mobile_number )';
 
@@ -30,7 +38,7 @@ export async function listCustomRequests(opts: {
   q?: string;
   status?: string;
   type?: string;
-}): Promise<{ rows: CustomRequestRow[]; total: number; missing: boolean }> {
+}): Promise<{ rows: CustomRequestRow[]; total: number; missing: boolean; amounts: Record<string, CustomProjectAmounts> }> {
   const supabase = createClient();
   const from = (opts.page - 1) * CUSTOM_PROJECTS_PAGE_SIZE;
 
@@ -46,11 +54,56 @@ export async function listCustomRequests(opts: {
   if (opts.type) query = query.eq('project_type', opts.type);
 
   const { data, count, error } = await query;
+  const rows = error ? [] : ((data ?? []) as unknown as CustomRequestRow[]);
   return {
-    rows: error ? [] : ((data ?? []) as unknown as CustomRequestRow[]),
+    rows,
     total: error ? 0 : count ?? 0,
     missing: Boolean(error),
+    amounts: await getAmountsFor(rows.map((r) => r.id)),
   };
+}
+
+/** Due/payment status for many requests in one call — the same DB calculation the apps use. */
+export async function getAmountsFor(ids: string[]): Promise<Record<string, CustomProjectAmounts>> {
+  if (ids.length === 0) return {};
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('custom_project_amounts_bulk', { p_request_ids: ids });
+  const out: Record<string, CustomProjectAmounts> = {};
+  if (error || !Array.isArray(data)) return out;
+  for (const raw of data) {
+    const a = parseAmounts(raw);
+    if (a) out[a.requestId] = a;
+  }
+  return out;
+}
+
+export interface AddonRow {
+  id: string;
+  title: string;
+  description: string;
+  status: AddonStatus;
+  price: number | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface CreditRow {
+  id: string;
+  amount: number;
+  kind: string;
+  note: string;
+  created_at: string;
+}
+export interface ChangeRow {
+  id: string;
+  addon_id: string | null;
+  actor_role: string;
+  entity: string;
+  action: string;
+  field: string | null;
+  old_value: unknown;
+  new_value: unknown;
+  note: string | null;
+  created_at: string;
 }
 
 export async function getCustomRequestStats() {
@@ -102,7 +155,7 @@ export async function getCustomRequest(id: string) {
     .maybeSingle();
   if (!request) return null;
 
-  const [features, files, history, deliveryRow, messages] = await Promise.all([
+  const [features, files, history, deliveryRow, messages, amountsRes, addons, credits, changes] = await Promise.all([
     safe(
       supabase
         .from('custom_project_request_features')
@@ -127,7 +180,7 @@ export async function getCustomRequest(id: string) {
     safe(
       supabase
         .from('custom_project_request_history')
-        .select('id, old_status, new_status, changed_by_role, note, created_at')
+        .select('id, old_status, new_status, changed_by_role, note, created_at, event, old_value, new_value')
         .eq('request_id', id)
         .order('created_at'),
       [] as {
@@ -137,6 +190,9 @@ export async function getCustomRequest(id: string) {
         changed_by_role: string;
         note: string | null;
         created_at: string;
+        event: 'status' | 'price' | 'payment';
+        old_value: string | null;
+        new_value: string | null;
       }[],
     ),
     supabase
@@ -153,7 +209,34 @@ export async function getCustomRequest(id: string) {
         .order('created_at'),
       [] as { id: string; sender_role: string; body: string; created_at: string }[],
     ),
+    supabase.rpc('custom_project_amounts', { p_request_id: id }),
+    safe(
+      supabase
+        .from('custom_project_addons')
+        .select('id, title, description, status, price, created_at, updated_at')
+        .eq('project_id', id)
+        .order('created_at'),
+      [] as AddonRow[],
+    ),
+    safe(
+      supabase
+        .from('custom_project_credits')
+        .select('id, amount, kind, note, created_at')
+        .eq('request_id', id)
+        .order('created_at'),
+      [] as CreditRow[],
+    ),
+    safe(
+      supabase
+        .from('custom_project_changes')
+        .select('id, addon_id, actor_role, entity, action, field, old_value, new_value, note, created_at')
+        .eq('request_id', id)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      [] as ChangeRow[],
+    ),
   ]);
+  const amounts = amountsRes.error ? null : parseAmounts(amountsRes.data);
 
   let delivery: {
     id: string;
@@ -185,7 +268,20 @@ export async function getCustomRequest(id: string) {
     signedUrls(supabase, DELIVERIES_BUCKET, deliveryPaths),
   ]);
 
-  return { request, features, files, history, delivery, messages, uploadUrls, deliveryUrls };
+  return {
+    request,
+    features,
+    files,
+    history,
+    delivery,
+    messages,
+    uploadUrls,
+    deliveryUrls,
+    amounts,
+    addons,
+    credits,
+    changes,
+  };
 }
 
 // --- feature catalog (spec §1–§17) -----------------------------------

@@ -40,6 +40,45 @@ export const CUSTOM_PROJECT_PROGRESS: Record<CustomProjectStatus, number> = {
   cancelled: 0,
 };
 
+/**
+ * Customer-facing tracking steps — mirrors TIMELINE_STEPS in
+ * mobile-app/src/customProjects/CustomProjectDetailScreen.tsx. A request only
+ * appears once the token is paid, so the first three steps are always reached
+ * for a listed request; the rest follow the admin-driven `status`.
+ */
+export const TRACKING_STEPS = [
+  { key: "configured", label: "Project configured", minStatus: -1 },
+  { key: "token_paid", label: "Token paid", minStatus: -1 },
+  { key: "created", label: "Request created", minStatus: -1 },
+  { key: "in_development", label: "Development started", minStatus: 1 },
+  { key: "testing", label: "Testing", minStatus: 2 },
+  { key: "ready", label: "Ready", minStatus: 3 },
+  { key: "delivered", label: "Delivered", minStatus: 4 },
+] as const;
+
+const TRACKING_STATUS_ORDER: CustomProjectStatus[] = ["new", "in_development", "testing", "ready", "delivered"];
+
+export type TrackingStepState = "done" | "current" | "upcoming";
+
+/** Per-step state for a request status. `cancelled` reports every step as upcoming (the page shows a banner instead). */
+export function trackingStepStates(
+  status: string,
+  tokenPaid = true,
+): { key: string; label: string; state: TrackingStepState }[] {
+  const idx = TRACKING_STATUS_ORDER.indexOf(status as CustomProjectStatus);
+  const cancelled = status === "cancelled" || idx < 0;
+  const reached = TRACKING_STEPS.map((step) =>
+    cancelled ? false : step.key === "token_paid" || step.key === "created" ? tokenPaid : idx >= step.minStatus,
+  );
+  const lastDone = reached.lastIndexOf(true);
+  return TRACKING_STEPS.map((step, i) => ({
+    key: step.key,
+    label: step.label,
+    // The final step is "done" outright once delivered; otherwise the step after the last reached one is "current".
+    state: reached[i] ? "done" : i === lastDone + 1 && !cancelled ? "current" : "upcoming",
+  }));
+}
+
 export const TYPE_LABELS: Record<ProjectType, string> = {
   academic: "Academic",
   personal: "Personal",
@@ -372,6 +411,76 @@ export function computeEstimate(
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// --- money on an existing request: computed ONLY by public.custom_project_amounts() (migration 0128) ---
+export type PaymentStatus = "paid" | "partially_paid" | "unpaid";
+
+export type CustomProjectAmounts = {
+  baseValue: number;
+  addonsTotal: number;
+  projectValue: number;
+  paymentsTotal: number;
+  creditsTotal: number;
+  settledTotal: number;
+  due: number;
+  paymentStatus: PaymentStatus;
+  pendingAddons: number;
+  pricedAddons: number;
+};
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  paid: "Paid",
+  partially_paid: "Partially paid",
+  unpaid: "Unpaid",
+};
+
+/** Maps the RPC's jsonb; never recomputes anything. Null when the RPC returned nothing usable. */
+export function parseAmounts(raw: unknown): CustomProjectAmounts | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const n = (k: string) => {
+    const v = Number(o[k]);
+    return Number.isFinite(v) ? round2(v) : 0;
+  };
+  const status = o.payment_status;
+  if (status !== "paid" && status !== "partially_paid" && status !== "unpaid") return null;
+  return {
+    baseValue: n("base_value"),
+    addonsTotal: n("addons_total"),
+    projectValue: n("project_value"),
+    paymentsTotal: n("payments_total"),
+    creditsTotal: n("credits_total"),
+    settledTotal: n("settled_total"),
+    due: Math.max(0, n("due")),
+    paymentStatus: status,
+    pendingAddons: n("pending_addons"),
+    pricedAddons: n("priced_addons"),
+  };
+}
+
+// --- add-ons (custom_project_addons, migration 0128) ---------------------
+export type AddonStatus = "pending" | "priced" | "accepted" | "rejected";
+
+export const ADDON_STATUS_LABELS: Record<AddonStatus, string> = {
+  pending: "Waiting for price",
+  priced: "Priced — awaiting your OK",
+  accepted: "Accepted",
+  rejected: "Not accepted",
+};
+
+export type CustomProjectAddon = {
+  id: string;
+  title: string;
+  description: string;
+  status: AddonStatus;
+  price: number | null;
+  createdAt: string;
+};
+
+/** Owners may edit the request itself only before work starts; add-ons are allowed at any stage. */
+export function isRequestEditable(status: string): boolean {
+  return status === "new";
 }
 
 /**

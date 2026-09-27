@@ -11,7 +11,7 @@ import { cn } from "@/lib/cn";
 import { absoluteUrl, courseListJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { ContinueLearningRow } from "./_components/ContinueLearningRow";
 
-export const revalidate = 300;
+export const revalidate = 21600;
 
 export const metadata: Metadata = {
   title: "Learning",

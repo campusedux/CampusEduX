@@ -10,7 +10,7 @@ import { CourseCurriculum } from "../_components/CourseCurriculum";
 import { CourseCta } from "../_components/CourseCta";
 import { ProgressSummary } from "../_components/ProgressSummary";
 
-export const revalidate = 300;
+export const revalidate = 21600;
 export const dynamicParams = true;
 
 export async function generateStaticParams() {

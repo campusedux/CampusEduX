@@ -15,14 +15,23 @@ export interface UploadedFile {
 }
 
 /**
- * Drag-and-drop upload box. Uploads straight to a public Supabase Storage
- * bucket as the signed-in admin (storage RLS = is_admin), then hands the
- * resulting paths/URLs to a bound Server Action that writes the DB row(s).
+ * Drag-and-drop upload box. Uploads straight to a Supabase Storage bucket as
+ * the signed-in admin (storage RLS = is_admin) — public or private; `url` (a
+ * getPublicUrl() result) is only meaningful for a public bucket, so callers
+ * writing into a private one (e.g. custom-project-deliveries) ignore it and
+ * resolve their own signed URLs separately — then hands the resulting
+ * paths/URLs to a bound Server Action that writes the DB row(s).
+ *
+ * `maxSizeBytes`, when given, is a client-side pre-check only (fast feedback,
+ * skips the upload attempt for an obviously oversized file) — it is NOT the
+ * enforcement boundary. The real limits are the bucket's own file_size_limit
+ * and whatever the Server Action re-validates after upload.
  */
 export function UploadDropzone({
   bucket,
   pathPrefix,
   accept,
+  maxSizeBytes,
   multiple = false,
   hint,
   action,
@@ -30,6 +39,7 @@ export function UploadDropzone({
   bucket: string;
   pathPrefix: string;
   accept?: string;
+  maxSizeBytes?: number;
   multiple?: boolean;
   hint?: string;
   action: (files: UploadedFile[]) => Promise<{ ok: boolean; error?: string }>;
@@ -43,6 +53,20 @@ export function UploadDropzone({
   const handle = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     const files = Array.from(fileList);
+
+    if (maxSizeBytes != null) {
+      const tooBig = files.find((f) => f.size > maxSizeBytes);
+      if (tooBig) {
+        toast({
+          title: 'File too large',
+          description: `${tooBig.name} is over the ${(maxSizeBytes / (1024 * 1024)).toFixed(0)} MB limit for this upload.`,
+          variant: 'error',
+        });
+        if (inputRef.current) inputRef.current.value = '';
+        return;
+      }
+    }
+
     setBusy(true);
     const supabase = createClient();
     const uploaded: UploadedFile[] = [];

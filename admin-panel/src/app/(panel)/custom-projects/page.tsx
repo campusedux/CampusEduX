@@ -16,6 +16,7 @@ import {
   CUSTOM_STATUS_LABEL,
   PLATFORM_LABEL,
   PROJECT_TYPES,
+  PAYMENT_STATUS_LABEL,
 } from '@/lib/custom-projects/constants';
 import { markInboxRead } from './actions';
 
@@ -33,7 +34,7 @@ export default async function CustomProjectsPage({
   const status = searchParams.status ?? '';
   const type = searchParams.type ?? '';
 
-  const [{ rows, total, missing }, stats, inbox] = await Promise.all([
+  const [{ rows, total, missing, amounts }, stats, inbox] = await Promise.all([
     listCustomRequests({ page, q, status, type }),
     getCustomRequestStats(),
     getAdminInbox(),
@@ -161,6 +162,18 @@ export default async function CustomProjectsPage({
                     <td className="py-2.5 font-mono">{formatINR(Number(r.token_amount))}</td>
                     <td className="py-2.5">
                       <StatusPill status={r.status} />
+                      {amounts[r.id] && amounts[r.id].due > 0 ? (
+                        <p className="mt-1 whitespace-nowrap text-xs font-semibold text-warning">
+                          {PAYMENT_STATUS_LABEL[amounts[r.id].paymentStatus]} · due {formatINR(amounts[r.id].due)}
+                        </p>
+                      ) : amounts[r.id] ? (
+                        <p className="mt-1 whitespace-nowrap text-xs font-semibold text-emerald-700">Paid</p>
+                      ) : null}
+                      {amounts[r.id] && amounts[r.id].pendingAddons > 0 ? (
+                        <p className="mt-0.5 whitespace-nowrap text-xs text-ink-muted">
+                          {amounts[r.id].pendingAddons} add-on{amounts[r.id].pendingAddons === 1 ? '' : 's'} to price
+                        </p>
+                      ) : null}
                     </td>
                     <td className="py-2.5 text-ink-muted">{formatDate(r.created_at)}</td>
                     <td className="py-2.5">

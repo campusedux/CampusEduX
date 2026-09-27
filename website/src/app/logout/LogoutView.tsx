@@ -14,7 +14,9 @@ export default function LogoutView() {
         // Session cookie is cleared — flip the header nav to signed-out
         // (this tab and any others) without a reload.
         emitSessionChange();
-        router.push("/");
+        // replace (not push) so Back can't return to a signed-in page, and
+        // refresh to drop the client router cache of the previous user's pages.
+        router.replace("/");
         router.refresh();
       });
   }, [router]);

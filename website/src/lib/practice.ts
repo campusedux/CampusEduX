@@ -1,5 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
+import { cachedPublicRead, RpcFailed } from "@/lib/publicCache";
+import { CONTENT_LEAF_REVALIDATE, CONTENT_SHARED_REVALIDATE, practiceTag } from "@/lib/learningTags";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import type {
   PracticeCategory,
@@ -43,7 +45,7 @@ export const getPracticeCategories = unstable_cache(
     return data as PracticeCategory[];
   },
   ["practice-categories"],
-  { revalidate: 300, tags: ["practice"] },
+  { revalidate: CONTENT_SHARED_REVALIDATE, tags: ["practice"] },
 );
 
 /** One page of the problem list — server-side filtered + paginated. The browser
@@ -84,39 +86,58 @@ export const getPracticeProblemsPage = cache(
  * `CodingProblemDetail` (empty `topic` slugs — the workspace is given an
  * explicit breadcrumb), with the practice `category` attached.
  */
-export const getPracticeProblem = cache(async (slug: string): Promise<PracticeProblemDetail | null> => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const { data, error } = await supabase.rpc("practice_problem_detail", {
-    p_slug: slug,
-    p_platform: PLATFORM,
-  });
-  if (error || !data) return null;
-  const payload = data as PracticeProblemDetail;
-  return {
-    ...payload,
-    topic: {
-      grid_slug: payload.topic?.grid_slug ?? "",
-      topic_slug: payload.topic?.topic_slug ?? "",
-      title: payload.category?.name ?? payload.topic?.title ?? "Practice",
+export const getPracticeProblem = cache(async (slug: string): Promise<PracticeProblemDetail | null> =>
+  cachedPublicRead(
+    "practice:problem",
+    [slug],
+    ["practice", practiceTag.problem(slug)],
+    CONTENT_LEAF_REVALIDATE,
+    async (sl): Promise<PracticeProblemDetail | null> => {
+      const supabase = getPublicSupabase();
+      if (!supabase) return null;
+      const { data, error } = await supabase.rpc("practice_problem_detail", {
+        p_slug: sl,
+        p_platform: PLATFORM,
+      });
+      if (error) throw new RpcFailed();
+      if (!data) return null;
+      const payload = data as PracticeProblemDetail;
+      return {
+        ...payload,
+        topic: {
+          grid_slug: payload.topic?.grid_slug ?? "",
+          topic_slug: payload.topic?.topic_slug ?? "",
+          title: payload.category?.name ?? payload.topic?.title ?? "Practice",
+        },
+      };
     },
-  };
-});
+    null,
+  ),
+);
 
 /** Up to 3 related practice problems (same category) plus prev/next problem
  *  within the same category — `practice_problem_related()` (migration
  *  0102/074). Powers the internal-linking "Related Problems" section +
  *  prev/next nav on `/practice/problems/*`. */
-export const getPracticeProblemRelated = cache(async (slug: string): Promise<CodingProblemRelated | null> => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const { data, error } = await supabase.rpc("practice_problem_related", {
-    p_slug: slug,
-    p_platform: PLATFORM,
-  });
-  if (error || !data) return null;
-  return data as CodingProblemRelated;
-});
+export const getPracticeProblemRelated = cache(async (slug: string): Promise<CodingProblemRelated | null> =>
+  cachedPublicRead(
+    "practice:problem-related",
+    [slug],
+    ["practice", practiceTag.problem(slug)],
+    CONTENT_LEAF_REVALIDATE,
+    async (sl): Promise<CodingProblemRelated | null> => {
+      const supabase = getPublicSupabase();
+      if (!supabase) return null;
+      const { data, error } = await supabase.rpc("practice_problem_related", {
+        p_slug: sl,
+        p_platform: PLATFORM,
+      });
+      if (error) throw new RpcFailed();
+      return (data || null) as CodingProblemRelated | null;
+    },
+    null,
+  ),
+);
 
 /** Published, website-visible practice problem slugs + last-modified, for `sitemap.ts`. */
 export const getPracticeProblemSlugs = unstable_cache(
@@ -128,5 +149,5 @@ export const getPracticeProblemSlugs = unstable_cache(
     return data as { slug: string; updated_at: string }[];
   },
   ["practice-problem-slugs"],
-  { revalidate: 300, tags: ["practice"] },
+  { revalidate: CONTENT_SHARED_REVALIDATE, tags: ["practice"] },
 );

@@ -13,6 +13,9 @@ import {
   type FeatureRow,
   type PlatformRow,
   type PricingRow,
+  trackingStepStates,
+  parseAmounts,
+  isRequestEditable,
 } from "@/lib/customProjects";
 
 const PRICING: PricingRow[] = [
@@ -296,5 +299,76 @@ describe("Academic Extra Feature pricing — website ↔ Edge Function parity", 
     const source = fs.readFileSync(edgeFnPath, "utf8");
     const edgeMap = extractPriceMapLiteral(source, "ACADEMIC_EXTRA_FEATURE_PRICES");
     expect(edgeMap).toEqual(ACADEMIC_EXTRA_FEATURE_PRICES);
+  });
+});
+
+describe("trackingStepStates (customer tracking timeline)", () => {
+  const states = (status: string) => trackingStepStates(status).map((s) => s.state);
+
+  it("a freshly paid request has three done steps and Development as the current step", () => {
+    expect(states("new")).toEqual(["done", "done", "done", "current", "upcoming", "upcoming", "upcoming"]);
+  });
+
+  it("advances one step per admin status", () => {
+    expect(states("in_development")).toEqual(["done", "done", "done", "done", "current", "upcoming", "upcoming"]);
+    expect(states("testing")).toEqual(["done", "done", "done", "done", "done", "current", "upcoming"]);
+    expect(states("ready")).toEqual(["done", "done", "done", "done", "done", "done", "current"]);
+  });
+
+  it("delivered completes every step", () => {
+    expect(states("delivered").every((s) => s === "done")).toBe(true);
+  });
+
+  it("cancelled or unknown statuses claim no progress", () => {
+    expect(states("cancelled").every((s) => s === "upcoming")).toBe(true);
+    expect(states("bogus").every((s) => s === "upcoming")).toBe(true);
+  });
+});
+
+describe("parseAmounts (custom_project_amounts RPC)", () => {
+  const row = {
+    request_id: "r1",
+    base_value: 10000.5,
+    addons_total: 1500,
+    project_value: 11500.5,
+    payments_total: "4734.81",
+    credits_total: 0,
+    settled_total: 4734.81,
+    due: 6765.69,
+    payment_status: "partially_paid",
+    pending_addons: 1,
+    priced_addons: 0,
+  };
+
+  it("maps the jsonb as-is, including numeric strings and paise", () => {
+    expect(parseAmounts(row)).toEqual({
+      baseValue: 10000.5,
+      addonsTotal: 1500,
+      projectValue: 11500.5,
+      paymentsTotal: 4734.81,
+      creditsTotal: 0,
+      settledTotal: 4734.81,
+      due: 6765.69,
+      paymentStatus: "partially_paid",
+      pendingAddons: 1,
+      pricedAddons: 0,
+    });
+  });
+
+  it("never shows a negative due", () => {
+    expect(parseAmounts({ ...row, due: -0.01, payment_status: "paid" })?.due).toBe(0);
+  });
+
+  it("returns null for a missing or malformed result instead of inventing a number", () => {
+    expect(parseAmounts(null)).toBeNull();
+    expect(parseAmounts({ ...row, payment_status: "whatever" })).toBeNull();
+  });
+});
+
+describe("isRequestEditable", () => {
+  it("only while the request is new", () => {
+    expect(isRequestEditable("new")).toBe(true);
+    expect(isRequestEditable("in_development")).toBe(false);
+    expect(isRequestEditable("delivered")).toBe(false);
   });
 });

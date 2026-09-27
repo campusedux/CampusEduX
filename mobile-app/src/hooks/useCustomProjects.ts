@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
 import { customProjectsService } from "@/services/customProjects.service";
 import { useAuthStore } from "@/store/authStore";
-import type { CustomProjectBuilderConfig } from "@/types";
+import type { CustomProjectBuilderConfig, CustomProjectRequestEdit } from "@/types";
 
 export const customProjectKeys = {
   pricing: ["custom-projects", "pricing"] as const,
@@ -96,6 +96,53 @@ export const useSendCustomMessage = (requestId: string) => {
   });
 };
 
+/**
+ * Owner edits + extra features (migration 0128). Every mutation refetches the detail so the price
+ * breakdown always comes back from custom_project_amounts() — never patched locally.
+ */
+export const useCustomProjectEdits = (requestId: string) => {
+  const userId = useAuthStore((s) => s.user?.id);
+  const queryClient = useQueryClient();
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: customProjectKeys.detail(requestId) });
+    queryClient.invalidateQueries({ queryKey: customProjectKeys.myRequests });
+  };
+  const opts = { onSuccess: refresh };
+  return {
+    updateRequest: useMutation({
+      mutationFn: (changes: CustomProjectRequestEdit) => customProjectsService.updateRequest(requestId, changes),
+      ...opts,
+    }),
+    addAttachment: useMutation({
+      mutationFn: (file: { uri: string; name: string; mimeType?: string }) =>
+        customProjectsService.addAttachment(requestId, userId as string, file),
+      ...opts,
+    }),
+    removeAttachment: useMutation({
+      mutationFn: (fileId: string) => customProjectsService.removeAttachment(fileId),
+      ...opts,
+    }),
+    createAddon: useMutation({
+      mutationFn: (v: { title: string; description: string }) =>
+        customProjectsService.createAddon(requestId, v.title, v.description),
+      ...opts,
+    }),
+    updateAddon: useMutation({
+      mutationFn: (v: { addonId: string; title: string; description: string }) =>
+        customProjectsService.updateAddon(v.addonId, v.title, v.description),
+      ...opts,
+    }),
+    deleteAddon: useMutation({
+      mutationFn: (addonId: string) => customProjectsService.deleteAddon(addonId),
+      ...opts,
+    }),
+    acceptAddon: useMutation({
+      mutationFn: (addonId: string) => customProjectsService.acceptAddon(addonId),
+      ...opts,
+    }),
+  };
+};
+
 type SubmitResult =
   | {
       status: "success";
@@ -180,4 +227,71 @@ export function useCustomProjectSubmit() {
   );
 
   return { submit, isProcessing };
+}
+
+export type BalanceResult =
+  | { status: "success" }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+/**
+ * "Pay Remaining Amount" flow (Bug 3). Same create-order/checkout/verify shape
+ * as useCustomProjectSubmit, but for the balance: create-custom-project-balance-order
+ * recomputes the remaining amount server-side (coalesce(final_price, estimated_total)
+ * - amount_paid) and verify-custom-project-balance-payment does the real HMAC check
+ * before the ledger row — and so amount_paid — is ever touched.
+ */
+export function useCustomProjectBalance(requestId: string) {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+
+  const pay = useCallback(async (): Promise<BalanceResult> => {
+    setIsProcessing(true);
+    try {
+      const order = await customProjectsService.createBalanceOrder(requestId);
+
+      let checkoutResult;
+      try {
+        checkoutResult = await openRazorpayCheckout({
+          key: order.razorpayKeyId,
+          order_id: order.razorpayOrderId,
+          amount: order.amount,
+          currency: order.currency,
+          name: "CampusEduX",
+          description: "Custom project — remaining balance",
+          prefill: {
+            name: user?.fullName ?? "",
+            email: user?.email ?? "",
+            contact: user?.mobileNumber ?? "",
+          },
+          theme: { color: "#4F39F6" },
+        });
+      } catch {
+        return { status: "cancelled" };
+      }
+
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        throw new Error("Razorpay returned an incomplete payment response.");
+      }
+
+      await customProjectsService.verifyBalancePayment({
+        paymentId: order.paymentId,
+        razorpayOrderId: razorpay_order_id,
+        razorpayPaymentId: razorpay_payment_id,
+        razorpaySignature: razorpay_signature,
+      });
+
+      queryClient.invalidateQueries({ queryKey: customProjectKeys.detail(requestId) });
+      queryClient.invalidateQueries({ queryKey: customProjectKeys.myRequests });
+      return { status: "success" };
+    } catch (error: any) {
+      return { status: "failed", message: error?.message ?? "Payment failed. Please try again." };
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [queryClient, requestId, user]);
+
+  return { pay, isProcessing };
 }

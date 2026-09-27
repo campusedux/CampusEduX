@@ -8,7 +8,7 @@ import { Card, CardHeader } from '@/components/ui/primitives';
 import { DeleteButton } from '@/components/ui/DeleteButton';
 import { formatDate } from '@/lib/utils';
 import { DELIVERY_ASSET_LABEL, type DeliveryAssetKind } from '@/lib/custom-projects/constants';
-import { DeliveryDetailsForm, DeliveryAssetUploader } from './DeliveryForm';
+import { DeliveryDetailsForm, DeliverySlotUploaders, DeliveryAssetUploader } from './DeliveryForm';
 import { removeDeliveryAsset } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -33,17 +33,26 @@ export default async function DeliveryPage({ params }: { params: { id: string } 
         </Link>
         <PageHeader
           title="Delivery"
-          subtitle={`${r.title} — upload the finished project. It reaches the student once you set the status to Delivered.`}
+          subtitle={`${r.title} — upload the finished project, then Save & Deliver so the student can see it.`}
         />
       </div>
 
       <Card>
-        <CardHeader title="Delivery details" />
-        <DeliveryDetailsForm requestId={r.id} initial={{ demo_url: delivery?.demo_url ?? null, notes: delivery?.notes ?? '' }} />
+        <CardHeader title="Source code, PDF, PPT" description="At least one of these, or the demo URL below, is required to deliver." />
+        <DeliverySlotUploaders requestId={r.id} studentId={r.user_id} />
       </Card>
 
       <Card>
-        <CardHeader title="Add files" />
+        <CardHeader title="Delivery details" />
+        <DeliveryDetailsForm
+          requestId={r.id}
+          initial={{ demo_url: delivery?.demo_url ?? null, notes: delivery?.notes ?? '' }}
+          hasDeliverable={Boolean(delivery?.demo_url) || Boolean(delivery && delivery.assets.length > 0)}
+        />
+      </Card>
+
+      <Card>
+        <CardHeader title="Other files (optional)" description="Screenshots, APK, extra docs or demos." />
         <DeliveryAssetUploader requestId={r.id} studentId={r.user_id} />
       </Card>
 

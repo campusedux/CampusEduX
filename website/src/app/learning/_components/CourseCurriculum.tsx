@@ -62,7 +62,7 @@ export function CourseCurriculum({
     const complete = done(l.slug);
     return (
       <li key={l.id}>
-        <Link
+        <Link prefetch={false}
           href={`/learning/${gridSlug}/${l.slug}`}
           className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface"
         >
@@ -196,7 +196,7 @@ export function CourseCurriculum({
                     <ol>{s.lessons.map(row)}</ol>
                   )}
                   {test && (
-                    <Link
+                    <Link prefetch={false}
                       href={`/mock-tests/${test.id}`}
                       className="mt-1 flex items-center gap-3 rounded-xl border-t border-line px-3 py-3 text-sm font-semibold text-primary transition-colors hover:bg-surface"
                     >

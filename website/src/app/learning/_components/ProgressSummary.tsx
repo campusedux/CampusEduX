@@ -1,7 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import { getOptionalUser } from "@/lib/auth";
-import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 
 interface TopicProgress {
   topic_id: string;
@@ -23,14 +24,30 @@ interface TopicProgress {
  * `test_attempts` / `user_dsa_progress` via `learning_progress_summary()`
  * (0091/063). Renders nothing for a signed-out visitor or a grid with no
  * recorded activity yet — every other grid's page is unaffected either way.
+ *
+ * Client island: the grid page is public ISR and must not read cookies() on
+ * the server (that made every hit a dynamic render). The per-user data comes
+ * from `GET /api/learning/progress` (private, no-store), fetched only when a
+ * Supabase auth cookie is present.
  */
-export async function ProgressSummary({ gridSlug }: { gridSlug: string }) {
-  const user = await getOptionalUser();
-  if (!user) return null;
+export function ProgressSummary({ gridSlug }: { gridSlug: string }) {
+  const [topics, setTopics] = useState<TopicProgress[] | null>(null);
 
-  const supabase = createAuthedServerSupabase();
-  const { data } = await supabase.rpc("learning_progress_summary", { p_grid_slug: gridSlug, p_platform: "website" });
-  const topics = (data?.topics ?? []) as TopicProgress[];
+  useEffect(() => {
+    if (!/(?:^|;\s*)sb-[^=]*-auth-token/.test(document.cookie)) return;
+    let cancelled = false;
+    fetch(`/api/learning/progress?grid=${encodeURIComponent(gridSlug)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && j && Array.isArray(j.topics)) setTopics(j.topics as TopicProgress[]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [gridSlug]);
+
+  if (!topics) return null;
   const attempted = topics.filter((t) => t.mcq_attempts > 0 || t.coding_attempted > 0 || t.coding_solved > 0);
   if (attempted.length === 0) return null;
 

@@ -7,7 +7,7 @@ import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { getInterviewCategories } from "@/lib/interviewQuestions";
 import { interviewQuestionsCrumbs } from "@/lib/interviewQuestions.types";
 
-export const revalidate = 300;
+export const revalidate = 21600;
 
 export const metadata: Metadata = {
   title: "Interview Questions",

@@ -176,6 +176,10 @@ export interface CustomProjectRequest {
   platformCharge: number;
   featureTotal: number;
   estimatedTotal: number;
+  /** Admin-set price that overrides estimatedTotal once set (Bug 3) — null until the admin sets one. */
+  finalPrice: number | null;
+  /** Total ever credited (token + any settled balance payments). Never client-writable. */
+  amountPaid: number;
   tokenAmount: number;
   tokenPaymentStatus: CustomTokenPaymentStatus;
   status: CustomProjectStatus;
@@ -230,15 +234,56 @@ export interface CustomProjectMessage {
   createdAt: string;
 }
 
+/** Money on a request — mapped from public.custom_project_amounts() (migration 0128), never computed on the device. */
+export type CustomPaymentStatus = "paid" | "partially_paid" | "unpaid";
+export interface CustomProjectAmounts {
+  baseValue: number;
+  addonsTotal: number;
+  projectValue: number;
+  paymentsTotal: number;
+  creditsTotal: number;
+  settledTotal: number;
+  due: number;
+  paymentStatus: CustomPaymentStatus;
+  pendingAddons: number;
+  pricedAddons: number;
+}
+
+export type CustomAddonStatus = "pending" | "priced" | "accepted" | "rejected";
+export interface CustomProjectAddon {
+  id: string;
+  title: string;
+  description: string;
+  status: CustomAddonStatus;
+  price: number | null;
+  createdAt: string;
+}
+
+/** Fields the owner may change while the request is still "new" (the RPC enforces the same list + lock). */
+export interface CustomProjectRequestEdit {
+  title?: string;
+  objective?: string;
+  problem_statement?: string;
+  description?: string;
+  target_users?: string;
+  technology_preference?: string;
+  custom_requirements?: CustomRequirement[];
+  deadline?: string | null;
+}
+
 export interface CustomProjectRequestDetail extends CustomProjectRequest {
   objective: string;
   problemStatement: string;
   description: string;
   targetUsers: string;
+  deadline: string | null;
   customRequirements: CustomRequirement[];
   features: CustomProjectRequestFeature[];
   referenceFiles: CustomProjectReferenceFile[];
   timeline: CustomProjectTimelineEntry[];
   delivery: CustomProjectDelivery | null;
   messages: CustomProjectMessage[];
+  /** null when the amounts RPC failed — screens show an error instead of a guessed number. */
+  amounts: CustomProjectAmounts | null;
+  addons: CustomProjectAddon[];
 }

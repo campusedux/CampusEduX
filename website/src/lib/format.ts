@@ -6,6 +6,18 @@ export function formatINR(amount: number): string {
   }).format(amount);
 }
 
+/** Like formatINR, but keeps paise when the amount has them (₹1,500.50) so a due is never rounded away. */
+export function formatINRExact(amount: number): string {
+  const n = Math.round((Number(amount) || 0) * 100) / 100;
+  const fractional = !Number.isInteger(n);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: fractional ? 2 : 0,
+    maximumFractionDigits: fractional ? 2 : 0,
+  }).format(n);
+}
+
 export function timeAgo(dateString: string): string {
   const then = new Date(dateString).getTime();
   const diffMs = Date.now() - then;

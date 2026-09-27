@@ -2,6 +2,18 @@
 # Batch A / DB agent A tests. Builds template cx_tpl_dbA = clone of cx_tpl (full chain + helpers) + migrations
 # 0117/089, 0118/090, 0119/091 (mobile then admin twin; the twin must be an idempotent no-op), then runs every
 # batch_a/1*.sql in a fresh clone of cx_tpl_dbA. Never touches a remote DB; only cx_* databases.
+#
+# NOTE (2026-09): re-applying 0119/091 here re-defines custom_project_set_status() from THEIR
+# snapshot of it, clobbering any LATER migration in the chain that also redefines that same
+# function — currently migration 0125/097 (Bug 4's "no empty delivery" gate). That means
+# batch_a/126_custom_project_delivery_gate.sql correctly FAILS under cx_tpl_dbA (built by this
+# script) even though the migration itself is correct. This is an artifact of this script's own
+# rebuild step, not a production issue: production applies each migration exactly once, in order,
+# and 0119 is already live, so 0125 always has the last word there. Use
+# harness/run_tests.sh (a single, in-order, full-chain database) as the authoritative check for
+# any test whose target was touched by a later migration than 0119 — it is what CI/the owner
+# should trust for those. Do not add more 1*.sql files here that depend on functions modified after
+# 0119 unless you're prepared for this same clash.
 # Usage: run_dba.sh [--rebuild-only]
 set -u; ARG="${1:-}"
 T="$(cd "$(dirname "$0")" && pwd)"; S="$T/../.."

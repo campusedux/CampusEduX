@@ -7,7 +7,7 @@ import { urlFieldError } from '@/lib/safeUrl';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
 import type { UploadedFile } from '@/components/ui/UploadDropzone';
-import { FEATURE_LEVELS, INCLUDED_KEYS } from '@/lib/custom-projects/constants';
+import { FEATURE_LEVELS, INCLUDED_KEYS, DELIVERY_SLOTS } from '@/lib/custom-projects/constants';
 
 type Result = { ok: boolean; error?: string };
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -40,6 +40,142 @@ export async function setRequestStatus(id: string, newStatus: string, note: stri
   });
   revalidatePath(`/custom-projects/${id}`);
   revalidatePath('/custom-projects');
+  return { ok: true };
+}
+
+// Bug 3: admin-set final price. The RPC (migration 0124 / 096) itself re-checks
+// permission, refuses below amount_paid, refuses once the balance is fully paid,
+// refuses while a balance checkout is open, and writes its own history row — this
+// action only surfaces its error message and revalidates the page.
+export async function setFinalPrice(id: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const raw = String(fd.get('final_price') ?? '').trim();
+  const value = Number(raw);
+  if (!raw || !Number.isFinite(value)) return { ok: false, error: 'Enter a valid amount.' };
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_set_custom_project_final_price', {
+    p_request_id: id,
+    p_final_price: value,
+    p_note: String(fd.get('note') ?? '').trim() || null,
+  });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.final_price.set',
+    module: 'custom_projects',
+    resourceType: 'custom_project_requests',
+    resourceId: id,
+    details: { final_price: value },
+  });
+  revalidatePath(`/custom-projects/${id}`);
+  return { ok: true };
+}
+
+// --- request edits, add-ons, credits (migration 0128 / 099) -----------------------------
+// Each RPC re-checks custom_projects:edit, validates, writes custom_project_changes and notifies the student.
+
+export async function adminUpdateRequest(id: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const changes: Record<string, unknown> = {};
+  for (const key of ['title', 'objective', 'problem_statement', 'description', 'target_users', 'technology_preference']) {
+    if (fd.has(key)) changes[key] = String(fd.get(key) ?? '');
+  }
+  if (fd.has('deadline')) changes.deadline = str(fd, 'deadline') || null;
+  if (fd.has('custom_requirements')) {
+    changes.custom_requirements = String(fd.get('custom_requirements') ?? '')
+      .split('\n')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((text) => ({ text }));
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('admin_update_custom_project_request', { p_request_id: id, p_changes: changes });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.request.update',
+    module: 'custom_projects',
+    resourceType: 'custom_project_requests',
+    resourceId: id,
+    details: { changed: (data as { changed?: string[] } | null)?.changed ?? [] },
+  });
+  revalidatePath(`/custom-projects/${id}`);
+  return { ok: true };
+}
+
+export async function setAddonPrice(addonId: string, requestId: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const raw = str(fd, 'price');
+  const price = Number(raw);
+  if (!raw || !Number.isFinite(price) || price < 0) return { ok: false, error: 'Enter a valid price.' };
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_custom_project_addon_set_price', {
+    p_addon_id: addonId,
+    p_price: price,
+    p_note: str(fd, 'note') || null,
+  });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.addon.price',
+    module: 'custom_projects',
+    resourceType: 'custom_project_addons',
+    resourceId: addonId,
+    details: { price, request_id: requestId },
+  });
+  revalidatePath(`/custom-projects/${requestId}`);
+  return { ok: true };
+}
+
+export async function rejectAddon(addonId: string, requestId: string, note: string): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_custom_project_addon_reject', { p_addon_id: addonId, p_note: note || null });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.addon.reject',
+    module: 'custom_projects',
+    resourceType: 'custom_project_addons',
+    resourceId: addonId,
+    details: { request_id: requestId },
+  });
+  revalidatePath(`/custom-projects/${requestId}`);
+  return { ok: true };
+}
+
+export async function addCredit(requestId: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const amount = Number(str(fd, 'amount'));
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than 0.' };
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_add_custom_project_credit', {
+    p_request_id: requestId,
+    p_amount: amount,
+    p_kind: str(fd, 'kind') || 'adjustment',
+    p_note: str(fd, 'note') || null,
+  });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.credit.add',
+    module: 'custom_projects',
+    resourceType: 'custom_project_credits',
+    resourceId: requestId,
+    details: { amount, kind: str(fd, 'kind') },
+  });
+  revalidatePath(`/custom-projects/${requestId}`);
+  return { ok: true };
+}
+
+export async function removeCredit(creditId: string, requestId: string): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const supabase = createClient();
+  const { error } = await supabase.rpc('admin_remove_custom_project_credit', { p_credit_id: creditId, p_note: null });
+  if (error) return { ok: false, error: error.message };
+  await logActivity({
+    action: 'custom_project.credit.remove',
+    module: 'custom_projects',
+    resourceType: 'custom_project_credits',
+    resourceId: creditId,
+    details: { request_id: requestId },
+  });
+  revalidatePath(`/custom-projects/${requestId}`);
   return { ok: true };
 }
 
@@ -123,6 +259,44 @@ export async function saveDelivery(requestId: string, _prev: Result, fd: FormDat
   return { ok: true };
 }
 
+/**
+ * Bug 4: the combined "Save & Deliver" action. Saves the demo URL/notes, then marks the request
+ * Delivered in the same call. custom_project_set_status() (migration 0125/097) is the actual
+ * enforcement point for "at least one deliverable" — it refuses the transition with a friendly
+ * error when there is neither a demo_url nor any asset, so this never needs to duplicate that check.
+ */
+export async function saveAndDeliver(requestId: string, _prev: Result, fd: FormData): Promise<Result> {
+  await requirePermission('custom_projects', 'edit');
+  const urlErr = urlFieldError(fd, { demo_url: 'Demo URL' });
+  if (urlErr) return { ok: false, error: urlErr };
+  const supabase = createClient();
+  const { error: saveError } = await supabase
+    .from('custom_project_deliveries')
+    .upsert(
+      { request_id: requestId, demo_url: str(fd, 'demo_url') || null, notes: str(fd, 'notes') },
+      { onConflict: 'request_id' },
+    );
+  if (saveError) return { ok: false, error: saveError.message };
+
+  const { error: statusError } = await supabase.rpc('custom_project_set_status', {
+    p_request_id: requestId,
+    p_new_status: 'delivered',
+    p_note: null,
+  });
+  if (statusError) return { ok: false, error: statusError.message };
+
+  await logActivity({
+    action: 'custom_project.delivery.save_and_deliver',
+    module: 'custom_projects',
+    resourceType: 'custom_project_requests',
+    resourceId: requestId,
+  });
+  revalidatePath(`/custom-projects/${requestId}/delivery`);
+  revalidatePath(`/custom-projects/${requestId}`);
+  revalidatePath('/custom-projects');
+  return { ok: true };
+}
+
 export async function addDeliveryAssets(
   requestId: string,
   kind: string,
@@ -132,6 +306,28 @@ export async function addDeliveryAssets(
   await requirePermission('custom_projects', 'edit');
   if (!files.length) return { ok: false, error: 'No file uploaded.' };
   const supabase = createClient();
+
+  // Server-side re-validation of the dedicated slots (ZIP/PDF/PPT) — the real enforcement boundary;
+  // UploadDropzone's client-side accept/maxSizeBytes is only fast feedback and can be bypassed. The
+  // file is already in the private bucket by the time this runs, so an invalid one is removed rather
+  // than left as an orphan, and no DB row is ever written for it.
+  const slot = DELIVERY_SLOTS.find((s) => s.kind === kind);
+  if (slot) {
+    const bad = files.find((f) => {
+      const tooBig = f.size > slot.maxSizeBytes;
+      const lower = f.name.toLowerCase();
+      const wrongExt = !slot.extensions.some((ext) => lower.endsWith(ext));
+      return tooBig || wrongExt;
+    });
+    if (bad) {
+      await supabase.storage.from('custom-project-deliveries').remove(files.map((f) => f.path));
+      const limitMb = (slot.maxSizeBytes / (1024 * 1024)).toFixed(0);
+      return {
+        ok: false,
+        error: `${bad.name} is not a valid ${slot.label} upload (expected ${slot.extensions.join('/')}, up to ${limitMb} MB).`,
+      };
+    }
+  }
 
   // ensure a delivery row exists
   const { data: delivery, error: dErr } = await supabase

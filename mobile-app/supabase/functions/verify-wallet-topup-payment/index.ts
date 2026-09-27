@@ -53,24 +53,35 @@ Deno.serve(async (req) => {
 
     const valid = await verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
     if (!valid) {
-      await db.from("wallet_topup_orders").update({ status: "failed" }).eq("id", order.id);
+      await db.from("wallet_topup_orders").update({ status: "failed" }).eq("id", order.id).neq("status", "paid");
       return json({ error: "Payment signature verification failed." }, 400);
     }
 
-    const { error: updateError } = await db
+    // Atomic conditional update: only the caller that actually flips
+    // status away from "paid" gets a row back and credits the wallet.
+    // The Razorpay webhook can race this same order to "paid" (see
+    // razorpay-webhook/index.ts) — Postgres row-level locking on this
+    // UPDATE serializes the two, so exactly one of them ever inserts the
+    // wallet_transactions credit below.
+    const { data: updatedOrder, error: updateError } = await db
       .from("wallet_topup_orders")
       .update({ status: "paid", razorpay_payment_id: razorpayPaymentId })
-      .eq("id", order.id);
+      .eq("id", order.id)
+      .neq("status", "paid")
+      .select("id")
+      .maybeSingle();
     if (updateError) throw updateError;
 
-    const { error: creditError } = await db.from("wallet_transactions").insert({
-      user_id: user.id,
-      type: "credit",
-      category: "added_money",
-      amount: Number(order.amount),
-      description: "Added Money",
-    });
-    if (creditError) throw creditError;
+    if (updatedOrder) {
+      const { error: creditError } = await db.from("wallet_transactions").insert({
+        user_id: user.id,
+        type: "credit",
+        category: "added_money",
+        amount: Number(order.amount),
+        description: "Added Money",
+      });
+      if (creditError) throw creditError;
+    }
 
     return json({ ok: true, amount: Number(order.amount) });
   } catch (err) {

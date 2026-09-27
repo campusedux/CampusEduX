@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { absoluteUrl } from "@/lib/seo";
+import { describeResetPasswordError } from "@/lib/passwordReset";
 import { Field, Input } from "@/components/ui";
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -40,9 +41,19 @@ export default function ForgotPasswordView() {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: absoluteUrl("/reset-password"),
       });
-      // Never reveal whether the address has an account — same success
-      // message either way (mirrors admin-panel/src/actions/auth.ts).
-      if (resetError) console.error("[forgot-password] resetPasswordForEmail", resetError.message);
+      // Supabase's own resetPasswordForEmail already protects against email
+      // enumeration — it silently "succeeds" (no error) for an address with
+      // no account, by design. So an error here is never "that email doesn't
+      // exist"; it's a real problem (rate limit, SMTP/provider failure,
+      // malformed address) that the user needs to know about, not something
+      // to swallow into a fake "check your email" (which previously hid
+      // every such failure — from both the user and any monitoring, since
+      // this was only a console.error nobody watches in production).
+      if (resetError) {
+        console.error("[forgot-password] resetPasswordForEmail", resetError.message);
+        setError(describeResetPasswordError(resetError));
+        return;
+      }
       setSent(true);
     } catch (err: any) {
       setError(err.message ?? "Something went wrong.");

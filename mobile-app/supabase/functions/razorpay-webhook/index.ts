@@ -330,6 +330,15 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Untyped client: supabase-js infers the embed as an array, but PostgREST returns a single object
+      // for this many-to-one join (purchases.project_id -> projects.id). Accept either shape.
+      const embeddedProject = updatedPurchase.project as unknown as
+        | { title?: string | null }
+        | { title?: string | null }[]
+        | null;
+      const projectTitle =
+        (Array.isArray(embeddedProject) ? embeddedProject[0]?.title : embeddedProject?.title) ?? "project";
+
       const { error: ledgerError } = await db
         .from("wallet_transactions")
         .insert({
@@ -337,8 +346,7 @@ Deno.serve(async (req) => {
           type: "debit",
           category: "project_purchase",
           amount: updatedPurchase.total_amount,
-          description:
-            `Purchased "${updatedPurchase.project?.title ?? "project"}"`,
+          description: `Purchased "${projectTitle}"`,
         });
 
       if (ledgerError) {
@@ -409,6 +417,26 @@ Deno.serve(async (req) => {
           "id, user_id, amount, status, razorpay_order_id, razorpay_payment_id",
         )
         .maybeSingle();
+
+      // This webhook is a fallback credit path: if the browser never
+      // completes its call to verify-wallet-topup-payment (closed tab,
+      // network failure, blocked request) after Razorpay actually captured
+      // the payment, the wallet must still get credited. The .neq("status",
+      // "paid") guard above means only one of the two paths ever wins this
+      // race for a given order, so this insert can't double-credit a top-up
+      // that verify-wallet-topup-payment already settled.
+      if (updatedWalletOrder) {
+        const { error: creditError } = await db.from("wallet_transactions").insert({
+          user_id: updatedWalletOrder.user_id,
+          type: "credit",
+          category: "added_money",
+          amount: updatedWalletOrder.amount,
+          description: "Added Money",
+        });
+        if (creditError) {
+          console.error("Failed to create wallet top-up credit:", creditError);
+        }
+      }
 
       return json({
         received: true,
@@ -500,6 +528,8 @@ Deno.serve(async (req) => {
           ? "paid"
           : "failed";
 
+      // captured: settle an open or previously-failed attempt (DB triggers credit the token/balance);
+      // failed: only an open row. A 'paid' or 'refund_due' row is final and never touched here.
       const { data: updatedCustomPayment } = await db
         .from("custom_project_payments")
         .update({
@@ -507,7 +537,7 @@ Deno.serve(async (req) => {
           razorpay_payment_id: paymentId,
         })
         .eq("id", customProjectPayment.id)
-        .neq("status", "paid")
+        .in("status", newStatus === "paid" ? ["created", "failed"] : ["created"])
         .select(
           "id, status, razorpay_order_id, razorpay_payment_id",
         )

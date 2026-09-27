@@ -8,6 +8,9 @@ import { CUSTOM_PROJECT_PROGRESS, type CustomProjectStatus } from "@/lib/customP
 import { EmptyState } from "@/components/ui";
 import { StatusBadge } from "../_builder/StatusBadge";
 
+// Per-user data: never statically rendered or cached across users.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "My custom projects",
   robots: { index: false, follow: false },
@@ -18,11 +21,13 @@ export default async function Page() {
   const supabase = createAuthedServerSupabase();
 
   // token_payment_status = paid — a request only exists for real once the
-  // Edge Function has verified the token payment (spec §15). RLS already
-  // scopes this to the signed-in student.
+  // Edge Function has verified the token payment (spec §15). RLS scopes this
+  // to the signed-in student — but admins can read every row, so the explicit
+  // user_id filter is what keeps an admin's own "My projects" list to their own.
   const { data: requests } = await supabase
     .from("custom_project_requests")
     .select("id,request_code,title,project_type,project_level,platform,estimated_total,token_amount,status,created_at")
+    .eq("user_id", user.id)
     .eq("token_payment_status", "paid")
     .order("created_at", { ascending: false })
     // This un-paginated list is bounded to the 100 most recent requests so the

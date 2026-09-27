@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
@@ -24,24 +24,27 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Verification does NOT run on page load. A confirmation token is single-use,
+ * and email-security gateways (Outlook Safe Links "time-of-click" scanning,
+ * some corporate mail proxies) fetch/render a link's page before the person
+ * ever sees it — if that fired verifyOtp automatically, the scanner would
+ * burn the token and the real user would always land on "Link expired". It
+ * only runs once the person makes an explicit gesture (this button), which
+ * an automated scanner does not simulate.
+ */
 function ConfirmEmail() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const started = useRef(false);
+  const [verifying, setVerifying] = useState(false);
 
-  useEffect(() => {
-    // Guard against React StrictMode's double-invoked effect in dev — the
-    // confirmation token is single-use, so a second call would always fail.
-    if (started.current) return;
-    started.current = true;
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type");
+  const validLink = Boolean(tokenHash && type);
 
-    const tokenHash = searchParams.get("token_hash");
-    const type = searchParams.get("type");
-
-    if (!tokenHash || !type) {
-      router.replace("/email-verified?status=error");
-      return;
-    }
+  function handleContinue() {
+    if (!tokenHash || !type || verifying) return;
+    setVerifying(true);
 
     fetch(`/api/auth/verify-email?token_hash=${encodeURIComponent(tokenHash)}&type=${encodeURIComponent(type)}`)
       .then((res) => res.json())
@@ -51,13 +54,39 @@ function ConfirmEmail() {
       .catch(() => {
         router.replace("/email-verified?status=error");
       });
-  }, [router, searchParams]);
+  }
+
+  if (verifying) {
+    return (
+      <Shell>
+        <Loader2 className="mx-auto mt-6 h-9 w-9 animate-spin text-primary" aria-hidden />
+        <h1 className="mt-4 text-xl font-bold text-ink">Verifying your email…</h1>
+        <p className="mt-2 text-sm text-ink-muted">This will only take a moment.</p>
+      </Shell>
+    );
+  }
+
+  if (!validLink) {
+    return (
+      <Shell>
+        <h1 className="mt-4 text-xl font-bold text-ink">Link expired</h1>
+        <p className="mt-2 text-sm text-ink-muted">
+          This confirmation link is invalid or has expired. Sign in to request a new one.
+        </p>
+        <Link href="/login" className="btn-primary mt-5 block w-full text-center">
+          Go to sign in
+        </Link>
+      </Shell>
+    );
+  }
 
   return (
     <Shell>
-      <Loader2 className="mx-auto mt-6 h-9 w-9 animate-spin text-primary" aria-hidden />
-      <h1 className="mt-4 text-xl font-bold text-ink">Verifying your email…</h1>
-      <p className="mt-2 text-sm text-ink-muted">This will only take a moment.</p>
+      <h1 className="mt-4 text-xl font-bold text-ink">Confirm your email</h1>
+      <p className="mt-2 text-sm text-ink-muted">Tap continue to verify your email and finish setting up your account.</p>
+      <button type="button" onClick={handleContinue} className="btn-primary mt-5 w-full">
+        Continue
+      </button>
     </Shell>
   );
 }
@@ -68,7 +97,7 @@ export default function ConfirmEmailPage() {
       fallback={
         <Shell>
           <Loader2 className="mx-auto mt-6 h-9 w-9 animate-spin text-primary" aria-hidden />
-          <h1 className="mt-4 text-xl font-bold text-ink">Verifying your email…</h1>
+          <h1 className="mt-4 text-xl font-bold text-ink">Loading…</h1>
         </Shell>
       }
     >

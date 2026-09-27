@@ -9,7 +9,7 @@ import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { getInterviewTopicDetail } from "@/lib/interviewQuestions";
 import { interviewQuestionsCrumbs, JAVA_TOPIC_LEARNING_LINKS } from "@/lib/interviewQuestions.types";
 
-export const revalidate = 300;
+export const revalidate = 86400;
 export const dynamicParams = true;
 
 // [] registers the route for ISR without prerendering every topic at build

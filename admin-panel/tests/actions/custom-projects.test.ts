@@ -19,6 +19,10 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: () => supabase }));
 
 import {
   setRequestStatus,
+  setFinalPrice,
+  saveDelivery,
+  saveAndDeliver,
+  addDeliveryAssets,
   saveRequestAdminNotes,
   createFeature,
   updateFeature,
@@ -27,6 +31,11 @@ import {
   createFeatureCategory,
   deleteFeatureCategory,
   updatePricingRow,
+  adminUpdateRequest,
+  setAddonPrice,
+  rejectAddon,
+  addCredit,
+  removeCredit,
 } from '@/app/(panel)/custom-projects/actions';
 
 beforeEach(() => {
@@ -42,6 +51,156 @@ function form(fields: Record<string, string>) {
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
   return fd;
 }
+
+describe('setFinalPrice', () => {
+  it('routes the change through admin_set_custom_project_final_price and logs it', async () => {
+    setRpcResult('admin_set_custom_project_final_price', { data: { changed: true, final_price: 9000 }, error: null });
+
+    const res = await setFinalPrice('req-1', { ok: false }, form({ final_price: '9000', note: 'agreed after review' }));
+
+    expect(requirePermission).toHaveBeenCalledWith('custom_projects', 'edit');
+    expect(rpcCall('admin_set_custom_project_final_price')?.args[0]).toEqual({
+      p_request_id: 'req-1',
+      p_final_price: 9000,
+      p_note: 'agreed after review',
+    });
+    expect(res).toEqual({ ok: true });
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'custom_project.final_price.set', module: 'custom_projects' }),
+    );
+  });
+
+  it('rejects a blank or non-numeric amount without calling the RPC', async () => {
+    const blank = await setFinalPrice('req-1', { ok: false }, form({ final_price: '' }));
+    const bogus = await setFinalPrice('req-1', { ok: false }, form({ final_price: 'abc' }));
+
+    expect(blank).toEqual({ ok: false, error: 'Enter a valid amount.' });
+    expect(bogus).toEqual({ ok: false, error: 'Enter a valid amount.' });
+    expect(rpcCall('admin_set_custom_project_final_price')).toBeUndefined();
+  });
+
+  it('surfaces the RPC error (e.g. below the amount already paid, or locked)', async () => {
+    setRpcResult('admin_set_custom_project_final_price', {
+      data: null,
+      error: { message: 'Final price cannot be below the amount already paid (3000).' },
+    });
+
+    const res = await setFinalPrice('req-1', { ok: false }, form({ final_price: '2000' }));
+
+    expect(res).toEqual({ ok: false, error: 'Final price cannot be below the amount already paid (3000).' });
+    expect(logActivity).not.toHaveBeenCalled();
+  });
+
+  it('is blocked when the caller lacks custom_projects:edit', async () => {
+    requirePermission.mockRejectedValueOnce(new Error("You don't have permission to edit in custom_projects."));
+    await expect(setFinalPrice('req-1', { ok: false }, form({ final_price: '9000' }))).rejects.toThrow(
+      "You don't have permission to edit in custom_projects.",
+    );
+    expect(rpcCall('admin_set_custom_project_final_price')).toBeUndefined();
+  });
+});
+
+describe('saveAndDeliver', () => {
+  it('saves the delivery details and calls custom_project_set_status(\'delivered\') in one go', async () => {
+    setTableResult('custom_project_deliveries', { data: null, error: null });
+    setRpcResult('custom_project_set_status', { data: null, error: null });
+
+    const res = await saveAndDeliver('req-1', { ok: false }, form({ demo_url: 'https://example.com/demo', notes: 'all done' }));
+
+    expect(requirePermission).toHaveBeenCalledWith('custom_projects', 'edit');
+    expect(callsFor('custom_project_deliveries').some((c) => c.verb === 'upsert')).toBe(true);
+    expect(rpcCall('custom_project_set_status')?.args[0]).toEqual({
+      p_request_id: 'req-1',
+      p_new_status: 'delivered',
+      p_note: null,
+    });
+    expect(res).toEqual({ ok: true });
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'custom_project.delivery.save_and_deliver', module: 'custom_projects' }),
+    );
+  });
+
+  it('rejects an unsafe demo_url before ever calling the RPC (same guard as saveDelivery)', async () => {
+    const res = await saveAndDeliver('req-1', { ok: false }, form({ demo_url: 'javascript:alert(1)' }));
+    expect(res.ok).toBe(false);
+    expect(rpcCall('custom_project_set_status')).toBeUndefined();
+  });
+
+  it("surfaces the RPC's 'no deliverable' rejection (the real enforcement point, migration 0125/097)", async () => {
+    setTableResult('custom_project_deliveries', { data: null, error: null });
+    setRpcResult('custom_project_set_status', {
+      data: null,
+      error: { message: 'Add a demo URL or at least one file before marking this request Delivered.' },
+    });
+
+    const res = await saveAndDeliver('req-1', { ok: false }, form({}));
+
+    expect(res).toEqual({ ok: false, error: 'Add a demo URL or at least one file before marking this request Delivered.' });
+    expect(logActivity).not.toHaveBeenCalled();
+  });
+
+  it('is blocked when the caller lacks custom_projects:edit', async () => {
+    requirePermission.mockRejectedValueOnce(new Error("You don't have permission to edit in custom_projects."));
+    await expect(saveAndDeliver('req-1', { ok: false }, form({ demo_url: '' }))).rejects.toThrow(
+      "You don't have permission to edit in custom_projects.",
+    );
+    expect(rpcCall('custom_project_set_status')).toBeUndefined();
+  });
+});
+
+describe('addDeliveryAssets (Bug 4 — ZIP/PDF/PPT slot validation)', () => {
+  const zipFile = { path: 'u1/req-1/1-abc-source.zip', url: 'https://x/1', name: 'source.zip', size: 10 * 1024 * 1024 };
+
+  it('accepts a correctly-sized, correctly-named file for its slot', async () => {
+    setTableResult('custom_project_deliveries', { data: { id: 'd-1' }, error: null });
+    setTableResult('custom_project_delivery_assets', { data: [], error: null });
+
+    const res = await addDeliveryAssets('req-1', 'source_code', 'Source', [zipFile]);
+
+    expect(res).toEqual({ ok: true });
+    expect(callsFor('custom_project_delivery_assets').some((c) => c.verb === 'insert')).toBe(true);
+  });
+
+  it('rejects the wrong extension for a dedicated slot and removes the already-uploaded file', async () => {
+    const wrongExt = { ...zipFile, name: 'source.rar' };
+
+    const res = await addDeliveryAssets('req-1', 'source_code', 'Source', [wrongExt]);
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/not a valid Source code \(ZIP\) upload/);
+    expect(supabase.storage.from).toHaveBeenCalledWith('custom-project-deliveries');
+    // no DB row written for the rejected file
+    expect(callsFor('custom_project_delivery_assets').some((c) => c.verb === 'insert')).toBe(false);
+  });
+
+  it('rejects an oversized file for a dedicated slot (server-side, independent of the client pre-check)', async () => {
+    const tooBig = { ...zipFile, name: 'source.zip', size: 200 * 1024 * 1024 };
+
+    const res = await addDeliveryAssets('req-1', 'source_code', 'Source', [tooBig]);
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/up to 100 MB/);
+  });
+
+  it('rejects an oversized PDF against its own tighter 25MB limit', async () => {
+    const bigPdf = { path: 'u1/req-1/1-abc-doc.pdf', url: 'https://x/1', name: 'doc.pdf', size: 30 * 1024 * 1024 };
+
+    const res = await addDeliveryAssets('req-1', 'pdf', 'PDF', [bigPdf]);
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/up to 25 MB/);
+  });
+
+  it('kinds without a dedicated slot (screenshot/apk/other/…) are not subject to slot validation', async () => {
+    setTableResult('custom_project_deliveries', { data: { id: 'd-1' }, error: null });
+    setTableResult('custom_project_delivery_assets', { data: [], error: null });
+    const anyFile = { path: 'u1/req-1/1-abc-home.png', url: 'https://x/1', name: 'home.png', size: 500 * 1024 * 1024 };
+
+    const res = await addDeliveryAssets('req-1', 'screenshot', 'Home', [anyFile]);
+
+    expect(res).toEqual({ ok: true });
+  });
+});
 
 describe('setRequestStatus', () => {
   it('routes the change through custom_project_set_status and logs it', async () => {
@@ -310,5 +469,67 @@ describe('updatePricingRow', () => {
     const update = callsFor('custom_project_pricing').find((c) => c.verb === 'update');
     expect((update?.args[0] as Record<string, unknown>).base_price).toBe(21999);
     expect(res).toEqual({ ok: true });
+  });
+});
+
+describe('project value: request edits, add-ons, credits (migration 0128)', () => {
+  it('adminUpdateRequest sends only the whitelisted fields, requirements as {text} and a null deadline', async () => {
+    setRpcResult('admin_update_custom_project_request', { data: { changed: ['title'] }, error: null });
+    const res = await adminUpdateRequest(
+      'req-1',
+      { ok: false },
+      form({ title: 'New', custom_requirements: 'A\n\n B ', deadline: '', final_price: '1' }),
+    );
+    expect(requirePermission).toHaveBeenCalledWith('custom_projects', 'edit');
+    expect(rpcCall('admin_update_custom_project_request')?.args[0]).toEqual({
+      p_request_id: 'req-1',
+      p_changes: { title: 'New', custom_requirements: [{ text: 'A' }, { text: 'B' }], deadline: null },
+    });
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('setAddonPrice validates the price before calling the RPC', async () => {
+    const bad = await setAddonPrice('ad-1', 'req-1', { ok: false }, form({ price: '-5' }));
+    expect(bad).toEqual({ ok: false, error: 'Enter a valid price.' });
+    expect(rpcCall('admin_custom_project_addon_set_price')).toBeUndefined();
+
+    setRpcResult('admin_custom_project_addon_set_price', { data: null, error: null });
+    const ok = await setAddonPrice('ad-1', 'req-1', { ok: false }, form({ price: '1500.50', note: 'two screens' }));
+    expect(rpcCall('admin_custom_project_addon_set_price')?.args[0]).toEqual({
+      p_addon_id: 'ad-1',
+      p_price: 1500.5,
+      p_note: 'two screens',
+    });
+    expect(ok).toEqual({ ok: true });
+  });
+
+  it('surfaces the RPC error (e.g. re-pricing an accepted add-on)', async () => {
+    setRpcResult('admin_custom_project_addon_reject', {
+      data: null,
+      error: { message: 'Only pending or priced add-ons can be rejected.' },
+    });
+    const res = await rejectAddon('ad-1', 'req-1', '');
+    expect(res).toEqual({ ok: false, error: 'Only pending or priced add-ons can be rejected.' });
+  });
+
+  it('addCredit refuses a zero amount and passes kind + note through', async () => {
+    expect(await addCredit('req-1', { ok: false }, form({ amount: '0', kind: 'discount' }))).toEqual({
+      ok: false,
+      error: 'Enter an amount greater than 0.',
+    });
+    setRpcResult('admin_add_custom_project_credit', { data: { due: 0 }, error: null });
+    await addCredit('req-1', { ok: false }, form({ amount: '2000', kind: 'offline_payment', note: 'UPI 123' }));
+    expect(rpcCall('admin_add_custom_project_credit')?.args[0]).toEqual({
+      p_request_id: 'req-1',
+      p_amount: 2000,
+      p_kind: 'offline_payment',
+      p_note: 'UPI 123',
+    });
+  });
+
+  it('removeCredit requires edit permission', async () => {
+    requirePermission.mockRejectedValueOnce(new Error('forbidden'));
+    await expect(removeCredit('cr-1', 'req-1')).rejects.toThrow('forbidden');
+    expect(rpcCall('admin_remove_custom_project_credit')).toBeUndefined();
   });
 });
