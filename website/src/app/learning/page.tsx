@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import { absoluteUrl, breadcrumbJsonLd, courseListJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { BRAND } from "@/lib/brand";
 import { ContinueLearningRow } from "./_components/ContinueLearningRow";
+import { PopularTopics } from "./_components/PopularTopics";
 
 export const revalidate = 21600;
 
@@ -246,6 +247,9 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
               <CourseGrid courses={visible} />
             )}
           </section>
+
+          {/* 20 editorial lesson links across courses (see PopularTopics) */}
+          {!q && <PopularTopics grids={grids} />}
         </>
       )}
     </div>

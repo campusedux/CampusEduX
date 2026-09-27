@@ -26,6 +26,7 @@ import { LearningBookmarkButton } from "./LearningBookmarkButton";
 import { PremiumTopicContent } from "./PremiumTopicContent";
 import { TopicPractice } from "./_components/TopicPractice";
 import { TopicDiscovery } from "./_components/TopicDiscovery";
+import { RelatedLessons } from "./_components/RelatedLessons";
 import { RecordLessonVisit } from "./RecordLessonVisit";
 
 export const revalidate = 86400;
@@ -280,6 +281,9 @@ export default async function TopicPage({
         <div className="max-w-[46rem]">
           {/* Topic-specific Mock Tests + Coding Problems (renders nothing when there are none) */}
           <TopicPractice gridSlug={grid.slug} topicSlug={topic.slug} />
+
+          {/* 3–5 same-course related lessons (keyword + section match), from the already-fetched tree */}
+          <RelatedLessons tree={tree} topicSlug={topic.slug} exclude={[prev?.slug, next?.slug]} />
 
           <nav className="mt-10 grid gap-3 border-t border-line pt-6 sm:grid-cols-2" aria-label="Lesson navigation">
             {prev ? (
