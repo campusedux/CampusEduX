@@ -314,6 +314,11 @@ export function CustomProjectDetailScreen() {
 
         {data.delivery && data.status === "delivered" ? (
           <Section title="Delivery">
+            {remainingBalance(data) > 0 ? (
+              <View className="flex-row items-center justify-between rounded-xl bg-amber-50 px-3 py-2 mb-3">
+                <Text className="text-amber-800 text-xs font-semibold">Balance due · {rupees(remainingBalance(data))}</Text>
+              </View>
+            ) : null}
             {data.delivery.notes ? (
               <Text className="text-gray-600 mb-3">{data.delivery.notes}</Text>
             ) : null}
@@ -351,6 +356,20 @@ export function CustomProjectDetailScreen() {
                 )}
               </Pressable>
             ))}
+            {remainingBalance(data) > 0 ? (
+              <Pressable
+                onPress={handlePayBalance}
+                disabled={isPayingBalance}
+                className="mt-2 rounded-xl py-3 items-center flex-row justify-center"
+                style={{ backgroundColor: "#4F39F6", opacity: isPayingBalance ? 0.6 : 1 }}
+              >
+                {isPayingBalance ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text className="text-white font-bold">Pay remaining {rupees(remainingBalance(data))}</Text>
+                )}
+              </Pressable>
+            ) : null}
           </Section>
         ) : null}
 

@@ -53,6 +53,11 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-bold text-ink">{r.title}</h1>
           <StatusPill status={r.status} />
+          {r.status === 'delivered' && remainingBalance(r) > 0 && (
+            <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">
+              Balance due · {formatINR(remainingBalance(r))}
+            </span>
+          )}
         </div>
         <p className="mt-1 font-mono text-sm text-ink-muted">
           {r.request_code} · {formatDateTime(r.created_at)}

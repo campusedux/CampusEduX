@@ -13,6 +13,8 @@ export interface CustomRequestRow {
   project_level: string;
   platform: string;
   estimated_total: number;
+  final_price: number | null;
+  amount_paid: number;
   token_amount: number;
   token_payment_status: string;
   status: string;
@@ -21,7 +23,7 @@ export interface CustomRequestRow {
 }
 
 const LIST_SELECT =
-  'id, request_code, title, project_type, project_level, platform, estimated_total, token_amount, ' +
+  'id, request_code, title, project_type, project_level, platform, estimated_total, final_price, amount_paid, token_amount, ' +
   'token_payment_status, status, created_at, ' +
   'profile:profiles!custom_project_requests_user_id_fkey ( id, full_name, email, mobile_number )';
 

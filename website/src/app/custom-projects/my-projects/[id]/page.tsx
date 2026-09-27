@@ -261,10 +261,19 @@ export default async function Page({ params }: Params) {
         </section>
       )}
 
-      {/* delivery — only visible once status = delivered (RLS) */}
+      {/* delivery — only visible once status = delivered (RLS). Downloads are never gated on payment;
+          when a balance is still owed, this section also shows it (not just the Pricing card above)
+          so it's visible right alongside the files themselves. */}
       {delivery && (
         <section className="mt-5 rounded-2xl border border-success/40 bg-success/[0.06] p-5 sm:p-6">
-          <h2 className={sectionTitle}>Delivery</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className={sectionTitle}>Delivery</h2>
+            {remainingBalance(request) > 0 && (
+              <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">
+                Balance due · {formatINR(remainingBalance(request))}
+              </span>
+            )}
+          </div>
           {delivery.delivered_at && <p className="text-xs text-ink-muted">Delivered {timeAgo(delivery.delivered_at)}</p>}
           {delivery.notes && <p className="mt-2 whitespace-pre-line text-sm text-ink">{delivery.notes}</p>}
           {safeHref(delivery.demo_url) && (
@@ -291,6 +300,11 @@ export default async function Page({ params }: Params) {
                 </li>
               ))}
             </ul>
+          )}
+          {remainingBalance(request) > 0 && request.status !== "cancelled" && (
+            <div className="mt-4 border-t border-success/20 pt-4">
+              <PayRemainingButton requestId={request.id} remaining={remainingBalance(request)} />
+            </div>
           )}
         </section>
       )}

@@ -16,6 +16,7 @@ import {
   CUSTOM_STATUS_LABEL,
   PLATFORM_LABEL,
   PROJECT_TYPES,
+  remainingBalance,
 } from '@/lib/custom-projects/constants';
 import { markInboxRead } from './actions';
 
@@ -161,6 +162,11 @@ export default async function CustomProjectsPage({
                     <td className="py-2.5 font-mono">{formatINR(Number(r.token_amount))}</td>
                     <td className="py-2.5">
                       <StatusPill status={r.status} />
+                      {r.status === 'delivered' && remainingBalance(r) > 0 && (
+                        <p className="mt-1 whitespace-nowrap text-xs font-semibold text-warning">
+                          Balance due · {formatINR(remainingBalance(r))}
+                        </p>
+                      )}
                     </td>
                     <td className="py-2.5 text-ink-muted">{formatDate(r.created_at)}</td>
                     <td className="py-2.5">
