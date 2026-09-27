@@ -6,7 +6,8 @@ import { createTopicLinkState, type TopicLinkEntry, type TopicLinkState } from "
 import { detectCallout, detectParagraphCallout, detectQuickRevision } from "@/lib/callouts";
 import { Callout, QuickRevision } from "./Callout";
 import { detectLessonStructure, lessonSectionKind, sectionFrame, splitHeadingNumber, topicHeadingPrefixes, type LessonSectionKind, type LessonStructure } from "@/lib/lessonSections";
-import { KeyPointItem, LessonHeading, LessonSectionFrame, NumberChip, PracticeAnswer, PracticeQuestion } from "./LessonSection";
+import { detectListItemQnA, detectQnA } from "@/lib/qna";
+import { KeyPointItem, LessonHeading, LessonSectionFrame, NumberChip, PracticeAnswer, PracticeQuestion, QnA } from "./LessonSection";
 
 export { slugId } from "@/lib/blogText";
 export { createTopicLinkState } from "@/lib/topicLinks";
@@ -444,7 +445,14 @@ function renderBlocks(src: string, opts: BlockOpts): ReactNode[] {
         const om = lines[i].match(/^(\s*)(\d+)[.)]\s+(.*)$/);
         if (ordered ? !om : !um) break;
         const text = ordered ? om![3] : um![2];
-        const content = applyTopicLinks(renderInline(text, `li${i}`), linkCtx, `li${i}`);
+        const qna = detectListItemQnA(text);
+        const content = qna ? (
+          <QnA compact question={renderInline(qna.question, `li${i}q`)}>
+            {applyTopicLinks(renderInline(qna.answer, `li${i}`), linkCtx, `li${i}`)}
+          </QnA>
+        ) : (
+          applyTopicLinks(renderInline(text, `li${i}`), linkCtx, `li${i}`)
+        );
         items.push(
           chips ? (
             <li key={`li${i}`} className="flex items-start gap-3 leading-relaxed">
@@ -514,6 +522,17 @@ function renderBlocks(src: string, opts: BlockOpts): ReactNode[] {
       out.push(
         <PracticeAnswer key={`b${k++}`}>{applyTopicLinks(renderInline(answer[1], `b${k}`), linkCtx, `b${k}`)}</PracticeAnswer>,
       );
+      continue;
+    }
+    const qna = detectQnA(buf);
+    if (qna) {
+      for (const pair of qna) {
+        out.push(
+          <QnA key={`b${k++}`} question={renderInline(pair.question, `b${k}q`)}>
+            {applyTopicLinks(renderInline(pair.answer, `b${k}`), linkCtx, `b${k}`)}
+          </QnA>,
+        );
+      }
       continue;
     }
     const paraCallout = callouts ? detectParagraphCallout(buf.join(" ")) : null;

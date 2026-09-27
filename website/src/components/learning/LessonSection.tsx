@@ -151,6 +151,24 @@ export function PracticeAnswer({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * A question on its own line with the answer below it behind one "Ans:" label
+ * (see `@/lib/qna`). `compact` renders spans for use inside a list item.
+ */
+export function QnA({ question, children, compact = false }: { question: ReactNode; children: ReactNode; compact?: boolean }) {
+  const Wrap = compact ? "span" : "div";
+  const Line = compact ? "span" : "p";
+  return (
+    <Wrap className={cn("block", !compact && "my-5")}>
+      <Line className="block font-semibold leading-7 text-ink">{question}</Line>
+      <Line className="mt-1 block leading-7 text-ink-muted">
+        <strong className="mr-1.5 font-bold text-primary">Ans:</strong>
+        {children}
+      </Line>
+    </Wrap>
+  );
+}
+
 /** Key-points bullet: a tick instead of a disc. */
 export function KeyPointItem({ children }: { children: ReactNode }) {
   return (
