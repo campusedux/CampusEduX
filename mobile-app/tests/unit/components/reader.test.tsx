@@ -15,6 +15,7 @@ import { TopicNavFooter } from "@/components/learning/reader/TopicNavFooter";
 import { ReaderHeader } from "@/components/learning/reader/ReaderHeader";
 import { prepareTopic } from "@/learning/reader/readerModel";
 import { COURSE_ACCENTS, accentTokens } from "@/theme/courseAccents";
+import { LIGHT_COLORS } from "@/theme/colors";
 
 const accent = accentTokens(COURSE_ACCENTS.java, "light");
 const ctx = { accent, anchors: new AnchorRegistry(), enableRun: false };
@@ -120,6 +121,19 @@ it("ReaderContent: the leading heading equal to the topic title is not rendered"
   const out = textOf(render(<ReaderContent blocks={prepared.blocks} />));
   expect(out).not.toContain("Java Basics");
   expect(out).toContain("Hello there");
+});
+
+it("ReaderContent: Q&A renders the question, then one primary-colour \"Ans:\" label and the answer", () => {
+  const md = "**Q: What replaced the hierarchical model?**\nA: The relational model.\n\n- **Q: Why normalize?** To store each fact once.\n\n1. **What goes in?** Identify the input.";
+  const r = render(<ReaderContent blocks={prepareTopic(content(md), "T").blocks} />);
+  const out = textOf(r);
+  expect(out).toContain("Q: What replaced the hierarchical model?Ans: The relational model.");
+  expect(out).toContain("Q: Why normalize?Ans: To store each fact once.");
+  expect(out).toContain("What goes in? Identify the input."); // checklist bullet unchanged
+  expect(out).not.toMatch(/Ans: (A|Ans|Answer):/);
+  const labels = r.root.findAll((n) => typeof n.type === "string" && n.props.children === "Ans: ");
+  expect(labels).toHaveLength(2);
+  expect(labels[0].props.style.color).toBe(LIGHT_COLORS.primaryText);
 });
 
 it("TableOfContents: collapsed by default, expands, and selecting an item reports its id", () => {

@@ -3,9 +3,9 @@ import { Linking, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "@/components/ui/PressableScale";
 import { notify } from "@/lib/notify";
-import { RADII, SPACE, useTheme } from "@/theme";
+import { RADII, SPACE, fontFamily, useTheme } from "@/theme";
 import { nodeGap, type PreparedBlock, type ReaderNode } from "@/learning/reader/readerModel";
-import type { ListItem } from "@/learning/reader/markdownParser";
+import type { ListItem, QnAParts } from "@/learning/reader/markdownParser";
 import { Callout } from "./Callout";
 import { CodeBlock } from "./CodeBlock";
 import { InlineText } from "./InlineText";
@@ -91,6 +91,21 @@ function ReaderAction({ icon, label, url }: { icon: keyof typeof Ionicons.glyphM
   );
 }
 
+/** Question on its own line, then a bold primary-colour "Ans:" label and the answer. */
+function QnABlock({ question, answer }: QnAParts) {
+  const { colors, type, fontsLoaded } = useTheme();
+  const bold = fontFamily("bold", fontsLoaded);
+  return (
+    <View style={{ gap: SPACE[1] }}>
+      <InlineText nodes={question} style={[type.body, { color: colors.text, fontFamily: bold }]} />
+      <Text style={[type.body, { color: colors.text }]}>
+        <Text style={{ fontFamily: bold, color: colors.primaryText }}>Ans: </Text>
+        <InlineText nodes={answer} />
+      </Text>
+    </View>
+  );
+}
+
 function ListBlock({ ordered, items }: { ordered: boolean; items: ListItem[] }) {
   const { colors, type } = useTheme();
   const { accent } = useReaderCtx();
@@ -117,7 +132,7 @@ function ListBlock({ ordered, items }: { ordered: boolean; items: ListItem[] }) 
             </View>
           )}
           <View style={{ flex: 1 }}>
-            <InlineText nodes={it.inline} style={[type.body, { color: colors.text }]} />
+            {it.qna ? <QnABlock {...it.qna} /> : <InlineText nodes={it.inline} style={[type.body, { color: colors.text }]} />}
           </View>
         </View>
       ))}
@@ -132,6 +147,8 @@ function NodeView({ node }: { node: ReaderNode }) {
       return <HeadingBlock id={node.id} level={node.level} text={node.text} inline={node.inline} />;
     case "paragraph":
       return <InlineText nodes={node.inline} style={[type.body, { color: colors.text }]} />;
+    case "qna":
+      return <QnABlock question={node.question} answer={node.answer} />;
     case "list":
       return <ListBlock ordered={node.ordered} items={node.items} />;
     case "code":

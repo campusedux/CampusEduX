@@ -4,6 +4,7 @@
  * fenced code, ordered/unordered lists, blockquotes, GFM tables, links, hr — so
  * existing content renders the same, plus a few fixes noted inline.
  */
+import { detectListItemQnA, detectQnA, type DetectedQnA } from "./qna";
 
 export type Inline =
   | { t: "text"; v: string }
@@ -12,17 +13,26 @@ export type Inline =
   | { t: "code"; v: string }
   | { t: "link"; href: string | null; v: string };
 
+/** A question on its own line + its answer (see `./qna`). `question` is the text inside the bold markers. */
+export interface QnAParts {
+  question: Inline[];
+  answer: Inline[];
+}
+
 export interface ListItem {
   /** 0 = top level; indented items nest (max 3). */
   level: number;
   /** Source number for ordered lists (so "2." renders 2, not a restarted 1). */
   n: number;
   inline: Inline[];
+  /** Set for an explicit `**Q: …?** answer` bullet — rendered as question + "Ans:" instead of `inline`. */
+  qna?: QnAParts;
 }
 
 export type Block =
   | { t: "heading"; level: number; text: string; inline: Inline[] }
   | { t: "paragraph"; inline: Inline[] }
+  | ({ t: "qna" } & QnAParts)
   | { t: "list"; ordered: boolean; items: ListItem[] }
   | { t: "code"; lang: string; code: string }
   | { t: "table"; header: Inline[][]; rows: Inline[][][] }
@@ -62,6 +72,11 @@ export function parseInline(text: string): Inline[] {
 /** Plain text of inline nodes (for matching / TOC labels). */
 export function inlineToText(nodes: Inline[]): string {
   return nodes.map((n) => (n.t === "text" || n.t === "code" ? n.v : n.t === "link" ? n.v : inlineToText(n.c))).join("");
+}
+
+function qnaParts(pair: DetectedQnA): QnAParts {
+  // Strip the bold markers: the question line is styled as a whole by the renderer.
+  return { question: parseInline(pair.question.slice(2, -2)), answer: parseInline(pair.answer) };
 }
 
 const UL = /^(\s*)[-*+]\s+(.*)$/;
@@ -146,10 +161,13 @@ export function parseMarkdown(src: string): Block[] {
       while (i < lines.length) {
         const m = ordered ? lines[i].match(OL) : lines[i].match(UL);
         if (!m) break;
+        const text = ordered ? m[3] : m[2];
+        const qna = detectListItemQnA(text);
         items.push({
           level: indentLevel(m[1]),
           n: ordered ? Number(m[2]) : 0,
-          inline: parseInline(ordered ? m[3] : m[2]),
+          inline: parseInline(text),
+          ...(qna ? { qna: qnaParts(qna) } : {}),
         });
         i += 1;
       }
@@ -170,6 +188,11 @@ export function parseMarkdown(src: string): Block[] {
     ) {
       buf.push(lines[i].trim());
       i += 1;
+    }
+    const qna = detectQnA(buf);
+    if (qna) {
+      for (const pair of qna) out.push({ t: "qna", ...qnaParts(pair) });
+      continue;
     }
     out.push({ t: "paragraph", inline: parseInline(buf.join(" ")) });
   }

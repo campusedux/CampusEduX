@@ -75,6 +75,7 @@ function measure(nodes: ReaderNode[]): { words: number; heavy: boolean } {
       heavy = heavy || m.heavy;
     } else if (n.t === "heading") words += countWords(n.text);
     else if (n.t === "paragraph" || n.t === "quote") words += countWords(inlineToText(n.inline));
+    else if (n.t === "qna") words += countWords(`${inlineToText(n.question)} ${inlineToText(n.answer)}`);
     else if (n.t === "list") words += n.items.reduce((a, it) => a + countWords(inlineToText(it.inline)), 0);
   }
   return { words, heavy };
@@ -190,6 +191,7 @@ export function flattenText(nodes: ReaderNode[]): string[] {
       out.push(`[${n.kind}${n.variant === "box" ? "" : ":heading"}] ${n.label}`, ...flattenText(n.children));
     } else if (n.t === "heading") out.push(n.text);
     else if (n.t === "paragraph" || n.t === "quote") out.push(inlineToText(n.inline));
+    else if (n.t === "qna") out.push(inlineToText(n.question), inlineToText(n.answer));
     else if (n.t === "code") out.push(n.code);
     else if (n.t === "list") n.items.forEach((it) => out.push(inlineToText(it.inline)));
     else if (n.t === "table") {
@@ -212,6 +214,7 @@ export function nodeGap(prev: ReaderNode | null, cur: ReaderNode): number {
     return cur.level <= 2 ? GAP.h2Top : cur.level === 3 ? GAP.h3Top : GAP.h4Top; // heading-style, like a heading
   }
   if (prev.t === "heading") return GAP.afterHeading;
+  if (cur.t === "qna") return GAP.block; // a little extra room between consecutive Q&A pairs
   if (cur.t === "paragraph" || cur.t === "quote") return GAP.paragraph;
   if (cur.t === "hr") return 28;
   return GAP.block;
