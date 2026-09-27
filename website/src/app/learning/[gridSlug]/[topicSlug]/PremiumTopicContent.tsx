@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Lock } from "lucide-react";
-import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { useSessionProfile } from "@/lib/useSessionProfile";
+import { cn } from "@/lib/cn";
 import { Button, EmptyState } from "@/components/ui";
 import type { LearningContentBlock } from "@/lib/learning.types";
 
@@ -20,6 +21,12 @@ const LessonBlock = dynamic(() => import("@/components/learning/LessonBlock").th
  * re-runs `learning_topic_content` from the browser with the visitor's real
  * session: an authorised premium member (or admin) then gets `locked: false`
  * and the content is rendered client-side. Everyone else keeps the upgrade CTA.
+ *
+ * Performance: signed-out visitors (and crawlers) are resolved from the shared
+ * `/api/session` check and never download the Supabase browser SDK — it is
+ * imported lazily, only for a signed-in visitor. While checking, the upgrade
+ * card's own box is shown (content hidden) so the most common outcome —
+ * "locked" — fills it in place with no layout shift below.
  */
 export function PremiumTopicContent({
   gridSlug,
@@ -35,10 +42,19 @@ export function PremiumTopicContent({
 }) {
   const [phase, setPhase] = useState<Phase>("checking");
   const [blocks, setBlocks] = useState<LearningContentBlock[]>([]);
+  const { loading: sessionLoading, profile } = useSessionProfile();
+  const userId = profile?.id ?? null;
 
   useEffect(() => {
+    if (sessionLoading) return;
+    if (!userId) {
+      setPhase("locked");
+      return;
+    }
     let active = true;
     (async () => {
+      const { createBrowserSupabase } = await import("@/lib/supabase/browser");
+      if (!active) return;
       const supabase = createBrowserSupabase();
       const {
         data: { user },
@@ -60,21 +76,13 @@ export function PremiumTopicContent({
       }
       setBlocks(payload.contents ?? []);
       setPhase("unlocked");
-    })();
+    })().catch(() => {
+      /* SDK chunk / network failure — keep the current state (unchanged behaviour) */
+    });
     return () => {
       active = false;
     };
-  }, [gridSlug, topicSlug]);
-
-  if (phase === "checking") {
-    return (
-      <div className="space-y-3">
-        <div className="h-4 w-3/4 animate-pulse rounded bg-line/70" />
-        <div className="h-4 w-full animate-pulse rounded bg-line/70" />
-        <div className="h-4 w-5/6 animate-pulse rounded bg-line/70" />
-      </div>
-    );
-  }
+  }, [gridSlug, topicSlug, sessionLoading, userId]);
 
   if (phase === "unlocked") {
     return (
@@ -95,20 +103,29 @@ export function PremiumTopicContent({
     );
   }
 
+  const checking = phase === "checking";
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-warning/30 bg-gradient-to-br from-warning/10 via-card to-accent-pink/[0.06] px-6 py-10 text-center">
-      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-warning/15">
-        <Lock className="h-7 w-7 text-amber-600 dark:text-amber-300" aria-hidden />
-      </span>
-      <h2 className="mt-4 font-display text-xl font-bold text-ink">This is a premium lesson</h2>
-      <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
-        Upgrade to CampusEduX Premium to read this topic and everything else marked premium.
-      </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Button href="/premium">See Premium plans</Button>
-        <Button href={`/login?next=${encodeURIComponent(loginNext)}`} variant="ghost">
-          I already have Premium — sign in
-        </Button>
+    <div
+      aria-busy={checking || undefined}
+      className={cn(
+        "relative overflow-hidden rounded-3xl border border-warning/30 bg-gradient-to-br from-warning/10 via-card to-accent-pink/[0.06] px-6 py-10 text-center",
+        checking && "animate-pulse",
+      )}
+    >
+      <div className={checking ? "invisible" : undefined} aria-hidden={checking || undefined}>
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-warning/15">
+          <Lock className="h-7 w-7 text-amber-600 dark:text-amber-300" aria-hidden />
+        </span>
+        <h2 className="mt-4 font-display text-xl font-bold text-ink">This is a premium lesson</h2>
+        <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
+          Upgrade to CampusEduX Premium to read this topic and everything else marked premium.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Button href="/premium">See Premium plans</Button>
+          <Button href={`/login?next=${encodeURIComponent(loginNext)}`} variant="ghost">
+            I already have Premium — sign in
+          </Button>
+        </div>
       </div>
     </div>
   );

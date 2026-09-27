@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bookmark, BookmarkCheck } from "lucide-react";
-import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { useSessionProfile } from "@/lib/useSessionProfile";
 import { applyToJobAction, toggleSaveJobAction } from "@/lib/actions/jobs";
 import {
   RESUME_EXTENSIONS,
@@ -30,9 +30,20 @@ const STATUS_LABEL: Record<string, string> = {
 
 const ACCEPT_ATTR = [...RESUME_EXTENSIONS, ...RESUME_MIME_TYPES].join(",");
 
+// Performance: signed-out visitors (and crawlers) are resolved from the shared
+// `/api/session` check and never download the Supabase browser SDK (~67 kB gz);
+// it is imported lazily, only for a signed-in visitor (same pattern as
+// `useLearningBookmarks`), so it stays out of the job page's first-load JS.
+async function browserSupabase() {
+  const { createBrowserSupabase } = await import("@/lib/supabase/browser");
+  return createBrowserSupabase();
+}
+
 export default function JobApplyPanel({ jobId, externalApply = false }: { jobId: string; externalApply?: boolean }) {
   const [phase, setPhase] = useState<"loading" | "anon" | "ready">("loading");
   const userIdRef = useRef<string | null>(null);
+  const { loading: sessionLoading, profile } = useSessionProfile();
+  const sessionUserId = profile?.id ?? null;
 
   const [applied, setApplied] = useState<AppliedInfo | null>(null);
   const [isSaved, setIsSaved] = useState(false);
@@ -49,7 +60,7 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const supabase = createBrowserSupabase();
+    const supabase = await browserSupabase();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -77,8 +88,16 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
   }, [jobId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (sessionLoading) return;
+    if (!sessionUserId) {
+      userIdRef.current = null;
+      setPhase("anon");
+      return;
+    }
+    load().catch(() => {
+      /* SDK chunk / network failure — keep the loading line (unchanged behaviour) */
+    });
+  }, [sessionLoading, sessionUserId, load]);
 
   async function handleToggleSave() {
     setSavePending(true);
@@ -135,7 +154,7 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
           setSubmitError("Your session expired. Please sign in again.");
           return;
         }
-        const supabase = createBrowserSupabase();
+        const supabase = await browserSupabase();
         const path = resumeStoragePath(userId, file.name);
         // Explicit, extension-derived type (never octet-stream): the bucket allow-list checks it.
         const contentType = resolveUploadContentType(file, RESUME_MIME_TYPES);
@@ -166,7 +185,14 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
 
   // ---- render ------------------------------------------------------------
   if (phase === "loading") {
-    return <div className="mt-10 border-t border-line pt-6 text-sm text-ink-muted">Loading your application options…</div>;
+    // Reserves the signed-out block's box (text line + h-11 button) so the
+    // common anonymous outcome swaps in place without a layout shift.
+    return (
+      <div className="mt-10 border-t border-line pt-6" aria-busy="true">
+        <p className="text-sm text-ink-muted">Loading your application options…</p>
+        <div className="mt-3 h-11" aria-hidden />
+      </div>
+    );
   }
 
   if (phase === "anon") {

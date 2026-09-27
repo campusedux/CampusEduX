@@ -60,11 +60,13 @@ export const metadata: Metadata = {
   },
 };
 
-// Origin of the Supabase project — the browser opens a connection to it on
-// every page (client session check, announcements, storage image hosts). Warm
-// the DNS + TLS handshake in <head> so the first client Supabase call isn't
-// paying for it. Razorpay only loads on a checkout click, so a cheap
-// dns-prefetch (no handshake cost) is enough there.
+// Origin of the Supabase project. A signed-out first page load no longer
+// contacts it from the browser at all — the session check and announcements go
+// through same-origin `/api/*` routes, catalog images through `/_next/image`,
+// and the browser SDK is imported lazily only for signed-in flows. So a full
+// `preconnect` (TCP + TLS during the critical load window, reported by
+// Lighthouse as unused) is replaced by a cheap `dns-prefetch`, the same as
+// Razorpay, which only loads on a checkout click.
 const supabaseOrigin = (() => {
   try {
     return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").origin;
@@ -80,12 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${fontSans.variable} ${fontDisplay.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        {supabaseOrigin && (
-          <>
-            <link rel="preconnect" href={supabaseOrigin} crossOrigin="anonymous" />
-            <link rel="dns-prefetch" href={supabaseOrigin} />
-          </>
-        )}
+        {supabaseOrigin && <link rel="dns-prefetch" href={supabaseOrigin} />}
         <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
       </head>
       <body className="bg-canvas font-sans text-ink antialiased">

@@ -31,7 +31,12 @@ export function LessonComplete({ lesson, sectionSlugs, courseSlugs, next, varian
   const { gridSlug, topicSlug } = lesson;
 
   if (!progress.ready) {
-    return variant === "compact" ? <span className="inline-block h-9 w-36 animate-pulse rounded-xl bg-surface" aria-hidden /> : null;
+    // Same box as the compact button below (`h-11 sm:h-9`, ~"Mark as complete"
+    // width) so the lesson header row doesn't grow on mobile and shift the
+    // article when local progress loads.
+    return variant === "compact" ? (
+      <span className="inline-block h-11 w-[10.25rem] animate-pulse rounded-xl bg-surface sm:h-9" aria-hidden />
+    ) : null;
   }
 
   const done = progress.isComplete(gridSlug, topicSlug);

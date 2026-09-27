@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Lock } from "lucide-react";
-import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { useSessionProfile } from "@/lib/useSessionProfile";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import type { CodingProblemDetail } from "@/lib/learning.types";
@@ -115,6 +115,12 @@ export function CodingProblemPremiumGate({
 }) {
   const [phase, setPhase] = useState<Phase>("locked");
   const [detail, setDetail] = useState<CodingProblemDetail | null>(null);
+  // Anonymous visitors (the vast majority, and every crawler) can never
+  // unlock, so the Supabase browser SDK (~67 kB gz) is only imported once the
+  // shared `/api/session` check reports a signed-in user — it stays out of
+  // this route's first-load JS entirely.
+  const { loading: sessionLoading, profile } = useSessionProfile();
+  const userId = profile?.id ?? null;
 
   useEffect(() => {
     let active = true;
@@ -123,7 +129,10 @@ export function CodingProblemPremiumGate({
     // previous problem's unlocked body under a new URL while re-checking.
     setPhase("locked");
     setDetail(null);
+    if (sessionLoading || !userId) return;
     (async () => {
+      const { createBrowserSupabase } = await import("@/lib/supabase/browser");
+      if (!active) return;
       const supabase = createBrowserSupabase();
       const {
         data: { user },
@@ -138,11 +147,13 @@ export function CodingProblemPremiumGate({
       if (error || !payload || payload.locked) return;
       setDetail(payload);
       setPhase("unlocked");
-    })();
+    })().catch(() => {
+      /* SDK chunk / network failure — stay on the locked notice */
+    });
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [slug, sessionLoading, userId]);
 
   if (phase === "unlocked" && detail) {
     return (
