@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR, timeAgo } from "@/lib/format";
+import { computeWalletBalance } from "@/lib/wallet";
 import { EmptyState } from "@/components/ui";
 import TopUpForm from "./TopUpForm";
 import { Receipt, Wallet } from "lucide-react";
@@ -17,7 +18,7 @@ export default async function WalletPage() {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  const balance = (txns ?? []).reduce((sum, t) => sum + (t.type === "credit" ? Number(t.amount) : -Number(t.amount)), 0);
+  const balance = computeWalletBalance(txns ?? []);
 
   return (
     <div>

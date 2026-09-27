@@ -410,6 +410,26 @@ Deno.serve(async (req) => {
         )
         .maybeSingle();
 
+      // This webhook is a fallback credit path: if the browser never
+      // completes its call to verify-wallet-topup-payment (closed tab,
+      // network failure, blocked request) after Razorpay actually captured
+      // the payment, the wallet must still get credited. The .neq("status",
+      // "paid") guard above means only one of the two paths ever wins this
+      // race for a given order, so this insert can't double-credit a top-up
+      // that verify-wallet-topup-payment already settled.
+      if (updatedWalletOrder) {
+        const { error: creditError } = await db.from("wallet_transactions").insert({
+          user_id: updatedWalletOrder.user_id,
+          type: "credit",
+          category: "added_money",
+          amount: updatedWalletOrder.amount,
+          description: "Added Money",
+        });
+        if (creditError) {
+          console.error("Failed to create wallet top-up credit:", creditError);
+        }
+      }
+
       return json({
         received: true,
         handled: true,
