@@ -1,15 +1,20 @@
 import Link from "next/link";
 import { ArrowRight, Check, Crown, Gift } from "lucide-react";
+import { getRewardSettings, referralRewardText } from "@/lib/referral";
 
 // Same three claims the previous Home copy made — the full list lives in the
 // admin-managed `premium_features` table shown on /premium.
 const PREMIUM_POINTS = ["Priority access", "Extra placement material", "Faster support"];
 
 /**
- * Home Premium + Referral pair. Copy only restates what the product already
- * offers (see /premium and /referral) — no invented prices or reward amounts.
+ * Home Premium + Referral pair. Premium copy only restates what the product
+ * already offers (see /premium). The referral reward line comes live from
+ * `reward_settings` — the same source /referral and the mobile home banner
+ * read — so it never invents a number and stays in sync across surfaces.
  */
-export function PremiumReferralCta() {
+export async function PremiumReferralCta() {
+  const rewardSettings = await getRewardSettings();
+  const rewardText = referralRewardText(rewardSettings);
   return (
     <section className="container-page pt-14 sm:pt-20" aria-label="Premium and referral">
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
@@ -46,9 +51,12 @@ export function PremiumReferralCta() {
               <Gift className="h-6 w-6 text-accent-pink" aria-hidden />
             </span>
             <h2 className="mt-4 font-display text-2xl font-bold tracking-tight text-ink">Refer friends, earn rewards</h2>
-            <p className="mt-2 flex-1 text-[15px] text-ink-muted">
-              Share your referral link — when friends join CampusEduX, you earn wallet credit.
-            </p>
+            <div className="mt-2 flex-1">
+              <p className="text-[15px] font-semibold text-ink">{rewardText}</p>
+              <p className="mt-1 text-[15px] text-ink-muted">
+                Share your referral link — when friends join CampusEduX, you earn wallet credit.
+              </p>
+            </div>
             <Link
               href="/referral"
               className="mt-6 inline-flex h-12 w-fit items-center gap-2 rounded-xl border border-line bg-card px-6 text-sm font-semibold text-ink transition hover:border-accent-pink/40 hover:bg-surface"

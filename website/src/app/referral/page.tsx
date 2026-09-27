@@ -1,32 +1,13 @@
 import type { Metadata } from "next";
-import { getPublicSupabase } from "@/lib/supabase/server";
 import Link from "next/link";
 import { ArrowRight, BadgeIndianRupee } from "lucide-react";
 import { EmptyState } from "@/components/ui";
 import { ReferralHero } from "@/components/referral/ReferralHero";
 import { ReferralHowItWorks } from "@/components/referral/ReferralHowItWorks";
 import { absoluteUrl } from "@/lib/seo";
+import { getRewardSettings } from "@/lib/referral";
 
 export const revalidate = 300;
-
-type RewardSettings = {
-  bonus_type?: string;
-  bonus_value?: number;
-  max_payout?: number;
-  reward_on_signup?: boolean;
-  bonus_validity_days?: number;
-} | null;
-
-async function getRewardSettings(): Promise<RewardSettings> {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const { data } = await supabase
-    .from("reward_settings")
-    .select("bonus_type,bonus_value,max_payout,reward_on_signup,bonus_validity_days")
-    .eq("id", 1)
-    .maybeSingle();
-  return data;
-}
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getRewardSettings();
