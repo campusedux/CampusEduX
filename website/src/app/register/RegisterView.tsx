@@ -3,12 +3,14 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { emitSessionChange } from "@/lib/sessionSignal";
 import { Field, Input } from "@/components/ui";
 import { CURRENT_LEGAL_VERSION, LEGAL_VERSIONS } from "@/legal/config";
 import { absoluteUrl } from "@/lib/seo";
 import { safeInternalPath } from "@/lib/nav";
+import { GoogleIcon } from "@/components/auth/GoogleIcon";
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -38,7 +40,37 @@ function RegisterForm() {
   const [referralCode] = useState(searchParams.get("ref") ?? "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+  const busy = loading || googleLoading;
+
+  async function handleGoogleSignIn() {
+    if (busy) return;
+    setError(null);
+    setGoogleLoading(true);
+
+    const supabase = createBrowserSupabase();
+    // Same pattern as LoginView.handleGoogleSignIn — the referral code rides
+    // along as a plain query param on the callback URL (Google round-trips it
+    // unchanged) so /auth/callback can apply it once the session exists,
+    // since signInWithOAuth has no raw_user_meta_data-style channel the way
+    // signUp's options.data does.
+    const redirectTo = new URL("/auth/callback", window.location.origin);
+    redirectTo.searchParams.set("next", safeInternalPath(searchParams.get("next")));
+    if (referralCode) redirectTo.searchParams.set("ref", referralCode);
+
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: redirectTo.toString() },
+    });
+
+    if (oauthError) {
+      setError(oauthError.message ?? "Could not start Google sign-in.");
+      setGoogleLoading(false);
+      return;
+    }
+    // Success leaves googleLoading true — the browser is already navigating away.
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -111,7 +143,24 @@ function RegisterForm() {
       <h1 className="mt-5 text-2xl font-bold text-ink">Create an account</h1>
       <p className="mt-1 text-sm text-ink-muted">Same account works in the CampusEduX app.</p>
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+      <button
+        type="button"
+        onClick={handleGoogleSignIn}
+        disabled={busy}
+        aria-busy={googleLoading}
+        className="btn-ghost mt-6 w-full bg-card"
+      >
+        {googleLoading ? <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" /> : <GoogleIcon />}
+        Continue with Google
+      </button>
+
+      <div className="my-5 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-ink-muted">
+        <span className="h-px flex-1 bg-line" aria-hidden="true" />
+        or
+        <span className="h-px flex-1 bg-line" aria-hidden="true" />
+      </div>
+
+      <form className="space-y-4" onSubmit={handleSubmit}>
         <Field label="Full name" htmlFor="fullName">
           <Input
             id="fullName"
@@ -169,7 +218,7 @@ function RegisterForm() {
           </Link>
           .
         </p>
-        <button type="submit" disabled={loading} className="btn-primary w-full">
+        <button type="submit" disabled={busy} className="btn-primary w-full">
           {loading ? "Creating account…" : "Create account"}
         </button>
       </form>
