@@ -10,10 +10,11 @@ interface Toast {
   title: string;
   description?: string;
   variant: Variant;
+  action?: { label: string; onClick: () => void };
 }
 
 const ToastCtx = createContext<{
-  toast: (t: { title: string; description?: string; variant?: Variant }) => void;
+  toast: (t: { title: string; description?: string; variant?: Variant; action?: Toast['action']; durationMs?: number }) => void;
 } | null>(null);
 
 let seq = 0;
@@ -24,10 +25,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const remove = useCallback((id: number) => setToasts((ts) => ts.filter((t) => t.id !== id)), []);
 
   const toast = useCallback(
-    ({ title, description, variant = 'info' }: { title: string; description?: string; variant?: Variant }) => {
+    ({ title, description, variant = 'info', action, durationMs = 5000 }: { title: string; description?: string; variant?: Variant; action?: Toast['action']; durationMs?: number }) => {
       const id = ++seq;
-      setToasts((ts) => [...ts, { id, title, description, variant }]);
-      setTimeout(() => remove(id), 5000);
+      setToasts((ts) => [...ts, { id, title, description, variant, action }]);
+      setTimeout(() => remove(id), durationMs);
     },
     [remove],
   );
@@ -60,6 +61,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink">{t.title}</p>
                 {t.description ? <p className="mt-0.5 text-sm text-ink-muted">{t.description}</p> : null}
+                {t.action ? (
+                  <button
+                    onClick={() => {
+                      remove(t.id);
+                      t.action!.onClick();
+                    }}
+                    className="mt-1.5 text-sm font-medium text-brand hover:underline"
+                  >
+                    {t.action.label}
+                  </button>
+                ) : null}
               </div>
               <button onClick={() => remove(t.id)} className="text-ink-faint hover:text-ink" aria-label="Dismiss">
                 <X size={15} />

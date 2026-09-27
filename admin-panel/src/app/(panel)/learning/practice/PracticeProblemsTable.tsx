@@ -5,11 +5,13 @@ import { Badge, StatusPill } from '@/components/ui/primitives';
 import { DeleteButton } from '@/components/ui/DeleteButton';
 import { StatusSelect, PreviewLink } from '@/app/(panel)/learning/_components/shared';
 import type { PracticeProblemRow } from '@/lib/learning/queries';
+import { useSiteNotice } from '@/components/learning/useSiteNotice';
 import { deletePracticeProblem, setPracticeProblemField } from '@/app/(panel)/learning/practice-global-actions';
 
 type Perms = { add: boolean; edit: boolean; delete: boolean };
 
 export function PracticeProblemsTable({ rows, perms }: { rows: PracticeProblemRow[]; perms: Perms }) {
+  const notify = useSiteNotice();
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full min-w-[720px] text-sm">
@@ -49,7 +51,7 @@ export function PracticeProblemsTable({ rows, perms }: { rows: PracticeProblemRo
                     <input
                       type="checkbox"
                       defaultChecked={p.is_premium}
-                      onChange={(e) => setPracticeProblemField(p.id, 'is_premium', e.target.checked)}
+                      onChange={(e) => setPracticeProblemField(p.id, 'is_premium', e.target.checked).then(notify)}
                       className="h-4 w-4 rounded border-border text-brand"
                     />
                     Premium
