@@ -2,6 +2,8 @@ import React, { type ReactNode } from "react";
 import { View, Text, ScrollView, Pressable, Linking, StyleSheet } from "react-native";
 import { canRunInCompiler, compilerUrl } from "@/lib/compilerLink";
 import { notify } from "@/lib/notify";
+import { detectListItemQnA, detectQnA, type DetectedQnA } from "@/learning/reader/qna";
+import { LIGHT_COLORS } from "@/theme/colors";
 
 /**
  * Dependency-free Markdown renderer for Learning content on mobile. Renders a
@@ -81,6 +83,19 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
   }
   if (last < text.length) nodes.push(text.slice(last));
   return nodes;
+}
+
+/** Question on its own line, then a bold "Ans:" label and the answer (see `@/learning/reader/qna`). */
+function renderQnA(pair: DetectedQnA, keyBase: string): ReactNode {
+  return (
+    <>
+      <Text style={styles.qnaQuestion}>{renderInline(pair.question, `${keyBase}q`)}</Text>
+      <Text style={styles.qnaAnswer}>
+        <Text style={styles.qnaLabel}>Ans: </Text>
+        {renderInline(pair.answer, `${keyBase}a`)}
+      </Text>
+    </>
+  );
 }
 
 // --- blocks -------------------------------------------------------------
@@ -214,12 +229,19 @@ function renderBlocks(src: string, enableRunOnWeb = false): ReactNode[] {
       }
       out.push(
         <View key={`b${k++}`} style={styles.list}>
-          {items.map((it, li) => (
-            <View key={li} style={styles.listItem}>
-              <Text style={styles.listMarker}>{it.marker}</Text>
-              <Text style={styles.listText}>{renderInline(it.text, `li${li}`)}</Text>
-            </View>
-          ))}
+          {items.map((it, li) => {
+            const qna = detectListItemQnA(it.text);
+            return (
+              <View key={li} style={styles.listItem}>
+                <Text style={styles.listMarker}>{it.marker}</Text>
+                {qna ? (
+                  <View style={styles.listQnA}>{renderQnA(qna, `li${li}`)}</View>
+                ) : (
+                  <Text style={styles.listText}>{renderInline(it.text, `li${li}`)}</Text>
+                )}
+              </View>
+            );
+          })}
         </View>,
       );
       continue;
@@ -237,6 +259,17 @@ function renderBlocks(src: string, enableRunOnWeb = false): ReactNode[] {
     ) {
       buf.push(lines[i]);
       i += 1;
+    }
+    const qna = detectQnA(buf);
+    if (qna) {
+      for (const pair of qna) {
+        out.push(
+          <View key={`b${k++}`} style={styles.qna}>
+            {renderQnA(pair, `b${k}`)}
+          </View>,
+        );
+      }
+      continue;
     }
     out.push(
       <Text key={`b${k++}`} style={styles.paragraph}>
@@ -297,6 +330,13 @@ const styles = StyleSheet.create({
   listItem: { flexDirection: "row", marginBottom: 4 },
   listMarker: { color: "#9CA3AF", width: 22, fontSize: 15, lineHeight: 23 },
   listText: { flex: 1, fontSize: 15, lineHeight: 23, color: "#374151" },
+  listQnA: { flex: 1 },
+  // Q&A: a little more room than a paragraph so consecutive pairs read apart.
+  qna: { marginVertical: 10 },
+  qnaQuestion: { fontSize: 15, lineHeight: 23, fontWeight: "700", color: "#111827" },
+  qnaAnswer: { fontSize: 15, lineHeight: 23, color: "#374151", marginTop: 2 },
+  // This renderer's palette is fixed light (its callers sit on white cards), so the label uses the light primary text colour.
+  qnaLabel: { fontWeight: "700", color: LIGHT_COLORS.primaryText },
   tableWrap: { marginVertical: 10 },
   tableRow: { flexDirection: "row" },
   tableHeadRow: { backgroundColor: "#EEF0FF" },
