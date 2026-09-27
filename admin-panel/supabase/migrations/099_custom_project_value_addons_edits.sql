@@ -30,7 +30,8 @@
 --       is accepted after the balance was paid) fail with a unique violation AFTER Razorpay captured the money.
 -- 7. Delivered files stay visible after delivery even if the admin later moves the status (e.g. back to
 --    in_development to build an accepted add-on): owners may read a delivery once it has a delivered_at.
---    Downloads are never gated on payment.
+--    Downloads are never gated on payment. The deliveries Storage bucket follows the same rule (section 12):
+--    an uploaded-but-undelivered file is no longer readable by the owner.
 -- ----------------------------------------------------------------------------
 
 do $$
@@ -1062,5 +1063,36 @@ create policy "cpda_select_delivered" on public.custom_project_delivery_assets
      where d.id = delivery_id and r.user_id = auth.uid()
        and (r.status = 'delivered' or d.delivered_at is not null)
   ));
+
+-- ============================================================================
+-- 12. deliveries bucket: the owner may read only files attached to a delivered delivery
+-- ============================================================================
+-- 0033's owner policy was path-only (<owner uid>/...), so files the admin had uploaded but not yet
+-- delivered could be listed and downloaded straight from Storage. Now the same rule as the table policies
+-- above applies: the object must be a custom_project_delivery_assets row of the caller's own request that is
+-- delivered (status 'delivered' or delivered_at set). The admin policies on this bucket are unchanged.
+create index if not exists custom_project_delivery_assets_storage_path_idx
+  on public.custom_project_delivery_assets (storage_path);
+
+create or replace function public.custom_project_can_read_delivery_file(p_name text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and exists (
+    select 1
+      from public.custom_project_delivery_assets a
+      join public.custom_project_deliveries d on d.id = a.delivery_id
+      join public.custom_project_requests r on r.id = d.request_id
+     where a.storage_path = p_name
+       and r.user_id = auth.uid()
+       and (r.status = 'delivered' or d.delivered_at is not null)
+  );
+$$;
+revoke all on function public.custom_project_can_read_delivery_file(text) from public, anon;
+grant execute on function public.custom_project_can_read_delivery_file(text) to authenticated;
+
+drop policy if exists "cp_deliveries_owner_read" on storage.objects;
+create policy "cp_deliveries_owner_read" on storage.objects for select to authenticated
+  using (bucket_id = 'custom-project-deliveries'
+         and (storage.foldername(name))[1] = auth.uid()::text
+         and public.custom_project_can_read_delivery_file(name));
 
 notify pgrst, 'reload schema';

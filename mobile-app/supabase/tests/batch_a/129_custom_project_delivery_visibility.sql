@@ -32,7 +32,8 @@ begin
   insert into storage.objects(bucket_id, name) values
     ('custom-project-deliveries', a::text || '/' || r_staged::text     || '/src.zip'),
     ('custom-project-deliveries', a::text || '/' || r_delivered::text  || '/src.zip'),
-    ('custom-project-deliveries', a::text || '/' || r_moved_back::text || '/src.zip');
+    ('custom-project-deliveries', a::text || '/' || r_moved_back::text || '/src.zip'),
+    ('custom-project-deliveries', a::text || '/' || r_delivered::text  || '/orphan-not-attached.zip');
 
   perform test_as(adm);
   perform custom_project_set_status(r_delivered, 'delivered', null);
@@ -78,9 +79,22 @@ begin
      or exists (select 1 from custom_project_delivery_assets where delivery_id = d_staged) then
     raise exception 'FAIL owner reads a staged (never delivered) delivery';
   end if;
+  -- Storage (what createSignedUrl / download check): delivered + moved-back files are readable ...
+  if not exists (select 1 from storage.objects where bucket_id = 'custom-project-deliveries'
+                  and name = a::text || '/' || r_delivered::text || '/src.zip')
+     or not exists (select 1 from storage.objects where bucket_id = 'custom-project-deliveries'
+                     and name = a::text || '/' || r_moved_back::text || '/src.zip') then
+    raise exception 'FAIL owner cannot download a delivered file';
+  end if;
+  -- ... but an uploaded-but-undelivered file is NOT, even by its exact path in the owner's own folder
+  if exists (select 1 from storage.objects where bucket_id = 'custom-project-deliveries'
+              and name = a::text || '/' || r_staged::text || '/src.zip') then
+    raise exception 'FAIL owner can download an undelivered file';
+  end if;
+  -- ... nor an object in their folder that is not attached to any delivery
   select count(*) into n from storage.objects
    where bucket_id = 'custom-project-deliveries' and name like a::text || '/%';
-  if n < 2 then raise exception 'FAIL owner cannot read own delivered files (%)', n; end if;
+  if n <> 2 then raise exception 'FAIL owner sees % delivery objects, expected exactly the 2 delivered ones', n; end if;
   -- the owner still cannot write into the deliveries bucket
   begin
     insert into storage.objects(bucket_id, name) values ('custom-project-deliveries', a::text || '/x/own.zip');
