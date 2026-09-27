@@ -8,8 +8,18 @@ import { SITE_URL } from "@/lib/seo";
 import { ReferralHero } from "@/components/referral/ReferralHero";
 import { ReferralHowItWorks } from "@/components/referral/ReferralHowItWorks";
 import { ShareReferralLink } from "@/components/referral/ShareReferralLink";
+import { ReferralReminderButton } from "@/components/referral/ReferralReminderButton";
 
 const isDone = (status: string) => status === "successful" || status === "completed";
+
+interface ReferralHistoryRow {
+  id: string;
+  status: string;
+  reward_amount: number;
+  created_at: string;
+  completed_at: string | null;
+  referred_display_name: string | null;
+}
 
 export default async function AccountReferralPage() {
   const user = await requireUser();
@@ -17,15 +27,16 @@ export default async function AccountReferralPage() {
 
   const [{ data: code }, { data: referrals }] = await Promise.all([
     supabase.from("referral_codes").select("code,total_referrals,total_earned").eq("user_id", user.id).maybeSingle(),
-    supabase
-      .from("referrals")
-      .select("id,status,reward_amount,created_at,completed_at,referred_user:profiles!referrals_referred_user_id_fkey(full_name,email)")
-      .eq("referrer_id", user.id)
-      .order("created_at", { ascending: false }),
+    // Privacy-safe RPC (migration 0126): masked first-name + last-initial
+    // only, never email/phone. The direct `profiles` join this replaced was
+    // also silently denied by RLS (a referrer has no read policy on a
+    // referred user's profile row), so history rows always showed "Pending
+    // signup" regardless of real status.
+    supabase.rpc("referral_history"),
   ]);
 
   const link = code?.code ? `${SITE_URL}/register?ref=${code.code}` : null;
-  const history = referrals ?? [];
+  const history: ReferralHistoryRow[] = referrals ?? [];
   const completed = history.filter((r) => isDone(r.status)).length;
   const pending = history.length - completed;
 
@@ -94,16 +105,18 @@ export default async function AccountReferralPage() {
         ) : (
           <div className="card mt-4 divide-y divide-line">
             {history.map((r) => {
-              const ref = Array.isArray(r.referred_user) ? r.referred_user[0] : r.referred_user;
+              const done = isDone(r.status);
+              const name = r.referred_display_name || "Pending signup";
               return (
-                <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-4 text-sm">
+                <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm">
                   <div className="min-w-0">
-                    <div className="truncate font-medium text-ink">{ref?.full_name || ref?.email || "Pending signup"}</div>
+                    <div className="truncate font-medium text-ink">{name}</div>
                     <div className="text-xs text-ink-faint">{timeAgo(r.created_at)}</div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-semibold text-ink">{formatINR(r.reward_amount)}</span>
-                    <Badge tone={isDone(r.status) ? "success" : "neutral"}>{r.status}</Badge>
+                    <Badge tone={done ? "success" : "neutral"}>{done ? "Purchased a project" : "Signed up"}</Badge>
+                    {!done && link && <ReferralReminderButton link={link} name={r.referred_display_name} />}
                   </div>
                 </div>
               );
