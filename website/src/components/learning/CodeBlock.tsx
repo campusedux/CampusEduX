@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Check, Play, ExternalLink } from "lucide-react";
-import { isRunnableLanguage, resolveLanguage } from "@/lib/compiler/languages";
+import { isRunnableSnippet, resolveLanguage } from "@/lib/compiler/languages";
 import { buildCompilerHref, HANDOFF_STORAGE_KEY } from "@/lib/compiler/handoff";
 
 /**
@@ -21,7 +21,8 @@ import { buildCompilerHref, HANDOFF_STORAGE_KEY } from "@/lib/compiler/handoff";
 export function CodeBlock({ code, lang }: { code: string; lang: string }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
-  const runnable = isRunnableLanguage(lang);
+  // The single-file compiler has only the JDK: Java that needs a framework or library can't run there.
+  const runnable = isRunnableSnippet(lang, code);
   const canonical = resolveLanguage(lang)?.id ?? lang;
 
   async function copy() {
