@@ -7,7 +7,7 @@ import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { CodingProblemBody } from "@/app/coding-problems/[problemSlug]/CodingProblemBody";
 import { PracticeProblemPremiumGate } from "./PracticeProblemPremiumGate";
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 export const dynamicParams = true;
 
 // [] registers the route for ISR without prerendering every problem at build time.

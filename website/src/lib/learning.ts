@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
+import { cachedPublicRead, RpcFailed } from "@/lib/publicCache";
 import { LEARNING_LEAF_REVALIDATE, LEARNING_SHARED_REVALIDATE, learningTag } from "@/lib/learningTags";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { onlyActiveJobs } from "@/lib/jobsActive";
@@ -53,30 +54,21 @@ export { flattenTopics } from "@/lib/learning.types";
 
 const PLATFORM = "website";
 
-/**
- * Cross-request cache for a public (anon-client) RPC read. Errors THROW inside
- * the cached function so a transient failure is never cached; the caller gets
- * `fallback` and the next request retries. "Not found" (null) IS cached, and
- * carries the same tags, so publishing it later is picked up by tag revalidation.
- */
-async function cachedRead<A extends string[], R>(
+// Per-topic / per-problem entries (read once per page regeneration) get the leaf TTL.
+const LEAF_KEYS = new Set(["learning:topic", "learning:topic-practice", "learning:coding-problem", "learning:coding-related"]);
+
+/** Learning-flavoured `cachedPublicRead`: adds the coarse `learning` tag and picks the TTL by key. */
+function cachedRead<A extends string[], R>(
   key: string,
   args: A,
   tags: string[],
   read: (...a: A) => Promise<R>,
   fallback: R,
 ): Promise<R> {
-  try {
-    return await unstable_cache(read, [key, ...args], { revalidate: LEAF_KEYS.has(key) ? LEARNING_LEAF_REVALIDATE : LEARNING_SHARED_REVALIDATE, tags: ["learning", ...tags] })(...args);
-  } catch {
-    return fallback;
-  }
+  const ttl = LEAF_KEYS.has(key) ? LEARNING_LEAF_REVALIDATE : LEARNING_SHARED_REVALIDATE;
+  return cachedPublicRead(key, args, ["learning", ...tags], ttl, read, fallback);
 }
 
-class RpcFailed extends Error {}
-
-// Per-topic / per-problem entries (read once per page regeneration) get the short TTL.
-const LEAF_KEYS = new Set(["learning:topic", "learning:topic-practice", "learning:coding-problem", "learning:coding-related"]);
 
 export const getLearningGrids = cache(async (): Promise<LearningGridCard[]> =>
   cachedRead("learning:grids", [] as [], [learningTag.list], async () => {

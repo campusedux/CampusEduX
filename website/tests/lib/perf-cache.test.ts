@@ -73,6 +73,12 @@ describe("POST /api/revalidate", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/sitemap.xml");
   });
 
+  it("accepts the granular practice / interview tags and rejects malformed ones", async () => {
+    const { POST } = await load();
+    const res = await POST(post({ tags: ["practice:problem:two-sum", "interview:category:java", "interview:topic:java:collections", "interview:topic:java", "practice:problem:a b"] }, CONFIGURED));
+    expect((await res.json()).tags).toEqual(["practice:problem:two-sum", "interview:category:java", "interview:topic:java:collections"]);
+  });
+
   it("keeps the coarse legacy tags working", async () => {
     const { POST } = await load();
     const res = await POST(post({ tags: ["learning", "blog"] }, CONFIGURED));
@@ -131,8 +137,10 @@ describe("public cached routes stay cookie-free", () => {
   }
 
   it("the learning data layer only uses the anon public client", () => {
-    const src = readFileSync(join(root, "lib/learning.ts"), "utf8");
-    expect(src).toMatch(/getPublicSupabase/);
-    for (const re of FORBIDDEN) expect(src).not.toMatch(re);
+    for (const f of ["lib/learning.ts", "lib/practice.ts", "lib/interviewQuestions.ts", "lib/publicCache.ts"]) {
+      const src = readFileSync(join(root, f), "utf8");
+      if (f !== "lib/publicCache.ts") expect(src, f).toMatch(/getPublicSupabase/);
+      for (const re of FORBIDDEN) expect(src, f).not.toMatch(re);
+    }
   });
 });

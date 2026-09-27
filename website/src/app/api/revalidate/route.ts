@@ -1,7 +1,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { isAllowedLearningTag, learningTag } from "@/lib/learningTags";
+import { isAllowedContentTag, learningTag } from "@/lib/learningTags";
 
 export const runtime = "nodejs";
 
@@ -22,7 +22,8 @@ export const runtime = "nodejs";
  *
  * Granular Learning tags (see `lib/learningTags.ts`): learning:list,
  * learning:sitemap, learning:grid:<grid>, learning:topic:<grid>:<topic>,
- * learning:coding:<slug>. `learning:sitemap` also re-renders /sitemap.xml.
+ * learning:coding:<slug>; practice:problem:<slug>; interview:category:<cat>;
+ * interview:topic:<cat>:<topic>. `learning:sitemap` also re-renders /sitemap.xml.
  *
  * Known tags: projects, jobs, categories, companies, home, learning, practice,
  * premium, resume-templates, cms, blog, interview-questions.
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
 
   if (Array.isArray(body.tags)) {
     for (const t of body.tags.slice(0, MAX_TAGS)) {
-      if (typeof t === "string" && (ALLOWED_TAGS.has(t) || isAllowedLearningTag(t))) {
+      if (typeof t === "string" && (ALLOWED_TAGS.has(t) || isAllowedContentTag(t))) {
         revalidateTag(t);
         done.tags.push(t);
         if (t === learningTag.sitemap) {

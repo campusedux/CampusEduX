@@ -6,7 +6,7 @@ import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { CodingProblemBody } from "./CodingProblemBody";
 import { CodingProblemPremiumGate } from "./CodingProblemPremiumGate";
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 export const dynamicParams = true;
 
 // [] still registers the route for ISR (on-demand renders are cached for

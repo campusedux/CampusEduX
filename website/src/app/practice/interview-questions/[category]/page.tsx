@@ -8,7 +8,7 @@ import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { getInterviewTopics } from "@/lib/interviewQuestions";
 import { interviewQuestionsCrumbs } from "@/lib/interviewQuestions.types";
 
-export const revalidate = 3600;
+export const revalidate = 21600;
 export const dynamicParams = true;
 
 // [] registers the route for ISR without prerendering every category at

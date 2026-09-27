@@ -10,7 +10,7 @@
 //   node scripts/revalidate-learning.mjs --grid spring-boot-tutorial   (= the three tags above)
 //   node scripts/revalidate-learning.mjs --dry-run --grid spring-boot-tutorial
 const SLUG = "[a-z0-9][a-z0-9_-]{0,99}";
-const TAG = new RegExp(`^learning:(?:list|sitemap|grid:${SLUG}|topic:${SLUG}:${SLUG}|coding:${SLUG})$`);
+const TAG = new RegExp(`^learning:(?:list|sitemap|grid:${SLUG}|topic:${SLUG}:${SLUG}|coding:${SLUG})$|^(?:practice:problem:${SLUG}|interview:category:${SLUG}|interview:topic:${SLUG}:${SLUG})$`);
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");

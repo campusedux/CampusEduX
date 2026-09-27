@@ -2,21 +2,23 @@
 
 Public Learning content is ISR (`revalidate = 3600` on learning, coding-problem, practice and interview routes) on top of `unstable_cache` reads in `src/lib/learning.ts`.
 
-## Staleness (no on-demand revalidation)
+## Staleness
 
-Worst case = page ISR + data-cache TTL, because a page can regenerate just before its data entry expires.
+Two layers: the route's ISR `revalidate` and the `unstable_cache` data TTL. Worst case for a change that does NOT go through `/api/revalidate` (direct SQL, a migration, a failed admin refresh) = page TTL + data TTL, because a page can regenerate just before its data entry expires.
 
-| Data | Data TTL | Worst case |
-| --- | --- | --- |
-| Topic content, topic practice, coding problem (per-entry) | 300 s | ~65 min |
-| Grid list, tree, grid brief, slug lists (shared) | 900 s | ~75 min |
-| Sitemap route | 3600 s | ~75 min (its sources are 900 s) |
+| Content | Page ISR | Data TTL | Worst case without a refresh |
+| --- | --- | --- | --- |
+| Learning topic, coding problem, practice problem, interview topic (long tail, rarely edited) | 24 h | 1 h | ~25 h |
+| Course overview, `/learning`, practice hub, interview hub and category pages | 6 h | 1 h | ~7 h |
+| Sitemap | 1 h | 1 h | ~2 h |
 
-`revalidateTag` clears both layers: `unstable_cache` adds its tags to the ISR page that consumed it (on hit and miss), so one call drops the data entry and the page.
+Admin saves (PR "admin refresh") and `scripts/revalidate-learning.mjs` clear both layers immediately: `unstable_cache` adds its tags to the ISR page that consumed it (on hit and miss), so one `revalidateTag` drops the data entry and the page. After a SQL seed or migration, run the script; until then expect the worst case above.
 
 ## Tags (`src/lib/learningTags.ts`)
 
 `learning:list`, `learning:sitemap`, `learning:grid:<grid>`, `learning:topic:<grid>:<topic>`, `learning:coding:<slug>`, plus the legacy coarse `learning`. Topic entries also carry their grid tag, so a grid tag refreshes the whole course.
+
+Practice and Interview detail pages: `practice:problem:<slug>`, `interview:category:<cat>` (category page and every topic page in it, because of prev/next links), `interview:topic:<cat>:<topic>`. Each also carries its coarse tag (`practice` / `interview-questions`), which the admin panel sends today, so an admin save already refreshes them (all pages of that kind). Sending the granular tags from the admin is a follow-up that limits the refresh to one page.
 
 ## Endpoint and script
 
