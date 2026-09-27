@@ -12,8 +12,14 @@ import { BlogImage } from "./BlogImage";
  * lift). `h-full` + the flex column let a CSS-grid row equalise card heights.
  *
  * `featured` switches to a wide two-column layout (image left, text right) from
- * `sm` up — used for the single lead article on the blog index. Presentation
- * only; same href, same data.
+ * `lg` up — used for the lead article on the blog index (and a lone leftover
+ * featured article). Below `lg` it stacks like a normal card: at tablet widths
+ * the text column is taller than a 16:9 image beside it, which forced a crop.
+ *
+ * Thumbnails are 16:9 with title text baked in near the top, so the wrapper is
+ * always `aspect-[16/9]` (never shorter than the image) and the image is
+ * anchored `object-top` — any crop comes off the bottom/sides, not the title.
+ * Presentation only; same href, same data.
  */
 export function BlogCard({
   post,
@@ -29,13 +35,13 @@ export function BlogCard({
       href={`/blog/${post.slug}`}
       className={cn(
         "card card-hover group flex h-full flex-col overflow-hidden",
-        featured && "sm:flex-row",
+        featured && "lg:flex-row",
       )}
     >
       <div
         className={cn(
           "relative flex-shrink-0 overflow-hidden bg-primary-50",
-          featured ? "aspect-[16/9] sm:aspect-auto sm:w-[46%]" : "aspect-[16/9]",
+          featured ? "aspect-[16/9] lg:w-1/2 2xl:w-[42%]" : "aspect-[16/9]",
         )}
       >
         {post.featured_image ? (
@@ -45,11 +51,11 @@ export function BlogCard({
             priority={priority}
             sizes={
               featured
-                ? "(min-width: 1024px) 560px, (min-width: 640px) 46vw, 100vw"
+                ? "(min-width: 1536px) 42vw, (min-width: 1024px) 50vw, 100vw"
                 : "(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw"
             }
             className="h-full w-full"
-            imgClassName="transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none"
+            imgClassName="object-top transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary-50 to-surface">
@@ -75,8 +81,8 @@ export function BlogCard({
 
         <h3
           className={cn(
-            "mt-3 line-clamp-2 font-bold leading-snug text-ink group-hover:text-primary",
-            featured ? "text-xl sm:text-2xl" : "text-lg",
+            "mt-3 font-bold leading-snug text-ink group-hover:text-primary",
+            featured ? "line-clamp-3 text-xl sm:text-2xl" : "line-clamp-2 text-lg",
           )}
         >
           {post.title}

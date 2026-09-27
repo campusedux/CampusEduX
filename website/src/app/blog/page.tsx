@@ -119,8 +119,18 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
               <h2 className="h-section">Featured articles</h2>
               <div className="mt-5 space-y-6">
                 {lead ? <BlogCard post={lead} priority featured /> : null}
-                {restFeatured.length > 0 ? (
-                  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {/* Adaptive so a leftover card never sits in 1/3 width next to
+                    empty space: 1 → full-width horizontal card like the lead,
+                    2 → two equal columns, 3+ → three columns (2 on tablet). */}
+                {restFeatured.length === 1 ? (
+                  <BlogCard post={restFeatured[0]} priority featured />
+                ) : restFeatured.length > 1 ? (
+                  <div
+                    className={cn(
+                      "grid gap-6 sm:grid-cols-2",
+                      restFeatured.length >= 3 && "lg:grid-cols-3",
+                    )}
+                  >
                     {restFeatured.map((p, i) => (
                       <BlogCard key={p.id} post={p} priority={i < 2} />
                     ))}
