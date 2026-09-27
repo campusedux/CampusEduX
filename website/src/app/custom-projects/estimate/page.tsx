@@ -235,6 +235,45 @@ function EstimateBody({
             ))}
           </ul>
         </section>
+
+        {/* Bottom action bar */}
+        <div>
+          <BottomBar
+            step={3}
+            sticky={false}
+            left={
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <Link
+                  href="/custom-projects/features"
+                  className="text-sm font-medium text-ink-muted underline hover:text-ink"
+                >
+                  ← Edit features
+                </Link>
+
+                <Link
+                  href="/custom-projects/start"
+                  className="text-sm font-medium text-ink-muted underline hover:text-ink"
+                >
+                  ← Edit details
+                </Link>
+              </div>
+            }
+            right={
+              <Button
+                href="/custom-projects/checkout"
+                leftIcon={Lock}
+                size="lg"
+              >
+                Continue to secure payment
+              </Button>
+            }
+          />
+
+          <p className="mt-3 text-xs text-ink-faint">
+            You&apos;re reviewing your project scope before payment.
+            Payment amount: {formatINR(estimate.tokenAmount)}.
+          </p>
+        </div>
       </div>
 
       {/* Right column */}
@@ -385,45 +424,6 @@ function EstimateBody({
           </dl>
         </div>
       </aside>
-
-      {/* Bottom action bar */}
-      <div className="lg:col-span-2">
-        <BottomBar
-          step={3}
-          sticky={false}
-          left={
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <Link
-                href="/custom-projects/features"
-                className="text-sm font-medium text-ink-muted underline hover:text-ink"
-              >
-                ← Edit features
-              </Link>
-
-              <Link
-                href="/custom-projects/start"
-                className="text-sm font-medium text-ink-muted underline hover:text-ink"
-              >
-                ← Edit details
-              </Link>
-            </div>
-          }
-          right={
-            <Button
-              href="/custom-projects/checkout"
-              leftIcon={Lock}
-              size="lg"
-            >
-              Continue to secure payment
-            </Button>
-          }
-        />
-
-        <p className="mt-3 text-xs text-ink-faint">
-          You&apos;re reviewing your project scope before payment.
-          Payment amount: {formatINR(estimate.tokenAmount)}.
-        </p>
-      </div>
     </div>
   );
 }

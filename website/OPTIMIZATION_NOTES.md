@@ -4,8 +4,9 @@
 **Branch:** `audit/full-project-review` · **Dates:** 2026-09-06
 **Commits:** `185c502` (P0) → `17912ae` (P1) → `7a7ca5c` (P2) → `7ffacba` (P3) → `73d0039` (P4) → this (P5).
 
-Per-phase detail lives in `PERFORMANCE_AUDIT.md` (P0), `PERFORMANCE_PHASE1..4.md`,
-and `docs/perf/audit-website.md` (a prior on-branch audit, folded in). This file
+Per-phase detail (the P0 baseline audit, the P1–P4 phase reports and a prior
+on-branch audit, folded in) was kept in separate reports that have since been
+removed from the tree; they remain available in git history. This file
 is the summary: **what was done, what remains, what needs infra / a paid plan.**
 
 ---
@@ -243,7 +244,7 @@ cross-region hop adds ~200–250 ms to **every** server-side Supabase call.
 `next/image`'s optimizer already resizes + AVIF-converts every catalog image, so
 Storage originals are never shipped. On the **Pro plan** you can additionally
 move the resize work off the Next server onto Supabase's own image CDN with a
-custom `next/image` loader — snippet in `PERFORMANCE_PHASE4.md §23`. Not required;
+custom `next/image` loader — snippet in the P4 phase report (see git history). Not required;
 only a compute offload.
 
 ### M5. Wire `revalidateTag` into the admin panel (optional)
@@ -287,7 +288,7 @@ drafted in `website/docs/perf/suggested-indexes.sql`. Correctness-sensitive
 
 - **Lighthouse / real Core Web Vitals (LCP, INP, CLS, TBT) and the perf score.**
   No Chrome / headless browser here, and the site isn't deployed to a public URL.
-  The CWV numbers in `PERFORMANCE_AUDIT.md` are lab *estimates*, flagged as such.
+  The CWV numbers in the P0 baseline audit (see git history) are lab *estimates*, flagged as such.
   **→ This is what the new Lighthouse CI job is for** (§6): it runs on every PR
   with a real headless Chrome on the GitHub runner and fails the check on a
   regression.
