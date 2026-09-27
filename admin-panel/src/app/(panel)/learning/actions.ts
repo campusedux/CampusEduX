@@ -8,13 +8,15 @@ import { logActivity } from '@/lib/audit';
 import { isValidSlug, slugify, GRID_TYPES, parseTags } from '@/lib/learning/constants';
 import type { LearningStatus, GridType } from '@/lib/learning/constants';
 import { resolveLearningTargeting } from '@/lib/learning/targeting';
+import type { SiteSync } from '@/lib/learning/siteRevalidate';
+import { gridSlugById, syncGridStructure, syncGridStructureById, syncTopicByPath } from '@/lib/learning/siteSync';
 
 // The unified Learning CMS runs under its own `learning` permission module
 // (migration 0045/022 seeds `role_permissions`). RLS `*_admin_all` (is_admin)
 // on every learning_* / practice table is the authoritative backstop.
 const MODULE = 'learning' as const;
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string } & SiteSync;
 type IdResult = Result & { id?: string };
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -146,7 +148,7 @@ export async function createGrid(_p: IdResult, fd: FormData): Promise<IdResult> 
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.grid.create', module: MODULE, resourceType: 'learning_grids', resourceId: data.id });
   revalidatePath('/learning');
-  return { ok: true, id: data.id };
+  return { ok: true, id: data.id, ...(await syncGridStructure([slug.slug])) };
 }
 
 export async function updateGrid(id: string, _p: Result, fd: FormData): Promise<Result> {
@@ -159,6 +161,7 @@ export async function updateGrid(id: string, _p: Result, fd: FormData): Promise<
   const slug = resolveSlug(fd, 'name');
   if (!slug.ok) return slug;
 
+  const before = await gridSlugById(id);
   const { error } = await supabase
     .from('learning_grids')
     .update({
@@ -173,7 +176,7 @@ export async function updateGrid(id: string, _p: Result, fd: FormData): Promise<
   await logActivity({ action: 'learning.grid.update', module: MODULE, resourceType: 'learning_grids', resourceId: id });
   revalidatePath('/learning');
   revalidatePath(`/learning/grids/${id}`);
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructure([before, slug.slug])) };
 }
 
 export async function deleteGrid(id: string): Promise<Result> {
@@ -184,11 +187,12 @@ export async function deleteGrid(id: string): Promise<Result> {
   if ((count ?? 0) > 0 || (tcount ?? 0) > 0) {
     return { ok: false, error: 'This grid still has sections or topics. Archive the grid, or remove them first.' };
   }
+  const before = await gridSlugById(id);
   const { error } = await supabase.from('learning_grids').delete().eq('id', id);
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.grid.delete', module: MODULE, resourceType: 'learning_grids', resourceId: id });
   revalidatePath('/learning');
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructure([before])) };
 }
 
 export async function setGridField(
@@ -205,14 +209,14 @@ export async function setGridField(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: `learning.grid.${field}`, module: MODULE, resourceType: 'learning_grids', resourceId: id });
   revalidatePath('/learning');
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructureById(id)) };
 }
 
 export async function reorderGrid(id: string, dir: 'up' | 'down'): Promise<Result> {
   await requirePermission(MODULE, 'edit');
   const r = await moveRow('learning_grids', id, 'status', dir);
   revalidatePath('/learning');
-  return r;
+  return r.ok ? { ...r, ...(await syncGridStructure([])) } : r;
 }
 
 // ===========================================================================
@@ -247,7 +251,7 @@ export async function createSection(gridId: string, _p: Result, fd: FormData): P
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.section.create', module: MODULE, resourceType: 'learning_sections' });
   revalidatePath(`/learning/grids/${gridId}`);
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructureById(gridId)) };
 }
 
 export async function updateSection(id: string, gridId: string, _p: Result, fd: FormData): Promise<Result> {
@@ -265,7 +269,7 @@ export async function updateSection(id: string, gridId: string, _p: Result, fd: 
   await logActivity({ action: 'learning.section.update', module: MODULE, resourceType: 'learning_sections', resourceId: id });
   revalidatePath(`/learning/grids/${gridId}`);
   revalidatePath(`/learning/grids/${gridId}/sections/${id}`);
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructureById(gridId)) };
 }
 
 export async function deleteSection(id: string, gridId: string): Promise<Result> {
@@ -279,7 +283,7 @@ export async function deleteSection(id: string, gridId: string): Promise<Result>
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.section.delete', module: MODULE, resourceType: 'learning_sections', resourceId: id });
   revalidatePath(`/learning/grids/${gridId}`);
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructureById(gridId)) };
 }
 
 export async function setSectionField(
@@ -297,14 +301,14 @@ export async function setSectionField(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: `learning.section.${field}`, module: MODULE, resourceType: 'learning_sections', resourceId: id });
   revalidatePath(`/learning/grids/${gridId}`);
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructureById(gridId)) };
 }
 
 export async function reorderSection(id: string, gridId: string, dir: 'up' | 'down'): Promise<Result> {
   await requirePermission(MODULE, 'edit');
   const r = await moveRow('learning_sections', id, 'grid_id', dir);
   revalidatePath(`/learning/grids/${gridId}`);
-  return r;
+  return r.ok ? { ...r, ...(await syncGridStructureById(gridId)) } : r;
 }
 
 // ===========================================================================
@@ -351,7 +355,7 @@ export async function createTopic(sectionId: string, gridId: string, _p: IdResul
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.topic.create', module: MODULE, resourceType: 'learning_topics', resourceId: data.id });
   revalidatePath(`/learning/grids/${gridId}/sections/${sectionId}`);
-  return { ok: true, id: data.id };
+  return { ok: true, id: data.id, ...(await syncGridStructureById(gridId)) };
 }
 
 /** Create a topic directly under a grid (Grid → Topic → Content — used by the
@@ -382,7 +386,7 @@ export async function createGridTopic(gridId: string, _p: IdResult, fd: FormData
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.topic.create', module: MODULE, resourceType: 'learning_topics', resourceId: data.id });
   revalidatePath(`/learning/grids/${gridId}`);
-  return { ok: true, id: data.id };
+  return { ok: true, id: data.id, ...(await syncGridStructureById(gridId)) };
 }
 
 export async function updateTopic(
@@ -411,7 +415,7 @@ export async function updateTopic(
     revalidatePath(`/learning/grids/${gridId}/sections/${sectionId}`);
     revalidatePath(`/learning/grids/${gridId}/sections/${sectionId}/topics/${id}`);
   }
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructureById(gridId)) };
 }
 
 export async function deleteTopic(id: string, sectionId: string | null, gridId: string): Promise<Result> {
@@ -432,7 +436,7 @@ export async function deleteTopic(id: string, sectionId: string | null, gridId: 
   await logActivity({ action: 'learning.topic.delete', module: MODULE, resourceType: 'learning_topics', resourceId: id });
   revalidatePath(`/learning/grids/${gridId}`);
   if (sectionId) revalidatePath(`/learning/grids/${gridId}/sections/${sectionId}`);
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructureById(gridId)) };
 }
 
 export async function setTopicField(
@@ -452,7 +456,7 @@ export async function setTopicField(
   await logActivity({ action: `learning.topic.${field}`, module: MODULE, resourceType: 'learning_topics', resourceId: id });
   revalidatePath(`/learning/grids/${gridId}`);
   if (sectionId) revalidatePath(`/learning/grids/${gridId}/sections/${sectionId}`);
-  return { ok: true };
+  return { ok: true, ...(await syncGridStructureById(gridId)) };
 }
 
 export async function reorderTopic(
@@ -465,7 +469,7 @@ export async function reorderTopic(
   const r = await moveRow('learning_topics', id, sectionId ? 'section_id' : 'grid_id', dir);
   revalidatePath(`/learning/grids/${gridId}`);
   if (sectionId) revalidatePath(`/learning/grids/${gridId}/sections/${sectionId}`);
-  return r;
+  return r.ok ? { ...r, ...(await syncGridStructureById(gridId)) } : r;
 }
 
 // ===========================================================================
@@ -516,7 +520,7 @@ export async function createContent(topicId: string, path: string, _p: Result, f
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.content.create', module: MODULE, resourceType: 'learning_contents' });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
 
 export async function updateContent(id: string, path: string, _p: Result, fd: FormData): Promise<Result> {
@@ -535,7 +539,7 @@ export async function updateContent(id: string, path: string, _p: Result, fd: Fo
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.content.update', module: MODULE, resourceType: 'learning_contents', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
 
 export async function deleteContent(id: string, path: string): Promise<Result> {
@@ -545,7 +549,7 @@ export async function deleteContent(id: string, path: string): Promise<Result> {
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.content.delete', module: MODULE, resourceType: 'learning_contents', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
 
 export async function setContentField(
@@ -563,12 +567,12 @@ export async function setContentField(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: `learning.content.${field}`, module: MODULE, resourceType: 'learning_contents', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
 
 export async function reorderContent(id: string, path: string, dir: 'up' | 'down'): Promise<Result> {
   await requirePermission(MODULE, 'edit');
   const r = await moveRow('learning_contents', id, 'topic_id', dir);
   revalidatePath(path);
-  return r;
+  return r.ok ? { ...r, ...(await syncTopicByPath(path)) } : r;
 }

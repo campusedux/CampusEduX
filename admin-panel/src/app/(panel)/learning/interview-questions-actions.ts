@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { SiteSync } from '@/lib/learning/siteRevalidate';
+import { syncInterview } from '@/lib/learning/siteSync';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth';
 
@@ -9,7 +11,7 @@ import { requirePermission } from '@/lib/auth';
 const MODULE = 'learning' as const;
 const LIST_PATH = '/learning/interview-questions';
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string } & SiteSync;
 
 export async function reorderInterviewTopic(id: string, categoryId: string, dir: 'up' | 'down'): Promise<Result> {
   await requirePermission(MODULE, 'edit');
@@ -31,7 +33,7 @@ export async function reorderInterviewTopic(id: string, categoryId: string, dir:
   const { error: e2 } = await supabase.from('interview_topics').update({ sort_order: a.sort_order }).eq('id', b.id);
   if (e1 || e2) return { ok: false, error: (e1 ?? e2)!.message };
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 export async function reorderInterviewQuestion(id: string, topicId: string, dir: 'up' | 'down'): Promise<Result> {
@@ -54,5 +56,5 @@ export async function reorderInterviewQuestion(id: string, topicId: string, dir:
   const { error: e2 } = await supabase.from('interview_questions').update({ sort_order: a.sort_order }).eq('id', b.id);
   if (e1 || e2) return { ok: false, error: (e1 ?? e2)!.message };
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }

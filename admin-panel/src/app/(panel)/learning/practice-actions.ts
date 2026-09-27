@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { SiteSync } from '@/lib/learning/siteRevalidate';
+import { codingSlugById, codingTags, syncTopicByPath } from '@/lib/learning/siteSync';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
@@ -17,7 +19,7 @@ import { slugify, isValidSlug, CODING_LANGUAGES, MOCK_TEST_CATEGORIES } from '@/
  */
 const MODULE = 'learning' as const;
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string } & SiteSync;
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const n = (fd: FormData, k: string) => Number(s(fd, k) || 0);
@@ -119,7 +121,7 @@ export async function createTopicMockTest(
   await logActivity({ action: 'learning.mocktest.create', module: MODULE, resourceType: 'practice_tests' });
   void uid;
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
 
 export async function updateTopicMockTest(id: string, path: string, _p: Result, fd: FormData): Promise<Result> {
@@ -131,7 +133,7 @@ export async function updateTopicMockTest(id: string, path: string, _p: Result, 
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.mocktest.update', module: MODULE, resourceType: 'practice_tests', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
 
 export async function deleteTopicMockTest(id: string, path: string): Promise<Result> {
@@ -141,7 +143,7 @@ export async function deleteTopicMockTest(id: string, path: string): Promise<Res
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.mocktest.delete', module: MODULE, resourceType: 'practice_tests', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
 
 export async function setTopicMockTestField(
@@ -156,7 +158,7 @@ export async function setTopicMockTestField(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: `learning.mocktest.${field}`, module: MODULE, resourceType: 'practice_tests', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
 
 // ===========================================================================
@@ -242,7 +244,7 @@ export async function createTopicCodingProblem(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.coding.create', module: MODULE, resourceType: 'dsa_problems' });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path, codingTags(parsed.slug))) };
 }
 
 export async function updateTopicCodingProblem(id: string, path: string, _p: Result, fd: FormData): Promise<Result> {
@@ -252,6 +254,7 @@ export async function updateTopicCodingProblem(id: string, path: string, _p: Res
   if (await slugTaken(parsed.slug, id)) {
     return { ok: false, error: 'That slug is already used by another coding problem — pick another.' };
   }
+  const before = await codingSlugById(id);
   const supabase = createClient();
   const { error } = await supabase
     .from('dsa_problems')
@@ -260,17 +263,18 @@ export async function updateTopicCodingProblem(id: string, path: string, _p: Res
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.coding.update', module: MODULE, resourceType: 'dsa_problems', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path, codingTags(before, parsed.slug))) };
 }
 
 export async function deleteTopicCodingProblem(id: string, path: string): Promise<Result> {
   await requirePermission(MODULE, 'delete');
   const supabase = createClient();
+  const before = await codingSlugById(id);
   const { error } = await supabase.from('dsa_problems').delete().eq('id', id);
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.coding.delete', module: MODULE, resourceType: 'dsa_problems', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path, codingTags(before))) };
 }
 
 export async function setTopicCodingProblemField(
@@ -285,7 +289,7 @@ export async function setTopicCodingProblemField(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: `learning.coding.${field}`, module: MODULE, resourceType: 'dsa_problems', resourceId: id });
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path, codingTags(await codingSlugById(id)))) };
 }
 
 export async function reorderTopicCodingProblem(id: string, topicId: string, path: string, dir: 'up' | 'down'): Promise<Result> {
@@ -309,5 +313,5 @@ export async function reorderTopicCodingProblem(id: string, topicId: string, pat
   const { error: e2 } = await supabase.from('dsa_problems').update({ sort_order: a.sort_order }).eq('id', b.id);
   if (e1 || e2) return { ok: false, error: (e1 ?? e2)!.message };
   revalidatePath(path);
-  return { ok: true };
+  return { ok: true, ...(await syncTopicByPath(path)) };
 }
