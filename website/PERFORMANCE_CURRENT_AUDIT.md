@@ -235,7 +235,7 @@ mid‑tier phone, 4× CPU throttle, ~1.6 Mbps / 150 ms RTT "Slow 4G") — **not 
 | FCP (mobile) | **~1.4–2.0 s** | one render‑blocking 10.4 KB CSS; no blocking fonts. |
 
 A Lighthouse CI job (`.github/workflows/website-ci.yml` + `website/lighthouserc.json`) exists but
-**has not been exercised** (no Chrome in CI runs seen; PHASE5 notes flag it as un‑calibrated).
+**has not been exercised** (no Chrome in CI runs seen; the P5 phase notes, now in git history, flag it as un‑calibrated).
 Running it on a deployed preview, or `npx lighthouse` locally on a machine with Chrome, is the
 way to get real numbers.
 
@@ -814,9 +814,9 @@ sub‑scores.
 
 ### 16.5 Comparison with the prior audits on this branch
 
-Prior docs: `website/PERFORMANCE_AUDIT.md` (P0 baseline), `PERFORMANCE_PHASE1..5.md`,
-`OPTIMIZATION_NOTES.md`, `docs/perf/audit-website.md`, `perf/phase1_indexes.sql`,
-`perf/phase1_rls_optimization.sql`, `docs/perf/suggested-indexes.sql`.
+Prior docs: the P0 baseline audit, the P1–P5 phase reports and an earlier on-branch audit
+(all since removed from the tree; see git history), plus `OPTIMIZATION_NOTES.md`,
+`perf/phase1_indexes.sql`, `perf/phase1_rls_optimization.sql`, `docs/perf/suggested-indexes.sql`.
 
 **Already fixed — verified in this pass:**
 

@@ -14,6 +14,7 @@ import {
   FileText,
   Gift,
   Crown,
+  Boxes,
 } from "lucide-react";
 import { useSessionProfile } from "@/lib/useSessionProfile";
 import { loginHrefFor } from "@/lib/nav";
@@ -23,6 +24,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 const MENU = [
   { href: "/account", label: "My account", icon: User },
   { href: "/account/purchases", label: "My projects", icon: LayoutGrid },
+  { href: "/custom-projects/my-projects", label: "My custom projects", icon: Boxes },
   { href: "/account/resume", label: "My resumes", icon: FileText },
   { href: "/account/applications", label: "Applications", icon: Briefcase },
   { href: "/account/saved-projects", label: "Saved", icon: Bookmark },
