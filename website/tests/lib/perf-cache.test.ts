@@ -106,8 +106,9 @@ describe("middleware public-GET bypass", () => {
 // (cookies()/headers()/session helpers) and of user-scoped data.
 describe("public cached routes stay cookie-free", () => {
   const root = join(__dirname, "..", "..", "src");
-  const PUBLIC_DIRS = ["app/learning", "app/coding-problems", "app/practice/interview-questions", "app/blog"];
-  const PUBLIC_FILES = ["app/practice/problems/[slug]/page.tsx", "app/jobs/[id]/page.tsx", "app/projects/[id]/page.tsx", "app/page.tsx", "app/sitemap.ts"];
+  // Sitemap: index route + child routes + their shared loaders (all ISR, anon client only).
+  const PUBLIC_DIRS = ["app/learning", "app/coding-problems", "app/practice/interview-questions", "app/blog", "app/sitemaps", "lib/sitemap"];
+  const PUBLIC_FILES = ["app/practice/problems/[slug]/page.tsx", "app/jobs/[id]/page.tsx", "app/projects/[id]/page.tsx", "app/page.tsx", "app/sitemap.xml/route.ts"];
   const FORBIDDEN = [
     /from\s+["']next\/headers["']/,
     /\bcookies\s*\(/,

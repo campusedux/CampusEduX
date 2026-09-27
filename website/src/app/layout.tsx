@@ -45,7 +45,6 @@ export const metadata: Metadata = {
   },
   description,
   applicationName: BRAND.name,
-  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: BRAND.name,

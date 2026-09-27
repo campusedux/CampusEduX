@@ -42,7 +42,7 @@ function jsonLdBlocks(node: Node): Record<string, unknown>[] {
 
 describe("/projects/category/[category] BreadcrumbList", () => {
   it("adds Projects -> <category name> with the real canonical URL", async () => {
-    vi.mocked(getCachedCategoryPreview).mockResolvedValueOnce({ name: "Web & Mobile", projects: [] });
+    vi.mocked(getCachedCategoryPreview).mockResolvedValueOnce({ name: "Web & Mobile", projects: [], found: true });
 
     const { default: CategoryPage } = await import("@/app/projects/category/[category]/page");
     const element = (await CategoryPage({ params: { category: "web-mobile" } })) as unknown as Node;

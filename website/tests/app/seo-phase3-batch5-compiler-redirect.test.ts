@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { loadSitemapRoutes, unloadSitemapRoutes } from "../helpers/sitemapFakes";
 
 /**
  * Phase 3 Batch 5: compiler URL consolidation.
@@ -15,7 +16,7 @@ import { describe, it, expect, vi } from "vitest";
  *   1. next.config.js permanently redirects /practice/compiler -> /compiler
  *      (never the reverse).
  *   2. The standalone /practice/compiler page file no longer exists.
- *   3. sitemap.ts drops /practice/compiler but keeps /compiler.
+ *   3. The sitemap drops /practice/compiler but keeps /compiler.
  *   4. The /practice hub page's "Online Compiler" tile now links to
  *      /compiler instead of /practice/compiler.
  *   5. /compiler itself — page, metadata, JSON-LD — is untouched.
@@ -54,17 +55,13 @@ describe("Phase 3 Batch 5: /practice/compiler -> /compiler redirect", () => {
   });
 });
 
-describe("Phase 3 Batch 5: sitemap.ts", () => {
+describe("Phase 3 Batch 5: sitemap", () => {
   it("no longer lists /practice/compiler, but keeps /compiler", async () => {
-    vi.resetModules();
-    vi.doMock("@/lib/supabase/server", () => ({ getPublicSupabase: () => null }));
-    const { default: sitemap } = await import("@/app/sitemap");
-    const entries = await sitemap();
-    const urls = entries.map((e) => e.url);
+    const r = await loadSitemapRoutes(null);
+    const urls = await r.allLocs();
     expect(urls).not.toContain("https://www.campusedux.com/practice/compiler");
     expect(urls).toContain("https://www.campusedux.com/compiler");
-    vi.doUnmock("@/lib/supabase/server");
-    vi.resetModules();
+    unloadSitemapRoutes();
   });
 });
 

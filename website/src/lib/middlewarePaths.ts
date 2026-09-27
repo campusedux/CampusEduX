@@ -12,6 +12,7 @@ export const PUBLIC_GET_PREFIXES = [
   "/jobs",
   "/projects",
   "/sitemap.xml",
+  "/sitemaps",
   "/robots.txt",
   "/api/announcements",
   "/api/search",

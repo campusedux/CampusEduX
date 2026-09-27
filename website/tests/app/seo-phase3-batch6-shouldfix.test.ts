@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { fakeSitemapSupabase, loadSitemapRoutes, unloadSitemapRoutes, urlEntries } from "../helpers/sitemapFakes";
 
 /**
  * Phase 3 Batch 6: verified SHOULD-FIX items from the final SEO audit.
@@ -47,35 +48,28 @@ describe("Phase 3 Batch 6: /placement/notes/[id] legacy redirect", () => {
 // ---------------------------------------------------------------------------
 // 2. sitemap.ts category lastModified
 // ---------------------------------------------------------------------------
-describe("Phase 3 Batch 6: sitemap.ts category entries carry a real lastModified", () => {
+// (sitemap.ts was replaced by the /sitemap.xml index + /sitemaps/<section>.xml
+// route handlers; the guarantee is unchanged — a category page's lastmod is a
+// real content date, now the newest of categories.updated_at and its listed
+// projects' updated_at, never the build time.)
+describe("Phase 3 Batch 6: sitemap category entries carry a real lastModified", () => {
   it("uses categories.updated_at, not the build-time default", async () => {
-    vi.resetModules();
     const categoryUpdatedAt = "2020-01-01T00:00:00.000Z";
-    vi.doMock("@/lib/supabase/server", () => ({
-      getPublicSupabase: () => ({
-        from: (table: string) => ({
-          select: () => ({
-            limit: async () => {
-              if (table === "categories") {
-                return { data: [{ id: "web-development", updated_at: categoryUpdatedAt }] };
-              }
-              return { data: [] };
-            },
-            eq: () => ({ limit: async () => ({ data: [] }), or: () => ({ limit: async () => ({ data: [] }) }) }),
-            is: () => ({ not: () => ({ limit: async () => ({ data: [] }) }) }),
-          }),
-        }),
-        rpc: async () => ({ data: [] }),
+    const r = await loadSitemapRoutes(
+      fakeSitemapSupabase({
+        tables: {
+          categories: [{ id: "web-development", updated_at: categoryUpdatedAt }],
+          // a category page is only listed when it has a project (empty ones are noindex)
+          projects: [{ id: "p1", category_id: "web-development", updated_at: "2019-06-01T00:00:00.000Z" }],
+        },
       }),
-    }));
-
-    const { default: sitemap } = await import("@/app/sitemap");
-    const entries = await sitemap();
-    const categoryEntry = entries.find((e) => e.url === "https://www.campusedux.com/projects/category/web-development");
+    );
+    const entries = urlEntries(await r.sectionXml("projects"));
+    const categoryEntry = entries.find((e) => e.loc === "https://www.campusedux.com/projects/category/web-development");
 
     expect(categoryEntry).toBeDefined();
-    expect(categoryEntry!.lastModified).toEqual(new Date(categoryUpdatedAt));
-    vi.doUnmock("@/lib/supabase/server");
+    expect(categoryEntry!.lastmod).toBe(categoryUpdatedAt);
+    unloadSitemapRoutes();
   });
 });
 

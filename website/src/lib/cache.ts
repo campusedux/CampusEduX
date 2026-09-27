@@ -53,8 +53,8 @@ export const getCachedCategories = unstable_cache(
 export const getCachedCategoryPreview = unstable_cache(
   async (categoryId: string) => {
     const supabase = getPublicSupabase();
-    if (!supabase) return { name: categoryId, projects: [] as unknown[] };
-    const [{ data: cat }, { data }] = await Promise.all([
+    if (!supabase) return { name: categoryId, projects: [] as unknown[], found: false };
+    const [{ data: cat, error: catError }, { data }] = await Promise.all([
       supabase.from("categories").select("name").eq("id", categoryId).maybeSingle(),
       supabase
         .from("projects")
@@ -65,7 +65,8 @@ export const getCachedCategoryPreview = unstable_cache(
         .order("created_at", { ascending: false })
         .limit(48),
     ]);
-    return { name: cat?.name ?? categoryId, projects: data ?? [] };
+    // A failed lookup is not "missing" — only a clean miss 404s the page.
+    return { name: cat?.name ?? categoryId, projects: data ?? [], found: Boolean(cat) || Boolean(catError) };
   },
   ["catalog:category-preview"],
   { revalidate: FIVE_MIN, tags: [CACHE_TAGS.projects, CACHE_TAGS.categories] },

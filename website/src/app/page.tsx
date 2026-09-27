@@ -66,6 +66,9 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "CampusEduX — Projects, Jobs, Placement Prep & Resume, in one app",
     description:
       "Buy or sell final-year projects, apply to jobs and internships, prepare for placements, build a resume, and get a custom project built — one account across web and the CampusEduX app.",
+    // Declared here, not in the root layout, so pages without their own
+    // canonical (404s, redirects) never inherit the homepage's.
+    alternates: { canonical: "/" },
     openGraph: {
       title: "CampusEduX",
       description: "Projects · Jobs · Placement Prep · Resume · Custom Projects — for students.",

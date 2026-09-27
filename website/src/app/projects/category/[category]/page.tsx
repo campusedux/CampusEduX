@@ -1,6 +1,7 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import type { ProjectCardData } from "@/components/ProjectCard";
 import { ProjectGrid } from "@/components/marketplace/ProjectGrid";
 import { getCachedCategoryPreview, getCachedCategoryIds } from "@/lib/cache";
@@ -21,11 +22,14 @@ export async function generateStaticParams() {
 
 const getData = cache(async (categoryId: string) => {
   const res = await getCachedCategoryPreview(categoryId);
-  return { name: res.name, projects: res.projects as ProjectCardData[] };
+  // `found: false` = no such category row. Answer with a real 404 instead of a
+  // 200 "soft 404" whose heading is the raw id.
+  return { name: res.name, projects: res.projects as ProjectCardData[], missing: res.found === false };
 });
 
 export async function generateMetadata({ params }: { params: { category: string } }): Promise<Metadata> {
-  const { name, projects } = await getData(params.category);
+  const { name, projects, missing } = await getData(params.category);
+  if (missing) return { title: "Category not found", robots: { index: false, follow: false } };
   const description = `${name} projects on CampusEduX — browse student-built final-year and mini projects in this category.`;
   const url = absoluteUrl(`/projects/category/${encodeURIComponent(params.category)}`);
   return {
@@ -39,7 +43,8 @@ export async function generateMetadata({ params }: { params: { category: string 
 }
 
 export default async function CategoryPage({ params }: { params: { category: string } }) {
-  const { name, projects } = await getData(params.category);
+  const { name, projects, missing } = await getData(params.category);
+  if (missing) notFound();
   return (
     <div className="page-shell">
       <JsonLd

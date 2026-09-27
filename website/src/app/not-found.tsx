@@ -1,4 +1,15 @@
+import type { Metadata } from "next";
 import { Button } from "@/components/ui";
+
+// Every 404 (unmatched URL or a page calling notFound()) otherwise inherits the
+// root layout's `alternates.canonical: "/"`, i.e. a 404 declaring the HOMEPAGE
+// as its canonical. Clear it here; Next already adds `noindex` to 404s, and it's
+// stated explicitly so it can't regress.
+export const metadata: Metadata = {
+  title: "Page not found",
+  alternates: { canonical: null },
+  robots: { index: false, follow: true },
+};
 
 export default function NotFound() {
   return (

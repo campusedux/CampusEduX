@@ -29,6 +29,9 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     title: `${res.company.name} — jobs`,
     description: (res.company.about || `Open roles at ${res.company.name}`).slice(0, 155),
     alternates: { canonical: absoluteUrl(`/jobs/companies/${params.id}`) },
+    // No open roles -> just a name and a blurb; keep it out of the index
+    // (the jobs sitemap lists only companies with an open job).
+    robots: res.jobs.length === 0 ? { index: false, follow: true } : undefined,
   };
 }
 

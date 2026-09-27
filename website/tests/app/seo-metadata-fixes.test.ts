@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { loadSitemapRoutes, locs, unloadSitemapRoutes } from "../helpers/sitemapFakes";
 
 // The five fixed static-metadata pages import UI/data modules that touch
 // Supabase only inside functions (never at module top-level), so importing
@@ -99,7 +100,7 @@ vi.mock("@/lib/cache", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/cache")>();
   return {
     ...actual,
-    getCachedCategoryPreview: vi.fn(async () => ({ name: "Web & Mobile", projects: [] })),
+    getCachedCategoryPreview: vi.fn(async () => ({ name: "Web & Mobile", projects: [], found: true })),
     getCachedCategoryIds: vi.fn(async () => []),
     getCachedProjectsPage: vi.fn(async () => ({ projects: [], count: 5 })),
     getCachedJobsPage: vi.fn(async () => ({ jobs: [], count: 5 })),
@@ -131,7 +132,7 @@ describe("/projects/category/[category] dynamic metadata", () => {
   });
 });
 
-// robots.ts / sitemap.ts read NEXT_PUBLIC_SITE_URL once at module load, so
+// robots.ts / the sitemap routes read NEXT_PUBLIC_SITE_URL once at module load, so
 // each fallback-domain assertion needs a fresh module instance.
 describe("robots.ts / sitemap.ts fallback domain", () => {
   const ORIGINAL_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
@@ -158,24 +159,22 @@ describe("robots.ts / sitemap.ts fallback domain", () => {
     expect(result.sitemap).toBe("https://example.test/sitemap.xml");
   });
 
-  it("sitemap.ts falls back to https://www.campusedux.com (not campusedux.app) when NEXT_PUBLIC_SITE_URL is unset", async () => {
+  // sitemap.ts was replaced by the /sitemap.xml index + /sitemaps/<section>.xml routes.
+  it("the sitemap falls back to https://www.campusedux.com (not campusedux.app) when NEXT_PUBLIC_SITE_URL is unset", async () => {
     delete process.env.NEXT_PUBLIC_SITE_URL;
-    vi.resetModules();
-    vi.doMock("@/lib/supabase/server", () => ({ getPublicSupabase: () => null }));
-    const { default: sitemap } = await import("@/app/sitemap");
-    const entries = await sitemap();
-    expect(entries[0].url).toBe("https://www.campusedux.com");
-    expect(entries.every((e) => e.url.startsWith("https://www.campusedux.com"))).toBe(true);
-    vi.doUnmock("@/lib/supabase/server");
+    const r = await loadSitemapRoutes(null);
+    const urls = [...locs(await r.indexXml()), ...(await r.allLocs())];
+    expect(locs(await r.sectionXml("static"))[0]).toBe("https://www.campusedux.com");
+    expect(urls.every((u) => u.startsWith("https://www.campusedux.com"))).toBe(true);
+    unloadSitemapRoutes();
   });
 
-  it("sitemap.ts still honors NEXT_PUBLIC_SITE_URL when set", async () => {
+  it("the sitemap still honors NEXT_PUBLIC_SITE_URL when set", async () => {
     process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
-    vi.resetModules();
-    vi.doMock("@/lib/supabase/server", () => ({ getPublicSupabase: () => null }));
-    const { default: sitemap } = await import("@/app/sitemap");
-    const entries = await sitemap();
-    expect(entries.every((e) => e.url.startsWith("https://example.test"))).toBe(true);
-    vi.doUnmock("@/lib/supabase/server");
+    const r = await loadSitemapRoutes(null);
+    const urls = [...locs(await r.indexXml()), ...(await r.allLocs())];
+    expect(urls.length).toBeGreaterThan(7);
+    expect(urls.every((u) => u.startsWith("https://example.test"))).toBe(true);
+    unloadSitemapRoutes();
   });
 });

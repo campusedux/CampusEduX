@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { fakeSitemapSupabase, loadSitemapRoutes, unloadSitemapRoutes } from "../helpers/sitemapFakes";
 
 /**
  * Phase 3 SEO audit fixes:
@@ -9,7 +10,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
  *      orphan-URL redirect tests below.)
  *   2. The public résumé share route (`/r/[token]`) is noindex/nofollow.
  *   3. The 5 bare auth/transactional pages are noindex, follow.
- *   4. robots.ts disallows `/r`.
+ *   4. robots.ts disallows `/r/` (the share-token route; not a bare `/r` prefix).
  *   5. The account referral link never falls back to the old
  *      `campusedux.app` domain.
  */
@@ -121,10 +122,14 @@ describe("Phase 3 follow-up: orphan project-URL consolidation redirects", () => 
     await expectPageRemoved("@/app/projects/best-sellers/page");
   });
 
-  it("sitemap.ts no longer lists the three redirected URLs, but keeps /projects and /projects/trending", async () => {
-    const { default: sitemap } = await import("@/app/sitemap");
-    const entries = await sitemap();
-    const urls = entries.map((e) => e.url);
+  it("the sitemap no longer lists the three redirected URLs, but keeps /projects and /projects/trending", async () => {
+    // /projects + /projects/trending are listed whenever there is a project
+    // (with none, both pages are noindex and the sitemap leaves them out).
+    const r = await loadSitemapRoutes(
+      fakeSitemapSupabase({ tables: { projects: [{ id: "p1", category_id: null, updated_at: "2026-01-01T00:00:00Z" }] } }),
+    );
+    const urls = await r.allLocs();
+    unloadSitemapRoutes();
     expect(urls).not.toContain("https://www.campusedux.com/projects/new");
     expect(urls).not.toContain("https://www.campusedux.com/projects/premium");
     expect(urls).not.toContain("https://www.campusedux.com/projects/best-sellers");
@@ -182,11 +187,17 @@ describe("Phase 3: auth pages are noindex, follow", () => {
 // ---------------------------------------------------------------------------
 // 4. robots.ts
 // ---------------------------------------------------------------------------
-describe("Phase 3: robots.ts disallows /r", () => {
-  it("disallow list includes /r", async () => {
+describe("Phase 3: robots.ts disallows /r/", () => {
+  // "/r/" (not a bare "/r"): robots rules are prefix matches, and "/r" also
+  // blocked /resume, /resume/templates, /referral and /refund-policy.
+  it("disallow list blocks the /r/<token> share route without blocking /resume or /referral", async () => {
     const { default: robots } = await import("@/app/robots");
     const result = robots() as { rules: { disallow: string[] } };
-    expect(result.rules.disallow).toContain("/r");
+    expect(result.rules.disallow).toContain("/r/");
+    expect(result.rules.disallow).not.toContain("/r");
+    for (const path of ["/resume", "/resume/templates", "/referral", "/refund-policy"]) {
+      expect(result.rules.disallow.some((rule) => path.startsWith(rule))).toBe(false);
+    }
   });
 
   it("does not disallow the bare auth pages (noindex meta is their control, not robots.txt)", async () => {
