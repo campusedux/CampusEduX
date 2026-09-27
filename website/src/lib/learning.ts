@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
+import { LEARNING_LEAF_REVALIDATE, LEARNING_SHARED_REVALIDATE, learningTag } from "@/lib/learningTags";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { onlyActiveJobs } from "@/lib/jobsActive";
 import { arrayMatchVariants } from "@/lib/searchModel";
@@ -52,37 +53,70 @@ export { flattenTopics } from "@/lib/learning.types";
 
 const PLATFORM = "website";
 
-export const getLearningGrids = cache(async (): Promise<LearningGridCard[]> => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return [];
-  const { data, error } = await supabase.rpc("learning_grids_list", { p_platform: PLATFORM });
-  if (error || !Array.isArray(data)) return [];
-  return data as LearningGridCard[];
-});
+/**
+ * Cross-request cache for a public (anon-client) RPC read. Errors THROW inside
+ * the cached function so a transient failure is never cached; the caller gets
+ * `fallback` and the next request retries. "Not found" (null) IS cached, and
+ * carries the same tags, so publishing it later is picked up by tag revalidation.
+ */
+async function cachedRead<A extends string[], R>(
+  key: string,
+  args: A,
+  tags: string[],
+  read: (...a: A) => Promise<R>,
+  fallback: R,
+): Promise<R> {
+  try {
+    return await unstable_cache(read, [key, ...args], { revalidate: LEAF_KEYS.has(key) ? LEARNING_LEAF_REVALIDATE : LEARNING_SHARED_REVALIDATE, tags: ["learning", ...tags] })(...args);
+  } catch {
+    return fallback;
+  }
+}
 
-export const getLearningTree = cache(async (gridSlug: string): Promise<LearningTree | null> => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const { data, error } = await supabase.rpc("learning_tree", {
-    p_grid_slug: gridSlug,
-    p_platform: PLATFORM,
-  });
-  if (error || !data) return null;
-  return data as LearningTree;
-});
+class RpcFailed extends Error {}
 
-export const getLearningTopicPage = cache(
-  async (gridSlug: string, topicSlug: string): Promise<LearningTopicPage | null> => {
+// Per-topic / per-problem entries (read once per page regeneration) get the short TTL.
+const LEAF_KEYS = new Set(["learning:topic", "learning:topic-practice", "learning:coding-problem", "learning:coding-related"]);
+
+export const getLearningGrids = cache(async (): Promise<LearningGridCard[]> =>
+  cachedRead("learning:grids", [] as [], [learningTag.list], async () => {
+    const supabase = getPublicSupabase();
+    if (!supabase) return [];
+    const { data, error } = await supabase.rpc("learning_grids_list", { p_platform: PLATFORM });
+    if (error || !Array.isArray(data)) throw new RpcFailed();
+    return data as LearningGridCard[];
+  }, []),
+);
+
+export const getLearningTree = cache(async (gridSlug: string): Promise<LearningTree | null> =>
+  cachedRead("learning:tree", [gridSlug], [learningTag.grid(gridSlug)], async (g) => {
     const supabase = getPublicSupabase();
     if (!supabase) return null;
-    const { data, error } = await supabase.rpc("learning_topic_content", {
-      p_grid_slug: gridSlug,
-      p_topic_slug: topicSlug,
-      p_platform: PLATFORM,
-    });
-    if (error || !data) return null;
-    return data as LearningTopicPage;
-  },
+    const { data, error } = await supabase.rpc("learning_tree", { p_grid_slug: g, p_platform: PLATFORM });
+    if (error) throw new RpcFailed();
+    return (data || null) as LearningTree | null;
+  }, null),
+);
+
+export const getLearningTopicPage = cache(
+  async (gridSlug: string, topicSlug: string): Promise<LearningTopicPage | null> =>
+    cachedRead(
+      "learning:topic",
+      [gridSlug, topicSlug],
+      [learningTag.grid(gridSlug), learningTag.topic(gridSlug, topicSlug)],
+      async (g, t) => {
+        const supabase = getPublicSupabase();
+        if (!supabase) return null;
+        const { data, error } = await supabase.rpc("learning_topic_content", {
+          p_grid_slug: g,
+          p_topic_slug: t,
+          p_platform: PLATFORM,
+        });
+        if (error) throw new RpcFailed();
+        return (data || null) as LearningTopicPage | null;
+      },
+      null,
+    ),
 );
 
 /**
@@ -96,19 +130,27 @@ export const getLearningTopicPage = cache(
 export const getTopicPractice = cache(
   async (gridSlug: string, topicSlug: string): Promise<TopicPractice> => {
     const empty: TopicPractice = { mock_tests: [], coding_problems: [] };
-    const supabase = getPublicSupabase();
-    if (!supabase) return empty;
-    const { data, error } = await supabase.rpc("learning_topic_practice", {
-      p_grid_slug: gridSlug,
-      p_topic_slug: topicSlug,
-      p_platform: PLATFORM,
-    });
-    if (error || !data) return empty;
-    const payload = data as Partial<TopicPractice>;
-    return {
-      mock_tests: Array.isArray(payload.mock_tests) ? payload.mock_tests : [],
-      coding_problems: Array.isArray(payload.coding_problems) ? payload.coding_problems : [],
-    };
+    return cachedRead(
+      "learning:topic-practice",
+      [gridSlug, topicSlug],
+      [learningTag.grid(gridSlug), learningTag.topic(gridSlug, topicSlug)],
+      async (g, t) => {
+        const supabase = getPublicSupabase();
+        if (!supabase) return empty;
+        const { data, error } = await supabase.rpc("learning_topic_practice", {
+          p_grid_slug: g,
+          p_topic_slug: t,
+          p_platform: PLATFORM,
+        });
+        if (error) throw new RpcFailed();
+        const payload = (data ?? {}) as Partial<TopicPractice>;
+        return {
+          mock_tests: Array.isArray(payload.mock_tests) ? payload.mock_tests : [],
+          coding_problems: Array.isArray(payload.coding_problems) ? payload.coding_problems : [],
+        };
+      },
+      empty,
+    );
   },
 );
 
@@ -217,39 +259,37 @@ export const getTopicDiscovery = unstable_cache(
     }
   },
   ["learning:topic-discovery"],
-  { revalidate: 300, tags: ["learning", "projects", "jobs"] },
+  { revalidate: 300, tags: ["learning", learningTag.list, "projects", "jobs"] },
 );
 
 /** One topic Coding Problem by its global slug, for `/coding-problems/<slug>`.
  *  `coding_problem_detail` (0048/025) withholds the body / examples / hints /
  *  editorial when the caller can't open a premium problem (`locked: true`), and
  *  NEVER returns the hidden judge test cases. */
-export const getCodingProblem = cache(async (slug: string): Promise<CodingProblemDetail | null> => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const { data, error } = await supabase.rpc("coding_problem_detail", {
-    p_slug: slug,
-    p_platform: PLATFORM,
-  });
-  if (error || !data) return null;
-  return data as CodingProblemDetail;
-});
+export const getCodingProblem = cache(async (slug: string): Promise<CodingProblemDetail | null> =>
+  cachedRead("learning:coding-problem", [slug], [learningTag.coding(slug)], async (sl) => {
+    const supabase = getPublicSupabase();
+    if (!supabase) return null;
+    const { data, error } = await supabase.rpc("coding_problem_detail", { p_slug: sl, p_platform: PLATFORM });
+    if (error) throw new RpcFailed();
+    return (data || null) as CodingProblemDetail | null;
+  }, null),
+);
 
 /** Up to 3 related coding problems (same topic, topped up from sibling topics
  *  in the same grid when the topic itself doesn't have 3) plus prev/next
  *  problem within the same topic, for a topic-scoped coding problem —
  *  `coding_problem_related()` (migration 0102/074). Powers the internal-
  *  linking "Related Problems" section + prev/next nav on `/coding-problems/*`. */
-export const getCodingProblemRelated = cache(async (slug: string): Promise<CodingProblemRelated | null> => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const { data, error } = await supabase.rpc("coding_problem_related", {
-    p_slug: slug,
-    p_platform: PLATFORM,
-  });
-  if (error || !data) return null;
-  return data as CodingProblemRelated;
-});
+export const getCodingProblemRelated = cache(async (slug: string): Promise<CodingProblemRelated | null> =>
+  cachedRead("learning:coding-related", [slug], [learningTag.coding(slug)], async (sl) => {
+    const supabase = getPublicSupabase();
+    if (!supabase) return null;
+    const { data, error } = await supabase.rpc("coding_problem_related", { p_slug: sl, p_platform: PLATFORM });
+    if (error) throw new RpcFailed();
+    return (data || null) as CodingProblemRelated | null;
+  }, null),
+);
 
 /** One topic Mock Test's meta for `/mock-tests/<id>` (instruction card +
  *  breadcrumb). Questions + scoring stay in `test_questions` RLS +
@@ -308,19 +348,21 @@ export const getGridScopedTests = cache(async (gridId: string): Promise<GridScop
  *  (migration 0045/022) already restricts anon to published + global +
  *  website-visible, so an unpublished / archived / targeted grid comes back
  *  null and the page 404s. */
-export const getLearningGridBrief = cache(async (slug: string): Promise<LearningGridBrief | null> => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return null;
-  const { data, error } = await supabase
-    .from("learning_grids")
-    .select("id,name,slug,description,grid_type,is_premium,icon,cover_image_url,accent_color")
-    .ilike("slug", slug)
-    .eq("status", "published")
-    .eq("show_on_website", true)
-    .maybeSingle();
-  if (error || !data) return null;
-  return data as LearningGridBrief;
-});
+export const getLearningGridBrief = cache(async (slug: string): Promise<LearningGridBrief | null> =>
+  cachedRead("learning:grid-brief", [slug], [learningTag.grid(slug)], async (sl) => {
+    const supabase = getPublicSupabase();
+    if (!supabase) return null;
+    const { data, error } = await supabase
+      .from("learning_grids")
+      .select("id,name,slug,description,grid_type,is_premium,icon,cover_image_url,accent_color")
+      .ilike("slug", sl)
+      .eq("status", "published")
+      .eq("show_on_website", true)
+      .maybeSingle();
+    if (error) throw new RpcFailed();
+    return (data || null) as LearningGridBrief | null;
+  }, null),
+);
 
 /**
  * `generateStaticParams` sources. Cross-request cached (`unstable_cache`, tag
@@ -336,7 +378,7 @@ export const getLearningGridSlugs = unstable_cache(
     return Array.isArray(data) ? (data as LearningGridCard[]).map((g) => g.slug).filter(Boolean) : [];
   },
   ["learning:grid-slugs"],
-  { revalidate: 300, tags: ["learning"] },
+  { revalidate: LEARNING_SHARED_REVALIDATE, tags: ["learning", learningTag.list, learningTag.sitemap] },
 );
 
 export const getLearningTopicParams = unstable_cache(
@@ -350,7 +392,7 @@ export const getLearningTopicParams = unstable_cache(
       .map((r) => ({ gridSlug: r.grid_slug, topicSlug: r.topic_slug as string }));
   },
   ["learning:topic-params"],
-  { revalidate: 300, tags: ["learning"] },
+  { revalidate: LEARNING_SHARED_REVALIDATE, tags: ["learning", learningTag.list, learningTag.sitemap] },
 );
 
 export const getCodingProblemSlugs = unstable_cache(
@@ -361,7 +403,7 @@ export const getCodingProblemSlugs = unstable_cache(
     return ((data ?? []) as { slug: string }[]).map((r) => r.slug).filter(Boolean);
   },
   ["learning:coding-problem-slugs"],
-  { revalidate: 300, tags: ["learning"] },
+  { revalidate: LEARNING_SHARED_REVALIDATE, tags: ["learning", learningTag.sitemap] },
 );
 
 export async function searchLearning(q: string, limit = 20): Promise<LearningSearchHit[]> {

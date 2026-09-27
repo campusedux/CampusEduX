@@ -29,7 +29,7 @@ export function LessonSidebar({
 
   return (
     <nav aria-label="Course contents" className="text-sm">
-      <Link
+      <Link prefetch={false}
         href={`/learning/${gridSlug}`}
         onClick={onNavigate}
         className="block rounded-xl px-2.5 py-2 font-display text-base font-bold leading-snug text-ink transition hover:bg-surface hover:text-primary"
@@ -87,7 +87,7 @@ export function LessonSidebar({
                   const done = progress.ready && progress.isComplete(gridSlug, l.slug);
                   return (
                     <li key={l.id}>
-                      <Link
+                      <Link prefetch={false}
                         href={`/learning/${gridSlug}/${l.slug}`}
                         onClick={onNavigate}
                         aria-current={active ? "page" : undefined}

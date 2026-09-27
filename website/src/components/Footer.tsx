@@ -98,7 +98,7 @@ function FooterLinkList({ links }: { links: readonly FooterLink[] }) {
     <ul className="sm:space-y-2.5">
       {links.map((l) => (
         <li key={l.href}>
-          <Link href={l.href} className={linkCls}>
+          <Link prefetch={false} href={l.href} className={linkCls}>
             {l.label}
           </Link>
         </li>
@@ -129,14 +129,14 @@ export default function Footer() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2.5">
-              <Link
+              <Link prefetch={false}
                 href="/learning"
                 className="inline-flex h-11 items-center gap-2 rounded-xl bg-card px-5 text-sm font-semibold text-primary-700 shadow-card transition hover:-translate-y-px motion-reduce:transform-none theme-light"
               >
                 <GraduationCap className="h-4 w-4" aria-hidden />
                 Start learning
               </Link>
-              <Link
+              <Link prefetch={false}
                 href="/jobs"
                 className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
               >
@@ -220,7 +220,7 @@ export default function Footer() {
                     {l.label}
                   </a>
                 ) : (
-                  <Link href={l.href} className="hit-44 transition-colors hover:text-primary">
+                  <Link prefetch={false} href={l.href} className="hit-44 transition-colors hover:text-primary">
                     {l.label}
                   </Link>
                 )}
