@@ -107,3 +107,54 @@ export function hiringOrganizationJsonLd(input: {
     ...(input.website ? { sameAs: input.website } : {}),
   };
 }
+
+/** The site's own Organization node (author/publisher of first-party content). */
+export function organizationRef(): Record<string, unknown> {
+  return { "@type": "Organization", name: BRAND.name, url: SITE_URL };
+}
+
+/**
+ * schema.org TechArticle for a Learning lesson. Every field comes from the
+ * lesson row: `dateModified` is the topic's real `updated_at` (omitted when
+ * missing/invalid), `isPartOf` is the lesson's course (grid), and
+ * `isAccessibleForFree` is emitted only for a free lesson — a premium lesson's
+ * body is never server-rendered, so no paywall markup is claimed for it.
+ */
+export function techArticleJsonLd(input: {
+  headline: string;
+  description: string;
+  path: string;
+  courseName: string;
+  coursePath: string;
+  sectionName?: string | null;
+  dateModified?: string | null;
+  imagePath?: string | null;
+  isPremium: boolean;
+}): Record<string, unknown> {
+  const url = absoluteUrl(input.path);
+  const modified = input.dateModified && !Number.isNaN(Date.parse(input.dateModified)) ? input.dateModified : null;
+  const headline = input.headline.length > 110 ? `${input.headline.slice(0, 109).trimEnd()}…` : input.headline;
+  return {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline,
+    name: input.headline,
+    description: input.description,
+    url,
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    inLanguage: "en",
+    learningResourceType: "Lesson",
+    ...(input.sectionName ? { articleSection: input.sectionName } : {}),
+    ...(modified ? { dateModified: modified } : {}),
+    ...(input.imagePath ? { image: absoluteUrl(input.imagePath) } : {}),
+    author: organizationRef(),
+    publisher: organizationRef(),
+    isPartOf: {
+      "@type": "Course",
+      name: input.courseName,
+      url: absoluteUrl(input.coursePath),
+      provider: { "@type": "Organization", name: BRAND.name },
+    },
+    ...(input.isPremium ? {} : { isAccessibleForFree: true }),
+  };
+}

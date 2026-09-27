@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { Building2 } from "lucide-react";
 import { Breadcrumb, CompanyCard, type CompanyCardData, EmptyState } from "@/components/ui";
-import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 const DESCRIPTION =
   "See which companies are hiring on CampusEduX and browse each employer's live job and internship openings in one place.";
@@ -23,7 +24,8 @@ async function getCompanies(): Promise<CompanyCardData[]> {
 export async function generateMetadata(): Promise<Metadata> {
   const companies = await getCompanies();
   return {
-    title: "Companies hiring on CampusEduX",
+    // Absolute: the layout's " | CampusEduX" template would repeat the brand.
+    title: { absolute: "Companies Hiring on CampusEduX" },
     description: DESCRIPTION,
     alternates: { canonical: absoluteUrl("/jobs/companies") },
     openGraph: {
@@ -42,6 +44,12 @@ export default async function CompaniesPage() {
   const companies = await getCompanies();
   return (
     <div className="page-shell">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Jobs", path: "/jobs" },
+          { name: "Companies", path: "/jobs/companies" },
+        ])}
+      />
       <Breadcrumb className="mb-5" items={[{ label: "Jobs", href: "/jobs" }, { label: "Companies" }]} />
       <p className="eyebrow">Careers</p>
       <h1 className="h-hero mt-2">Companies hiring</h1>

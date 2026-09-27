@@ -8,9 +8,13 @@ import { createTopicLinkState } from "@/components/learning/Markdown";
 import { LessonBlock } from "@/components/learning/LessonBlock";
 import { buildTopicLinkIndex } from "@/lib/topicLinks";
 import { isTemplatedGenerativeAiBody } from "@/lib/contentQuality";
-import { lessonMetaDescription } from "@/lib/metaDescription";
+import { lessonDescription } from "@/lib/metaDescription";
+import { courseLanguage, lessonTitle } from "@/lib/seoTitles";
+import { lessonFaqPairs } from "@/lib/lessonFaq";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { BRAND } from "@/lib/brand";
+import { absoluteUrl, breadcrumbJsonLd, faqJsonLd, techArticleJsonLd } from "@/lib/seo";
+import type { LearningTopicPage, LearningTree } from "@/lib/learning";
 import { toOutline, findLesson } from "@/lib/courseOutline";
 import { lessonToc, lessonReadingMinutes } from "@/lib/lessonToc";
 import { Breadcrumb, EmptyState } from "@/components/ui";
@@ -36,20 +40,45 @@ export function generateStaticParams() {
   return [];
 }
 
+/** How many lessons in the course carry this exact short_description (1 = unique to this lesson). */
+function shortDescriptionDuplicates(tree: LearningTree | null, shortDescription: string): number {
+  const key = (shortDescription ?? "").trim().toLowerCase();
+  if (!tree || !key) return 1;
+  return tree.sections.reduce(
+    (n, s) => n + s.topics.filter((t) => (t.short_description ?? "").trim().toLowerCase() === key).length,
+    0,
+  );
+}
+
+/** Meta description for a lesson — shared by generateMetadata and the TechArticle JSON-LD. */
+function describeLesson(page: LearningTopicPage, tree: LearningTree | null): string {
+  const { topic, grid, section } = page;
+  return lessonDescription({
+    topicTitle: topic.title,
+    shortDescription: topic.short_description,
+    shortDescriptionDuplicates: shortDescriptionDuplicates(tree, topic.short_description),
+    language: courseLanguage(grid.slug, grid.name, topic.title),
+    courseName: grid.name,
+    sectionName: section.name,
+    blocks: page.locked ? [] : page.contents,
+    isPremium: topic.is_premium,
+  });
+}
+
 export async function generateMetadata({
   params,
 }: {
   params: { gridSlug: string; topicSlug: string };
 }): Promise<Metadata> {
-  const page = await getLearningTopicPage(params.gridSlug, params.topicSlug);
+  const [page, tree] = await Promise.all([
+    getLearningTopicPage(params.gridSlug, params.topicSlug),
+    getLearningTree(params.gridSlug),
+  ]);
   if (!page) return { title: "Topic not found", robots: { index: false, follow: false } };
   const { topic, grid } = page;
   const bodyText = page.contents.map((c) => c.body).join(" ").replace(/[#>*`_|\-]+/g, " ").trim();
-  const description = lessonMetaDescription(
-    topic.short_description,
-    page.contents.map((c) => c.body),
-    `${topic.title} — ${grid.name} on CampusEduX.`,
-  );
+  const title = lessonTitle({ topicTitle: topic.title, gridSlug: grid.slug, courseName: grid.name });
+  const description = describeLesson(page, tree);
   const url = absoluteUrl(`/learning/${grid.slug}/${topic.slug}`);
   // Generative AI tutorial topics (migration 0069/041) are a mail-merge
   // template: the same filler paragraphs repeat verbatim regardless of the
@@ -59,11 +88,13 @@ export async function generateMetadata({
   // membership.
   const isThinTemplate = isTemplatedGenerativeAiBody(bodyText);
   return {
-    title: `${topic.title} · ${grid.name}`,
+    title: { absolute: title },
     description,
     alternates: { canonical: url },
-    openGraph: { title: topic.title, description, url, type: "article", images: [DEFAULT_OG_IMAGE] },
-    twitter: { card: "summary", title: topic.title, description },
+    // No `images` key: the route's opengraph-image.tsx (lesson title card) is
+    // used — an explicit `images` here would shadow it.
+    openGraph: { title, description, url, type: "article", siteName: BRAND.name },
+    twitter: { card: "summary_large_image", title, description },
     robots: isThinTemplate ? { index: false, follow: true } : undefined,
   };
 }
@@ -111,15 +142,33 @@ export default async function TopicPage({
     />
   );
 
+  const lessonPath = `/learning/${grid.slug}/${topic.slug}`;
+  // FAQPage only for Q&A the server actually renders (never a locked lesson's withheld body).
+  const faqs = locked ? [] : lessonFaqPairs(contents);
+
   return (
     <>
       <JsonLd
         data={breadcrumbJsonLd([
           { name: "Learning", path: "/learning" },
           { name: grid.name, path: `/learning/${grid.slug}` },
-          { name: topic.title, path: `/learning/${grid.slug}/${topic.slug}` },
+          { name: topic.title, path: lessonPath },
         ])}
       />
+      <JsonLd
+        data={techArticleJsonLd({
+          headline: topic.title,
+          description: describeLesson(page, tree),
+          path: lessonPath,
+          courseName: grid.name,
+          coursePath: `/learning/${grid.slug}`,
+          sectionName: section.name,
+          dateModified: topic.updated_at,
+          imagePath: `${lessonPath}/opengraph-image`,
+          isPremium: topic.is_premium,
+        })}
+      />
+      {faqs.length > 0 ? <JsonLd data={faqJsonLd(faqs)} /> : null}
       <ReadingProgress targetId="lesson-article" />
       <LessonShell
         outline={outline}

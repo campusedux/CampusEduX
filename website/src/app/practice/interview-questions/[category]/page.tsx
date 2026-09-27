@@ -5,6 +5,9 @@ import { ArrowRight, BookOpen } from "lucide-react";
 import { PageHeader, Breadcrumb } from "@/components/ui";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { interviewCategoryDescription } from "@/lib/metaDescription";
+import { interviewCategoryTitle } from "@/lib/seoTitles";
+import { BRAND } from "@/lib/brand";
 import { getInterviewTopics } from "@/lib/interviewQuestions";
 import { interviewQuestionsCrumbs } from "@/lib/interviewQuestions.types";
 
@@ -21,18 +24,22 @@ export async function generateMetadata({ params }: { params: { category: string 
   const page = await getInterviewTopics(params.category);
   if (!page) return { title: "Not found", robots: { index: false, follow: false } };
   const url = absoluteUrl(`/practice/interview-questions/${page.category.slug}`);
-  const description =
-    page.category.description ||
-    `${page.category.name} interview questions and answers, organized by topic, on CampusEduX.`;
+  const title = interviewCategoryTitle(page.category.name);
+  const description = interviewCategoryDescription({
+    categoryName: page.category.name,
+    categoryDescription: page.category.description,
+    topics: page.topics,
+  });
   return {
-    title: `${page.category.name} Interview Questions`,
-    description: description.slice(0, 155),
+    title: { absolute: title },
+    description,
     alternates: { canonical: url },
     openGraph: {
-      title: `${page.category.name} Interview Questions | CampusEduX`,
-      description: description.slice(0, 155),
+      title,
+      description,
       url,
       type: "website",
+      siteName: BRAND.name,
       images: [DEFAULT_OG_IMAGE],
     },
   };

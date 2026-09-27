@@ -6,7 +6,8 @@ import JobCard, { JobCardData } from "@/components/JobCard";
 import { FilterSheet, Pagination, EmptyState, SkeletonJobCard } from "@/components/ui";
 import { JobFilters } from "@/components/marketplace/JobFilters";
 import { getCachedJobsPage } from "@/lib/cache";
-import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 import { JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobExperience, jobSort, parsePage, totalPages } from "@/lib/marketplace";
 import { cn } from "@/lib/cn";
 
@@ -159,6 +160,7 @@ export default async function JobsPage({ searchParams }: { searchParams: SP }) {
 
   return (
     <div className="page-shell">
+      <JsonLd data={breadcrumbJsonLd([{ name: "Jobs", path: "/jobs" }])} />
       <header className="relative overflow-hidden rounded-3xl border border-line bg-card px-5 py-8 shadow-card sm:px-10 sm:py-10">
         <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,#000_15%,transparent_65%)]" />
         <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-accent-sky/15 blur-3xl" />

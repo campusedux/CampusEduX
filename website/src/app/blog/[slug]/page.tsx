@@ -22,6 +22,8 @@ import { ArticleToc } from "@/components/blog/ArticleToc";
 import { ShareButtons } from "@/components/blog/ShareButtons";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, faqJsonLd } from "@/lib/seo";
+import { authoredDescription } from "@/lib/metaDescription";
+import { plainTitle } from "@/lib/seoTitles";
 import { BRAND } from "@/lib/brand";
 
 export const revalidate = 300;
@@ -39,8 +41,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   const post = await getBlogPost(params.slug);
   if (!post) return { title: "Article not found", robots: { index: false, follow: false } };
 
-  const description =
-    post.seo_description || post.excerpt || stripMarkdown(post.content).slice(0, 155);
+  const description = authoredDescription(post.seo_description || post.excerpt || stripMarkdown(post.content), post.title);
+  const title = plainTitle(post.seo_title || post.title);
   const url = post.canonical_url || absoluteUrl(`/blog/${post.slug}`);
   const images = post.featured_image
     ? [{ url: post.featured_image.startsWith("http") ? post.featured_image : absoluteUrl(post.featured_image) }]
@@ -48,16 +50,18 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   const keywords = post.seo_keywords || post.tags.join(", ") || undefined;
 
   return {
-    title: post.seo_title || post.title,
+    title: { absolute: title },
     description,
     ...(keywords ? { keywords } : {}),
     alternates: { canonical: url },
     openGraph: {
       type: "article",
-      title: post.seo_title || post.title,
+      title,
       description,
       url,
-      images,
+      // A post with a featured image uses it; one without gets no `images`
+      // key, so this route's opengraph-image.tsx (title card) is used instead.
+      ...(images ? { images } : {}),
       publishedTime: post.published_at,
       modifiedTime: post.updated_at || post.published_at,
       authors: post.author_name ? [post.author_name] : undefined,
@@ -65,9 +69,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     },
     twitter: {
       card: "summary_large_image",
-      title: post.seo_title || post.title,
+      title,
       description,
-      images: images?.map((i) => i.url),
+      ...(images ? { images: images.map((i) => i.url) } : {}),
     },
   };
 }

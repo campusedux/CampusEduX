@@ -9,14 +9,17 @@ import { interviewQuestionsCrumbs } from "@/lib/interviewQuestions.types";
 
 export const revalidate = 21600;
 
+const TITLE = "Interview Questions & Answers by Topic | CampusEduX";
+const DESCRIPTION =
+  "Programming interview questions and answers by language, organized topic by topic — each with a clear answer, a code example and a key point to remember.";
+
 export const metadata: Metadata = {
-  title: "Interview Questions",
-  description:
-    "Interview questions and answers by language, organized by topic — Java today, with more languages on the way. Each question comes with a clear answer, a code example, and a key point to remember.",
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/practice/interview-questions") },
   openGraph: {
-    title: "Interview Questions | CampusEduX",
-    description: "Interview questions and answers by language, organized topic-by-topic.",
+    title: TITLE,
+    description: DESCRIPTION,
     url: absoluteUrl("/practice/interview-questions"),
     type: "website",
     images: [DEFAULT_OG_IMAGE],

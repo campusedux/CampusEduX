@@ -5,6 +5,8 @@ import JsonLd from "@/components/JsonLd";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import { Badge, Rating, PriceDisplay, TagPill, ReviewCard, SectionHeader, EmptyState, Breadcrumb } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { authoredDescription } from "@/lib/metaDescription";
+import { plainTitle } from "@/lib/seoTitles";
 import { getCachedProjectDetail, getCachedTopProjectIds } from "@/lib/cache";
 import ProjectPurchasePanel from "./ProjectPurchasePanel";
 import Gallery from "./Gallery";
@@ -54,8 +56,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const { project } = result;
   const image = project.thumbnail_url ? [{ url: project.thumbnail_url }] : [DEFAULT_OG_IMAGE];
   return {
-    title: project.title,
-    description: (project.description || "").slice(0, 155),
+    title: { absolute: plainTitle(project.title) },
+    description: authoredDescription(project.description, `${project.title} — a project on CampusEduX.`),
     alternates: { canonical: absoluteUrl(`/projects/${params.id}`) },
     openGraph: { title: project.title, images: image, url: absoluteUrl(`/projects/${params.id}`), type: "website" },
     twitter: { card: "summary_large_image", title: project.title, images: project.thumbnail_url ? [project.thumbnail_url] : undefined },

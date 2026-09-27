@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { getPracticeProblem, getPracticeProblemRelated } from "@/lib/practice";
 import { practiceCrumbs } from "@/lib/practice.types";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { problemDescription } from "@/lib/metaDescription";
+import { problemLanguage, problemTitle } from "@/lib/seoTitles";
+import { BRAND } from "@/lib/brand";
 import { CodingProblemBody } from "@/app/coding-problems/[problemSlug]/CodingProblemBody";
 import { PracticeProblemPremiumGate } from "./PracticeProblemPremiumGate";
 
@@ -29,20 +32,26 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   // actually shows (title, difficulty, category, a premium notice), never the
   // withheld statement.
   const categoryName = category?.name ?? "Practice";
-  const fallback = locked
-    ? `${problem.title} is a ${problem.difficulty} ${categoryName} coding problem on CampusEduX. It's a Premium problem — unlock it to view the full statement, examples and code editor.`
-    : `${problem.title} — a ${problem.difficulty} coding problem on CampusEduX.`;
-  const description = (problem.description || fallback)
-    .replace(/[#>*`_|\-]+/g, " ")
-    .trim()
-    .slice(0, 155);
+  // The global library is solvable in several languages → "Coding" unless a
+  // problem supports exactly one.
+  const language = problemLanguage({ supportedLanguages: problem.supported_languages });
+  const title = problemTitle({ problemTitle: problem.title, language });
+  const description = problemDescription({
+    title: problem.title,
+    difficulty: problem.difficulty,
+    language,
+    topicName: categoryName,
+    statement: locked ? null : problem.description,
+    locked,
+  });
   const url = absoluteUrl(`/practice/problems/${problem.slug}`);
   return {
-    title: `${problem.title} · Practice`,
+    title: { absolute: title },
     description,
     alternates: { canonical: url },
-    openGraph: { title: problem.title, description, url, type: "article", images: [DEFAULT_OG_IMAGE] },
-    twitter: { card: "summary", title: problem.title, description },
+    // No `images` key: this route's opengraph-image.tsx (problem title card) is used.
+    openGraph: { title, description, url, type: "article", siteName: BRAND.name },
+    twitter: { card: "summary_large_image", title, description },
     other: { "topic:name": categoryName },
   };
 }

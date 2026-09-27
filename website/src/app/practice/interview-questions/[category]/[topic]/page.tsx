@@ -5,7 +5,10 @@ import { ArrowLeft, ArrowRight, Code2, Briefcase, FolderKanban, Newspaper, Gradu
 import { Breadcrumb } from "@/components/ui";
 import { Markdown } from "@/components/learning/Markdown";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE, faqJsonLd } from "@/lib/seo";
+import { cleanText, interviewTopicDescription } from "@/lib/metaDescription";
+import { interviewTopicTitle } from "@/lib/seoTitles";
+import { BRAND } from "@/lib/brand";
 import { getInterviewTopicDetail } from "@/lib/interviewQuestions";
 import { interviewQuestionsCrumbs, JAVA_TOPIC_LEARNING_LINKS } from "@/lib/interviewQuestions.types";
 
@@ -26,22 +29,27 @@ export async function generateMetadata({
   const detail = await getInterviewTopicDetail(params.category, params.topic);
   if (!detail) return { title: "Not found", robots: { index: false, follow: false } };
   const { category, topic, questions } = detail;
-  const description = (
-    topic.description || `${questions.length} ${topic.name} interview questions and answers for ${category.name}.`
-  ).slice(0, 155);
+  const title = interviewTopicTitle({ categoryName: category.name, topicName: topic.name });
+  const description = interviewTopicDescription({
+    categoryName: category.name,
+    topicName: topic.name,
+    topicDescription: topic.description,
+    questions,
+  });
   const url = absoluteUrl(`/practice/interview-questions/${category.slug}/${topic.slug}`);
   return {
-    title: `${topic.name} Interview Questions · ${category.name}`,
+    title: { absolute: title },
     description,
     alternates: { canonical: url },
     openGraph: {
-      title: `${topic.name} Interview Questions | ${category.name} | CampusEduX`,
+      title,
       description,
       url,
       type: "article",
+      siteName: BRAND.name,
       images: [DEFAULT_OG_IMAGE],
     },
-    twitter: { card: "summary", title: `${topic.name} Interview Questions`, description },
+    twitter: { card: "summary", title, description },
   };
 }
 
@@ -72,6 +80,16 @@ export default async function InterviewTopicPage({
           { name: topic.name, path: `${basePath}/${topic.slug}` },
         ])}
       />
+      {/* Every question + answer below is rendered in full on the page. */}
+      {questions.length > 0 ? (
+        <JsonLd
+          data={faqJsonLd(
+            questions
+              .map((q) => ({ question: cleanText(q.question), answer: cleanText(q.answer) }))
+              .filter((q) => q.question && q.answer),
+          )}
+        />
+      ) : null}
       <Breadcrumb items={crumbs} className="mb-4" />
 
       <header className="max-w-2xl">

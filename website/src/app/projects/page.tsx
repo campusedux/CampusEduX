@@ -8,7 +8,8 @@ import { FilterSheet, Pagination, EmptyState, SkeletonProjectCard } from "@/comp
 import { cn } from "@/lib/cn";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
 import { getCachedProjectsPage, getCachedCategories } from "@/lib/cache";
-import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 import {
   PROJECT_PAGE_SIZE,
   PROJECT_SORTS,
@@ -213,6 +214,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
 
   return (
     <div className="page-shell">
+      <JsonLd data={breadcrumbJsonLd([{ name: "Projects", path: "/projects" }])} />
       <header className="relative overflow-hidden rounded-3xl border border-line bg-card px-5 py-8 shadow-card sm:px-10 sm:py-10">
         <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,#000_15%,transparent_65%)]" />
         <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />

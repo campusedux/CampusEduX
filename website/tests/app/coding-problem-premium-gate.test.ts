@@ -163,7 +163,7 @@ describe("Phase 3 Batch 4: /coding-problems/[problemSlug] generateMetadata", () 
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/coding-problems/two-sum");
   });
 
-  it("regression: unlocked metadata still uses the real description, stripped + truncated exactly as before", async () => {
+  it("unlocked metadata leads with a problem summary, then the real (Markdown-stripped) statement, within 155 chars", async () => {
     const { getCodingProblem } = await import("@/lib/learning");
     const { generateMetadata } = await import("@/app/coding-problems/[problemSlug]/page");
     const longDescription = `Given an array # of *integers* — ${"x".repeat(200)}`;
@@ -173,9 +173,13 @@ describe("Phase 3 Batch 4: /coding-problems/[problemSlug] generateMetadata", () 
 
     const metadata = await generateMetadata({ params: { problemSlug: "two-sum" } });
 
-    const expected = longDescription.replace(/[#>*`_|\-]+/g, " ").trim().slice(0, 155);
-    expect(metadata.description).toBe(expected);
-    expect(metadata.description?.toLowerCase()).not.toContain("premium problem");
+    const description = String(metadata.description);
+    expect(description.startsWith("Two Sum is an Easy ")).toBe(true);
+    expect(description).toContain("practice problem on Arrays.");
+    expect(description).toContain("Given an array # of integers");
+    expect(description).not.toContain("*");
+    expect(description.length).toBeLessThanOrEqual(155);
+    expect(description.toLowerCase()).not.toContain("premium problem");
   });
 });
 
@@ -235,7 +239,7 @@ describe("Phase 3 Batch 4: /practice/problems/[slug] generateMetadata", () => {
     expect(metadata.description).not.toContain(GATED_MARKER);
   });
 
-  it("regression: unlocked metadata still uses the real description, stripped + truncated exactly as before", async () => {
+  it("unlocked metadata leads with a problem summary, then the real (Markdown-stripped) statement, within 155 chars", async () => {
     const { getPracticeProblem } = await import("@/lib/practice");
     const { generateMetadata } = await import("@/app/practice/problems/[slug]/page");
     const longDescription = `Given a string # of *brackets* — ${"y".repeat(200)}`;
@@ -245,8 +249,12 @@ describe("Phase 3 Batch 4: /practice/problems/[slug] generateMetadata", () => {
 
     const metadata = await generateMetadata({ params: { slug: "valid-parentheses" } });
 
-    const expected = longDescription.replace(/[#>*`_|\-]+/g, " ").trim().slice(0, 155);
-    expect(metadata.description).toBe(expected);
+    const description = String(metadata.description);
+    expect(description.startsWith("Valid Parentheses is a Medium ")).toBe(true);
+    expect(description).toContain("practice problem on Arrays.");
+    expect(description).toContain("Given a string # of brackets");
+    expect(description.length).toBeLessThanOrEqual(155);
+    expect(description.toLowerCase()).not.toContain("premium problem");
   });
 });
 

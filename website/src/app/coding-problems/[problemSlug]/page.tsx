@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCodingProblem, getCodingProblemRelated } from "@/lib/learning";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { problemDescription } from "@/lib/metaDescription";
+import { problemLanguage, problemTitle } from "@/lib/seoTitles";
+import { BRAND } from "@/lib/brand";
 import { CodingProblemBody } from "./CodingProblemBody";
 import { CodingProblemPremiumGate } from "./CodingProblemPremiumGate";
 
@@ -25,16 +28,19 @@ export async function generateMetadata({
   const { problem, topic, locked } = detail;
   // Locked problems stay indexable (same convention as the Learning topic
   // page), but `problem.description` is nulled server-side for a locked
-  // problem — so the fallback here must describe only what the premium gate
+  // problem — so a locked description describes only what the premium gate
   // actually shows (title, difficulty, topic, a premium notice), never the
-  // withheld statement.
-  const fallback = locked
-    ? `${problem.title} is a ${problem.difficulty} ${topic.title} coding problem on CampusEduX. It's a Premium problem — unlock it to view the full statement, examples and code editor.`
-    : `${problem.title} — a ${problem.difficulty} coding problem on CampusEduX.`;
-  const description = (problem.description || fallback)
-    .replace(/[#>*`_|\-]+/g, " ")
-    .trim()
-    .slice(0, 155);
+  // withheld statement (`locked` is checked here, not just a falsy statement).
+  const language = problemLanguage({ supportedLanguages: problem.supported_languages, gridSlug: topic.grid_slug });
+  const title = problemTitle({ problemTitle: problem.title, language });
+  const description = problemDescription({
+    title: problem.title,
+    difficulty: problem.difficulty,
+    language,
+    topicName: topic.title,
+    statement: locked ? null : problem.description,
+    locked,
+  });
   const url = absoluteUrl(`/coding-problems/${problem.slug}`);
   // No examples, constraints, or starter code -> nothing but a generic
   // description actually renders (a currently-unrewritten seed batch).
@@ -46,11 +52,12 @@ export async function generateMetadata({
     problem.constraints.length === 0 &&
     Object.keys(problem.starter_code ?? {}).length === 0;
   return {
-    title: `${problem.title} · Coding Problem`,
+    title: { absolute: title },
     description,
     alternates: { canonical: url },
-    openGraph: { title: problem.title, description, url, type: "article", images: [DEFAULT_OG_IMAGE] },
-    twitter: { card: "summary", title: problem.title, description },
+    // No `images` key: this route's opengraph-image.tsx (problem title card) is used.
+    openGraph: { title, description, url, type: "article", siteName: BRAND.name },
+    twitter: { card: "summary_large_image", title, description },
     other: { "topic:name": topic.title },
     robots: isThin ? { index: false, follow: true } : undefined,
   };

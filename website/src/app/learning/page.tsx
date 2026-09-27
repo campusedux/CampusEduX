@@ -8,17 +8,31 @@ import { Badge, EmptyState, SectionHeader, Skeleton } from "@/components/ui";
 import { CourseCard } from "@/components/learning/CourseCard";
 import JsonLd from "@/components/JsonLd";
 import { cn } from "@/lib/cn";
-import { absoluteUrl, courseListJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, courseListJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { BRAND } from "@/lib/brand";
 import { ContinueLearningRow } from "./_components/ContinueLearningRow";
 
 export const revalidate = 21600;
 
+// Names only courses that exist on the live /learning index (2026-09-27):
+// Java, Python, DBMS & SQL, Spring Boot, AI/ML Notes and Generative AI.
+const TITLE = "Programming Tutorials: Java, Python, SQL & More | CampusEduX";
+const DESCRIPTION =
+  "Structured programming tutorials on CampusEduX — Java, Python, DBMS & SQL, Spring Boot, AI/ML and Generative AI, split into short lessons with examples.";
+
 export const metadata: Metadata = {
-  title: "Learning",
-  description:
-    "Free, structured learning resources on CampusEduX — tutorials and documentation across programming, DSA, web development, databases and more.",
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/learning") },
-  openGraph: { title: "Learning · CampusEduX", url: absoluteUrl("/learning"), type: "website", images: [DEFAULT_OG_IMAGE] },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: absoluteUrl("/learning"),
+    type: "website",
+    siteName: BRAND.name,
+    images: [DEFAULT_OG_IMAGE],
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 type Access = "free" | "premium";
@@ -132,6 +146,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
 
   return (
     <div className="page-shell">
+      <JsonLd data={breadcrumbJsonLd([{ name: "Learning", path: "/learning" }])} />
       {grids.length > 0 ? (
         <JsonLd
           data={courseListJsonLd(grids.map((g) => ({ name: g.name, description: g.description, path: `/learning/${g.slug}` })))}

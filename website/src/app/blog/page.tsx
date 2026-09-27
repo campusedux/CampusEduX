@@ -23,17 +23,17 @@ const DESCRIPTION =
   "Practical, plain-English articles on artificial intelligence, technology, programming and careers — written by the CampusEduX team for students and developers.";
 
 export const metadata: Metadata = {
-  title: "Blog",
+  title: "Blog: AI, Programming & Career Articles",
   description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/blog") },
   openGraph: {
-    title: `Blog · ${BRAND.name}`,
+    title: `Blog: AI, Programming & Career Articles | ${BRAND.name}`,
     description: DESCRIPTION,
     url: absoluteUrl("/blog"),
     type: "website",
     images: [DEFAULT_OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: `Blog · ${BRAND.name}`, description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: `Blog: AI, Programming & Career Articles | ${BRAND.name}`, description: DESCRIPTION },
 };
 
 type SP = { page?: string; q?: string; category?: string; tag?: string };

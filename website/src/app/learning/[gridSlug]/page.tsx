@@ -4,7 +4,10 @@ import { getLearningTree, getLearningGridBrief, getLearningGridSlugs, getGridSco
 import { toOutline } from "@/lib/courseOutline";
 import JsonLd from "@/components/JsonLd";
 import { Breadcrumb } from "@/components/ui";
-import { absoluteUrl, breadcrumbJsonLd, courseJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, courseJsonLd } from "@/lib/seo";
+import { courseDescription } from "@/lib/metaDescription";
+import { courseTitle } from "@/lib/seoTitles";
+import { BRAND } from "@/lib/brand";
 import { CourseHero } from "../_components/CourseHero";
 import { CourseCurriculum } from "../_components/CourseCurriculum";
 import { CourseCta } from "../_components/CourseCta";
@@ -18,20 +21,28 @@ export async function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: { params: { gridSlug: string } }): Promise<Metadata> {
-  const grid = await getLearningGridBrief(params.gridSlug);
+  const [grid, tree] = await Promise.all([getLearningGridBrief(params.gridSlug), getLearningTree(params.gridSlug)]);
   if (!grid) return { title: "Learning resource not found", robots: { index: false, follow: false } };
-  const description = (grid.description || `${grid.name} — a structured learning resource on CampusEduX.`).slice(0, 155);
+  const lessonCount = tree ? tree.sections.reduce((n, s) => n + s.topics.length, 0) : 0;
+  const chapterCount = tree ? tree.sections.filter((s) => s.topics.length > 0).length : 0;
+  const title = courseTitle({ courseName: grid.name, lessonCount });
+  const description = courseDescription({ courseName: grid.name, description: grid.description, lessonCount, chapterCount });
+  const url = absoluteUrl(`/learning/${grid.slug}`);
   return {
-    title: grid.name,
+    title: { absolute: title },
     description,
-    alternates: { canonical: absoluteUrl(`/learning/${grid.slug}`) },
+    alternates: { canonical: url },
     openGraph: {
-      title: grid.name,
+      title,
       description,
-      url: absoluteUrl(`/learning/${grid.slug}`),
+      url,
       type: "website",
-      images: grid.cover_image_url ? [{ url: grid.cover_image_url }] : [DEFAULT_OG_IMAGE],
+      siteName: BRAND.name,
+      // A real cover image wins; otherwise no `images` key, so this route's
+      // opengraph-image.tsx (course title card) is used instead.
+      ...(grid.cover_image_url ? { images: [{ url: grid.cover_image_url }] } : {}),
     },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 

@@ -11,6 +11,9 @@ import { TagPill, Breadcrumb, EmptyState } from "@/components/ui";
 import { ExperienceBadge } from "@/components/JobCard";
 import { absoluteUrl, breadcrumbJsonLd, jobPostingIdentifier, hiringOrganizationJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { getCachedJobDetail, getCachedRecentJobIds } from "@/lib/cache";
+import { authoredDescription, fitDescription, cleanText } from "@/lib/metaDescription";
+import { jobTitle } from "@/lib/seoTitles";
+import { BRAND } from "@/lib/brand";
 import { jobAvailability } from "@/lib/jobsActive";
 import JobApplyPanel from "./JobApplyPanel";
 
@@ -46,17 +49,27 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     return { title: "Job no longer available", robots: { index: false, follow: true } };
   }
   const company = job.company_name || job.company?.name || "a CampusEduX employer";
+  const title = jobTitle({ title: job.title, company: job.company_name || job.company?.name || "" });
+  // What/where first (real columns only), then the posting's own summary/description.
+  const facts = [job.job_type, job.work_mode, job.location].filter(Boolean).join(", ");
+  const description =
+    fitDescription([
+      `${job.title} at ${company}${facts ? ` (${facts})` : ""}.`,
+      cleanText(job.summary || job.description),
+    ]) || authoredDescription(job.title);
   return {
-    title: `${job.title} at ${company}`,
-    description: (job.description || `${job.title} — ${company}`).slice(0, 155),
+    title: { absolute: title },
+    description,
     alternates: { canonical: absoluteUrl(`/jobs/${params.id}`) },
     openGraph: {
-      title: `${job.title} at ${company}`,
+      title,
+      description,
       url: absoluteUrl(`/jobs/${params.id}`),
       type: "website",
+      siteName: BRAND.name,
       images: [DEFAULT_OG_IMAGE],
     },
-    twitter: { card: "summary", title: `${job.title} at ${company}` },
+    twitter: { card: "summary", title, description },
   };
 }
 
@@ -111,6 +124,11 @@ export default async function JobDetailPage({ params }: { params: { id: string }
     jobLocation: { "@type": "Place", address: job.location || "India" },
   };
   if (deadline) jobJsonLd.validThrough = deadline;
+  // `jobs.work_mode` (migration 0114: Remote | Hybrid | On-site, nullable) is the
+  // only remote signal. Google also expects `applicantLocationRequirements` for
+  // a TELECOMMUTE posting, but no column records which countries may apply, so
+  // it is left out rather than guessed.
+  if (job.work_mode === "Remote") jobJsonLd.jobLocationType = "TELECOMMUTE";
   if (job.salary_min_lpa && job.salary_max_lpa) {
     jobJsonLd.baseSalary = {
       "@type": "MonetaryAmount",
