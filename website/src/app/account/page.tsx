@@ -51,10 +51,10 @@ export default async function AccountOverviewPage() {
       </h1>
       <p className="mt-1 text-sm text-ink-muted">Here&apos;s a snapshot of your CampusEduX account.</p>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <AccountLearningCard courses={grids.map(({ slug, name, topic_count }) => ({ slug, name, topic_count }))} />
 
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <Link
             href="/account/wallet"
             className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-accent-violet p-5 text-white shadow-card transition hover:-translate-y-0.5 motion-reduce:transform-none"
