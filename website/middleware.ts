@@ -1,10 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { isPublicGet } from "@/lib/middlewarePaths";
 
 // Identical purpose to admin-panel/middleware.ts: Supabase's access token is
 // short-lived, so this refreshes it on every request that isn't a static
 // asset, keeping /account Server Components from seeing a stale session.
 export async function middleware(request: NextRequest) {
+  if (isPublicGet(request.method, request.nextUrl.pathname)) return NextResponse.next();
+
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   const supabase = createServerClient(
