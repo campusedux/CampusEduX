@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
@@ -27,35 +27,37 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-type Status = "checking" | "ready" | "invalid" | "success";
+// "confirm" (a Continue button, shown first) does NOT call verifyOtp — it only
+// checks that the URL has a token_hash/type at all. Verification is deferred
+// to an explicit click (below) because a recovery token is single-use, and
+// email-security gateways (Outlook Safe Links "time-of-click" scanning, some
+// corporate mail proxies) fetch/render a link's page before the person ever
+// sees it. If that fired verifyOtp automatically on load, the scanner would
+// burn the token and every real user would land on "Link expired" — an
+// automated scanner does not simulate a button click.
+type Status = "confirm" | "checking" | "ready" | "invalid" | "success";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<Status>("checking");
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type");
+  const validLink = Boolean(tokenHash && type === "recovery");
+
+  const [status, setStatus] = useState<Status>(validLink ? "confirm" : "invalid");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const started = useRef(false);
 
-  useEffect(() => {
-    // Guard against React StrictMode's double-invoked effect in dev — the
-    // recovery token is single-use, so a second call would always fail.
-    if (started.current) return;
+  function handleContinue() {
+    // Guard against a double-click / StrictMode re-render firing this twice —
+    // the recovery token is single-use, so a second call would always fail.
+    if (started.current || !tokenHash || !validLink) return;
     started.current = true;
+    setStatus("checking");
 
-    const tokenHash = searchParams.get("token_hash");
-    const type = searchParams.get("type");
-
-    // Only a token_hash freshly verified by our own server for THIS link
-    // counts as a genuine recovery session — an unrelated, already-signed-in
-    // session in this browser is never treated as one.
-    if (!tokenHash || type !== "recovery") {
-      setStatus("invalid");
-      return;
-    }
-
-    fetch(`/api/auth/verify-recovery?token_hash=${encodeURIComponent(tokenHash)}&type=${encodeURIComponent(type)}`)
+    fetch(`/api/auth/verify-recovery?token_hash=${encodeURIComponent(tokenHash)}&type=${encodeURIComponent(type as string)}`)
       .then((res) => res.json())
       .then((body: { status?: VerifyRecoveryStatus }) => {
         setStatus(body.status === "success" ? "ready" : "invalid");
@@ -63,7 +65,7 @@ function ResetPasswordForm() {
       .catch(() => {
         setStatus("invalid");
       });
-  }, [searchParams]);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,6 +99,20 @@ function ResetPasswordForm() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (status === "confirm") {
+    return (
+      <Shell>
+        <h1 className="mt-5 text-2xl font-bold text-ink">Reset your password</h1>
+        <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+          Tap continue to verify this link and set a new password.
+        </p>
+        <button type="button" onClick={handleContinue} className="btn-primary mt-5 w-full">
+          Continue
+        </button>
+      </Shell>
+    );
   }
 
   if (status === "checking") {
