@@ -1,5 +1,5 @@
 -- mobile-app/supabase/checks/spring_boot_publish.sql
--- NOT A MIGRATION and NOT run by anyone yet. The owner runs this ONCE, on purpose, after 0124-0137 are applied,
+-- NOT A MIGRATION and NOT run by anyone yet. The owner runs this ONCE, on purpose, after 0130-0143 are applied,
 -- spring_boot_hidden_check.sql is all ok = true, and the lessons have been reviewed.
 -- It switches the Spring Boot Tutorial ON: the grid and its mock tests together (the test table's RLS does
 -- not follow the grid, so both must change in the same transaction). It touches no other course.

@@ -126,28 +126,28 @@ All 95 topics are written. Topics 11-95 were written in one pass (2026-09-27) an
 
 | Batch | Mobile / admin migration | Rollback | Topics | Applied to production |
 |---|---|---|---|---|
-| 1 | `0124_seed_spring_boot_tutorial_batch01.sql` / `096_…` | `rollbacks/0124_…_rollback.sql` (removes the whole course) | 1-1 (1) | No |
-| 2 | `0125_seed_spring_boot_tutorial_batch02.sql` / `097_…` | `rollbacks/0125_…_rollback.sql` (removes only batch 02) | 2-6 (5) | No |
-| 3 | `0126_seed_spring_boot_tutorial_batch03.sql` / `098_…` | `rollbacks/0126_…_rollback.sql` (removes only batch 03) | 7-10 (4) | No |
-| 4 | `0127_seed_spring_boot_tutorial_batch04.sql` / `099_…` | `rollbacks/0127_…_rollback.sql` (removes only batch 04) | 11-21 (11) | No |
-| 5 | `0128_seed_spring_boot_tutorial_batch05.sql` / `100_…` | `rollbacks/0128_…_rollback.sql` (removes only batch 05) | 22-27 (6) | No |
-| 6 | `0129_seed_spring_boot_tutorial_batch06.sql` / `101_…` | `rollbacks/0129_…_rollback.sql` (removes only batch 06) | 28-38 (11) | No |
-| 7 | `0130_seed_spring_boot_tutorial_batch07.sql` / `102_…` | `rollbacks/0130_…_rollback.sql` (removes only batch 07) | 39-43 (5) | No |
-| 8 | `0131_seed_spring_boot_tutorial_batch08.sql` / `103_…` | `rollbacks/0131_…_rollback.sql` (removes only batch 08) | 44-49 (6) | No |
-| 9 | `0132_seed_spring_boot_tutorial_batch09.sql` / `104_…` | `rollbacks/0132_…_rollback.sql` (removes only batch 09) | 50-58 (9) | No |
-| 10 | `0133_seed_spring_boot_tutorial_batch10.sql` / `105_…` | `rollbacks/0133_…_rollback.sql` (removes only batch 10) | 59-67 (9) | No |
-| 11 | `0134_seed_spring_boot_tutorial_batch11.sql` / `106_…` | `rollbacks/0134_…_rollback.sql` (removes only batch 11) | 68-74 (7) | No |
-| 12 | `0135_seed_spring_boot_tutorial_batch12.sql` / `107_…` | `rollbacks/0135_…_rollback.sql` (removes only batch 12) | 75-80 (6) | No |
-| 13 | `0136_seed_spring_boot_tutorial_batch13.sql` / `108_…` | `rollbacks/0136_…_rollback.sql` (removes only batch 13) | 81-88 (8) | No |
-| 14 | `0137_seed_spring_boot_tutorial_batch14.sql` / `109_…` | `rollbacks/0137_…_rollback.sql` (removes only batch 14) | 89-95 (7) | No |
+| 1 | `0130_seed_spring_boot_tutorial_batch01.sql` / `101_…` | `rollbacks/0124_…_rollback.sql` (removes the whole course) | 1-1 (1) | No |
+| 2 | `0131_seed_spring_boot_tutorial_batch02.sql` / `102_…` | `rollbacks/0125_…_rollback.sql` (removes only batch 02) | 2-6 (5) | No |
+| 3 | `0132_seed_spring_boot_tutorial_batch03.sql` / `103_…` | `rollbacks/0126_…_rollback.sql` (removes only batch 03) | 7-10 (4) | No |
+| 4 | `0133_seed_spring_boot_tutorial_batch04.sql` / `104_…` | `rollbacks/0127_…_rollback.sql` (removes only batch 04) | 11-21 (11) | No |
+| 5 | `0134_seed_spring_boot_tutorial_batch05.sql` / `105_…` | `rollbacks/0128_…_rollback.sql` (removes only batch 05) | 22-27 (6) | No |
+| 6 | `0135_seed_spring_boot_tutorial_batch06.sql` / `106_…` | `rollbacks/0129_…_rollback.sql` (removes only batch 06) | 28-38 (11) | No |
+| 7 | `0136_seed_spring_boot_tutorial_batch07.sql` / `107_…` | `rollbacks/0130_…_rollback.sql` (removes only batch 07) | 39-43 (5) | No |
+| 8 | `0137_seed_spring_boot_tutorial_batch08.sql` / `108_…` | `rollbacks/0131_…_rollback.sql` (removes only batch 08) | 44-49 (6) | No |
+| 9 | `0138_seed_spring_boot_tutorial_batch09.sql` / `109_…` | `rollbacks/0132_…_rollback.sql` (removes only batch 09) | 50-58 (9) | No |
+| 10 | `0139_seed_spring_boot_tutorial_batch10.sql` / `110_…` | `rollbacks/0133_…_rollback.sql` (removes only batch 10) | 59-67 (9) | No |
+| 11 | `0140_seed_spring_boot_tutorial_batch11.sql` / `111_…` | `rollbacks/0134_…_rollback.sql` (removes only batch 11) | 68-74 (7) | No |
+| 12 | `0141_seed_spring_boot_tutorial_batch12.sql` / `112_…` | `rollbacks/0135_…_rollback.sql` (removes only batch 12) | 75-80 (6) | No |
+| 13 | `0142_seed_spring_boot_tutorial_batch13.sql` / `113_…` | `rollbacks/0136_…_rollback.sql` (removes only batch 13) | 81-88 (8) | No |
+| 14 | `0143_seed_spring_boot_tutorial_batch14.sql` / `114_…` | `rollbacks/0137_…_rollback.sql` (removes only batch 14) | 89-95 (7) | No |
 
-Apply in numeric order (0124 to 0137), mobile files only, each in one transaction. Roll back in reverse.
+Apply in numeric order (0130 to 0143), mobile files only, each in one transaction. Roll back in reverse.
 After applying, run `mobile-app/supabase/checks/spring_boot_hidden_check.sql` (read-only): all 33 rows must say ok = true (expects 95 topics / 186 blocks / 95 tests / 475 MCQs).
 Local evidence (2026-09-27): all 14 batches applied twice + admin twins gave identical rows, rollback x2 returned 8 tables byte for byte to baseline, re-apply restored; harness green.
 
 ## Before making the course visible
 
-- All 95 topics written; the owner has reviewed them and applied 0124 to 0137 with every check row ok = true.
+- All 95 topics written; the owner has reviewed them and applied 0130 to 0143 with every check row ok = true.
 - All Related Topics links now resolve (verify shows 0 broken-link warnings).
 - Switch on the grid **and** its mock tests together. The test table's RLS does not follow the grid, so
   each `pt-sb-*` test copies the grid's hidden flags when it is created.

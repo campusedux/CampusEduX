@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Applies the Spring Boot Tutorial mobile migrations 0124-0137, in order, each as ONE transaction, and stops at the
+# Applies the Spring Boot Tutorial mobile migrations 0130-0143, in order, each as ONE transaction, and stops at the
 # first error. The course stays HIDDEN: this script never switches anything on.
 #
 # Usage:   DATABASE_URL='<postgres connection string>' scripts/apply-spring-boot.sh
 # The connection string is read from the environment only. It is never printed, logged or stored by this script.
-# Nothing is applied until you run it yourself. Admin twins (096-109) are NOT applied here.
+# Nothing is applied until you run it yourself. Admin twins (101-114) are NOT applied here.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MIG="$ROOT/mobile-app/supabase/migrations"
@@ -12,7 +12,7 @@ MIG="$ROOT/mobile-app/supabase/migrations"
 command -v psql >/dev/null || { echo "psql is required" >&2; exit 2; }
 
 files=()
-for n in $(seq 124 137); do
+for n in $(seq 130 143); do
   f=$(ls "$MIG"/0${n}_seed_spring_boot_tutorial_batch*.sql 2>/dev/null || true)
   [ -n "$f" ] || { echo "missing migration ${n}" >&2; exit 2; }
   files+=("$f")

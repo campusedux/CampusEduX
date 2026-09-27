@@ -1,5 +1,5 @@
 -- mobile-app/supabase/checks/spring_boot_hidden_check.sql
--- READ-ONLY check, run by the owner after applying 0124 to 0137. Proves that the Spring Boot
+-- READ-ONLY check, run by the owner after applying 0130 to 0143. Proves that the Spring Boot
 -- Tutorial rows exist but stay HIDDEN from anon and from a signed-in (non-admin) student, through every
 -- Learning RPC and every table they could read directly.
 --
