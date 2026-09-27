@@ -3,8 +3,8 @@ import { View, Text, Pressable, Linking, Share } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "@/components/ui";
+import { currentAppVersion } from "@/lib/appVersion";
 
-const APP_VERSION = "1.0.0";
 
 const LINKS = [
   { icon: "document-text-outline" as const, label: "Terms & Conditions", onPress: (nav: any) => nav.getParent()?.navigate("SettingsModule", { screen: "Terms" }) },
@@ -38,7 +38,7 @@ export function AboutScreen() {
           <Ionicons name="school" size={36} color="#FBBF24" />
         </View>
         <Text className="text-xl font-bold text-gray-900">CampusEduX</Text>
-        <Text className="text-gray-400 text-sm mt-1">Version {APP_VERSION}</Text>
+        <Text className="text-gray-400 text-sm mt-1">Version {currentAppVersion() ?? "—"}</Text>
         <Text className="text-gray-500 text-sm text-center mt-3 px-6">
           Your all-in-one platform for projects, jobs, placement preparation and more.
         </Text>

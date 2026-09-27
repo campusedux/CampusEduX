@@ -16,9 +16,6 @@ export const BRAND = {
    * — the website has no `/ref/<code>` route, so append the code directly.
    */
   referralBaseUrl: "https://www.campusedux.com/register?ref=",
-  /** android.package in app.json — keep in sync. */
-  androidPackage: "com.campusedux.app",
-  playStoreUrl: "https://play.google.com/store/apps/details?id=com.campusedux.app",
 } as const;
 
 export const APP_NAME = BRAND.name;

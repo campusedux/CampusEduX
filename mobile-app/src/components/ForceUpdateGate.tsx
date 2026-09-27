@@ -1,25 +1,22 @@
 import React from "react";
-import { Linking, Platform, Text, View } from "react-native";
+import { Linking, Text, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Button } from "@/components/ui";
 import { BRAND } from "@/constants/brand";
+import { STORE_URL } from "@/constants/contact";
+import { notify } from "@/lib/notify";
 import { appConfigService } from "@/services/appConfig.service";
 import { currentAppVersion, isUpdateRequired } from "@/lib/appVersion";
 
 const THIRTY_MINUTES = 30 * 60 * 1000;
 
 async function openStore() {
-  const market = `market://details?id=${BRAND.androidPackage}`;
   try {
-    if (Platform.OS === "android" && (await Linking.canOpenURL(market))) {
-      await Linking.openURL(market);
-      return;
-    }
+    await Linking.openURL(STORE_URL);
   } catch {
-    // fall through to the web listing
+    notify("Couldn't open the store", "Please update the app from Google Play.");
   }
-  await Linking.openURL(BRAND.playStoreUrl);
 }
 
 /**
@@ -53,14 +50,14 @@ export function ForceUpdateGate({ children }: { children: React.ReactNode }) {
         This version of {BRAND.name} ({current}) is no longer supported. Please update to version {minimum} or
         later to keep using the app.
       </Text>
-      <View className="w-full mt-8">
-        <Button
-          label={Platform.OS === "android" ? "Update on Google Play" : "Get the latest version"}
-          leftIcon="logo-google-playstore"
-          onPress={openStore}
-          fullWidth
-        />
-      </View>
+      {/* STORE_URL (constants/contact.ts) is the one store link, shared with About > "Rate Us". */}
+      {STORE_URL ? (
+        <View className="w-full mt-8">
+          <Button label="Update on Google Play" leftIcon="logo-google-playstore" onPress={openStore} fullWidth />
+        </View>
+      ) : (
+        <Text className="text-gray-500 text-center mt-6">Update the app from the store you installed it from.</Text>
+      )}
     </View>
   );
 }

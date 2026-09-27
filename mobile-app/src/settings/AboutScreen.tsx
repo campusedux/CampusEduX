@@ -6,11 +6,11 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { STORE_URL } from "@/constants/contact";
 import { Screen } from "@/components/ui";
+import { currentAppVersion } from "@/lib/appVersion";
 import type { SettingsStackParamList } from "@/types";
 
 type Nav = NativeStackNavigationProp<SettingsStackParamList, "About">;
 
-const APP_VERSION = "1.0.0";
 
 export function AboutScreen() {
   const navigation = useNavigation<Nav>();
@@ -49,7 +49,7 @@ export function AboutScreen() {
           <Ionicons name="school" size={36} color="#FBBF24" />
         </View>
         <Text className="text-xl font-bold text-gray-900">CampusEduX</Text>
-        <Text className="text-gray-400 text-sm mt-1">Version {APP_VERSION}</Text>
+        <Text className="text-gray-400 text-sm mt-1">Version {currentAppVersion() ?? "—"}</Text>
         <Text className="text-gray-500 text-sm text-center mt-3 px-6">
           Your all-in-one platform for projects, jobs, placement preparation and more.
         </Text>
