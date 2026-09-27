@@ -7,7 +7,7 @@ import {
   splitFeaturesFor,
 } from "@/services/customProjects.service";
 import { CUSTOM_PROJECT_TOKENS } from "@/types";
-import { resetSupabaseMock, setTableResult, setFunctionResult } from "../../mocks/supabase.mock";
+import { resetSupabaseMock, setTableResult, setFunctionResult, supabase } from "../../mocks/supabase.mock";
 import type { CustomFeature, CustomPlatformPricing, CustomProjectPricing } from "@/types";
 
 beforeEach(() => resetSupabaseMock());
@@ -171,6 +171,22 @@ describe("customProjectsService reads throw on error (money/owned data)", () => 
   it("getMyRequests throws on error rather than faking a list", async () => {
     setTableResult("custom_project_requests", { error: { message: "rls" } });
     await expect(customProjectsService.getMyRequests("u-1")).rejects.toThrow("rls");
+  });
+
+  it("getMyRequests filters by the caller's user_id (admins can read every row via RLS)", async () => {
+    setTableResult("custom_project_requests", { data: [] });
+    await customProjectsService.getMyRequests("u-1");
+    const builder = (supabase.from as jest.Mock).mock.results[0].value;
+    expect(builder.eq).toHaveBeenCalledWith("user_id", "u-1");
+  });
+
+  it("getRequestDetail filters the request by user_id, so another user's id reads as not found", async () => {
+    setTableResult("custom_project_requests", { data: null });
+    await expect(customProjectsService.getRequestDetail("r-1", "u-2")).rejects.toThrow("Request not found");
+    const reqCall = (supabase.from as jest.Mock).mock.calls.findIndex((c) => c[0] === "custom_project_requests");
+    const builder = (supabase.from as jest.Mock).mock.results[reqCall].value;
+    expect(builder.eq).toHaveBeenCalledWith("id", "r-1");
+    expect(builder.eq).toHaveBeenCalledWith("user_id", "u-2");
   });
 
   it("maps a paid request row", async () => {

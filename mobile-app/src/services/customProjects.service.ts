@@ -478,12 +478,14 @@ export const customProjectsService = {
 
   // --- my custom projects (spec §31 — owner only, paid only) ---
 
-  async getMyRequests(_userId: string): Promise<CustomProjectRequest[]> {
-    // RLS scopes this to the caller; the paid filter honours spec §15
+  async getMyRequests(userId: string): Promise<CustomProjectRequest[]> {
+    // RLS scopes this to the caller (admins can read every row, hence the
+    // explicit user_id filter); the paid filter honours spec §15
     // ("request created only after verified token payment").
     const { data, error } = await supabase
       .from("custom_project_requests")
       .select("*")
+      .eq("user_id", userId)
       .eq("token_payment_status", "paid")
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -492,10 +494,15 @@ export const customProjectsService = {
 
   async getRequestDetail(
     requestId: string,
-    _userId: string
+    userId: string
   ): Promise<CustomProjectRequestDetail> {
     const [reqRes, featRes, fileRes, histRes, deliveryRes, msgRes] = await Promise.all([
-      supabase.from("custom_project_requests").select("*").eq("id", requestId).maybeSingle(),
+      supabase
+        .from("custom_project_requests")
+        .select("*")
+        .eq("id", requestId)
+        .eq("user_id", userId)
+        .maybeSingle(),
       supabase
         .from("custom_project_request_features")
         .select("feature_id, feature_name, feature_price, category, is_included")

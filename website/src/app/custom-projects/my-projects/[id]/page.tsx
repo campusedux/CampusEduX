@@ -19,6 +19,9 @@ import {
 } from "@/lib/customProjects";
 import MessageThread from "./MessageThread";
 
+// Per-user data: never statically rendered or cached across users.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Custom project",
   robots: { index: false, follow: false },
@@ -27,7 +30,7 @@ export const metadata: Metadata = {
 type Params = { params: { id: string } };
 
 export default async function Page({ params }: Params) {
-  await requireUser();
+  const user = await requireUser();
   const supabase = createAuthedServerSupabase();
 
   const { data: request } = await supabase
@@ -36,6 +39,8 @@ export default async function Page({ params }: Params) {
       "id,request_code,title,objective,problem_statement,description,target_users,technology_preference,project_type,project_level,platform,custom_requirements,base_price,platform_charge,feature_total,estimated_total,token_amount,status,created_at",
     )
     .eq("id", params.id)
+    // RLS lets admins read every row; this keeps the student page owner-only.
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!request) notFound();
 
