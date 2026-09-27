@@ -94,6 +94,10 @@ Deno.serve(async (req) => {
       .single();
     if (reReadError) throw reReadError;
 
+    // custom_project_apply_balance_payment (migration 0124) already did every side effect of
+    // settling this row — crediting amount_paid, the history row, the user notification, and (on
+    // the "doesn't fit" branch) the ONE admin-inbox row — atomically inside the UPDATE above, so
+    // this function must not duplicate any of them. It only re-reads the outcome to answer the caller.
     const { data: settledPayment } = await db
       .from("custom_project_payments")
       .select("status, amount")
@@ -101,25 +105,11 @@ Deno.serve(async (req) => {
       .single();
 
     if (settledPayment?.status === "refund_due") {
-      await db.from("custom_project_admin_inbox").insert({
-        request_id: payment.request_id,
-        title: "Balance payment needs a manual refund (verified but did not fit)",
-        body: `${updated.request_code} · payment ${razorpayPaymentId} of ${settledPayment.amount} — see custom_project_payments.`,
-      });
       return json({
         error: "Your payment was verified, but it no longer matches the remaining balance. Support has been notified for a refund.",
         request: updated,
       }, 409);
     }
-
-    await db.from("notifications").insert({
-      user_id: user.id,
-      title: "Balance payment received",
-      body: `Payment received for "${updated.title}". Remaining: ${
-        (Number(updated.final_price ?? updated.estimated_total) - Number(updated.amount_paid)).toFixed(2)
-      }.`,
-      category: "updates",
-    });
 
     return json(updated);
   } catch (err) {

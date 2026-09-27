@@ -27,9 +27,10 @@ begin
   if to_regclass('public.custom_project_requests') is null
      or to_regclass('public.custom_project_payments') is null
      or to_regclass('public.custom_project_request_history') is null
+     or to_regclass('public.notifications') is null
      or to_regprocedure('public.has_permission(uuid,text,text)') is null
      or to_regprocedure('public._is_privileged_caller()') is null then
-    raise exception '0124 prerequisite missing: custom project tables (0033), has_permission (admin 001) and _is_privileged_caller (0118/0119) must be applied first';
+    raise exception '0124 prerequisite missing: custom project tables (0033), notifications (0023), has_permission (admin 001) and _is_privileged_caller (0118/0119) must be applied first';
   end if;
 end $$;
 
@@ -206,10 +207,26 @@ begin
         (r.id, r.status, r.status, 'system',
          'Balance payment received (' || new.amount::text || ')', 'payment',
          r.amount_paid::text, (r.amount_paid + new.amount)::text);
+      -- Inserted here (not by the calling Edge Function) so the notification fires exactly once
+      -- however the payment gets settled: the verify function OR the Razorpay webhook (if the
+      -- customer closes the app/tab before the browser's verify call runs).
+      insert into public.notifications (user_id, title, body, category)
+      values (
+        r.user_id, 'Balance payment received',
+        'Payment of ' || new.amount::text || ' received for "' || r.title || '". Remaining: '
+          || greatest(v_remaining - new.amount, 0)::text || '.',
+        'updates'
+      );
     else
-      -- overpayment / duplicate / cancelled: never touch amount_paid; flag for a manual refund
+      -- overpayment / duplicate / cancelled: never touch amount_paid; flag for a manual refund.
+      -- NOTE: this sets custom_project_payments.status (this ledger row only) — it never touches
+      -- custom_project_requests.status (the new/in_development/testing/ready/delivered/cancelled
+      -- workflow column, whose check constraint this migration does not modify), so an
+      -- in_development or delivered project's progress is never affected by a refund flag.
       new.status := 'refund_due';
       if r.id is not null then
+        -- The ONLY place this inbox row is created (the calling Edge Function must not insert its
+        -- own copy) so a browser-settled and a webhook-settled refund_due each raise exactly one.
         insert into public.custom_project_admin_inbox (request_id, title, body)
         values (
           r.id,

@@ -18,6 +18,25 @@ begin
   insert into public.admin_users(id,email,role,status) values (adm,'adm125@x.io','super_admin','active');
   insert into public.admin_users(id,email,role,status) values (ed,'ed125@x.io','viewer','active');
 
+  -- A pre-existing-shaped history row (inserted the way custom_project_set_status() — and every row
+  -- that existed before this migration ran — inserts one: no `event` column at all) must still default
+  -- to event='status' and stay owner-visible under the NEW policy. Proves the ADD COLUMN ... NOT NULL
+  -- DEFAULT 'status' backfill/default is real, not just an aspiration in a comment.
+  declare v_legacy_req uuid; v_legacy_hist uuid; v_legacy_event text;
+  begin
+    insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status)
+      values (a,'Legacy row proj','personal','standard','web','paid') returning id into v_legacy_req;
+    insert into custom_project_request_history(request_id, old_status, new_status, changed_by_role, note)
+      values (v_legacy_req, null, 'new', 'system', null) returning id into v_legacy_hist;
+    select event into v_legacy_event from custom_project_request_history where id = v_legacy_hist;
+    if v_legacy_event <> 'status' then raise exception 'FAIL legacy-shaped row did not default to event=status (got %)', v_legacy_event; end if;
+    perform test_as(a);
+    if not exists (select 1 from custom_project_request_history where id = v_legacy_hist) then
+      raise exception 'FAIL owner cannot see a pre-existing-shaped history row';
+    end if;
+    perform test_reset();
+  end;
+
   -- token counts as the first payment
   insert into custom_project_requests(user_id,title,project_type,project_level,platform,
                                       estimated_total,token_amount,token_payment_status)
@@ -71,7 +90,7 @@ begin
   insert into custom_project_request_history(request_id,new_status) values (r,'new');
   perform test_as(a);
   if exists (select 1 from custom_project_request_history where event <> 'status') then raise exception 'FAIL user reads audit rows'; end if;
-  if (select count(*) from custom_project_request_history) <> 1 then raise exception 'FAIL user status rows'; end if;
+  if (select count(*) from custom_project_request_history where request_id = r) <> 1 then raise exception 'FAIL user status rows'; end if;
   perform test_reset();
 
   -- balance payment: remaining is 8000 - 3000 = 5000
@@ -98,6 +117,12 @@ begin
   if not exists (select 1 from custom_project_request_history where request_id = r and event = 'payment' and old_value='3000.00' and new_value='8000.00') then
     raise exception 'FAIL payment history';
   end if;
+  -- the user notification is inserted by the TRIGGER itself (not by whichever Edge Function/webhook
+  -- performed the UPDATE), so a webhook-only settlement (app closed before the browser's verify call
+  -- runs) still notifies the user — this is the exact case the owner asked about.
+  if not exists (select 1 from notifications where user_id = a and title = 'Balance payment received') then
+    raise exception 'FAIL no balance-received notification';
+  end if;
 
   -- webhook replay: idempotent
   perform test_as(null,'service_role');
@@ -110,7 +135,15 @@ begin
   exception when insufficient_privilege then null; end;
   perform test_reset();
 
-  -- double payment: a second balance order paid after the balance is settled -> refund_due, no credit
+  -- double payment: a second balance order paid after the balance is settled -> refund_due, no credit,
+  -- and — the owner's exact worry — the project's WORKFLOW status (in_development/testing/ready/
+  -- delivered/cancelled, on custom_project_requests) must not move or reset because of it. Advance it
+  -- first so there is real progress to lose if this were wrong.
+  perform test_as(adm);
+  perform custom_project_set_status(r, 'in_development', null);
+  perform test_reset();
+  if (select status from custom_project_requests where id = r) <> 'in_development' then raise exception 'FAIL setup: status not advanced'; end if;
+
   insert into custom_project_payments(request_id,user_id,project_type,amount,status,kind,razorpay_order_id)
     values (r,a,'personal',5000,'created','balance','order_bal_2') returning id into l2;
   perform test_as(null,'service_role');
@@ -118,14 +151,35 @@ begin
   perform test_reset();
   if (select status from custom_project_payments where id = l2) <> 'refund_due' then raise exception 'FAIL duplicate not refund_due'; end if;
   if (select amount_paid from custom_project_requests where id = r) <> 8000 then raise exception 'FAIL overpayment credited'; end if;
+  if (select status from custom_project_requests where id = r) <> 'in_development' then
+    raise exception 'FAIL a refund_due payment moved the request workflow status (progress would be lost)';
+  end if;
   if not exists (select 1 from custom_project_admin_inbox where request_id = r and title like '%manual refund%') then
     raise exception 'FAIL no refund inbox row';
   end if;
+  -- exactly one inbox row — the calling Edge Function must not add its own duplicate
+  if (select count(*) from custom_project_admin_inbox where request_id = r and title like '%manual refund%') <> 1 then
+    raise exception 'FAIL duplicate refund-due inbox row';
+  end if;
+  -- 'refund_due' can never reach the workflow column at all — its check constraint is untouched
+  begin
+    update custom_project_requests set status = 'refund_due' where id = r;
+    raise exception 'FAIL requests.status accepted refund_due';
+  exception when check_violation then null; end;
 
-  -- an amount larger than the remaining balance is refused too
+  -- an amount larger than the remaining balance is refused too — same proof, this time on a
+  -- fully 'delivered' project (the other end of the workflow, and the one the owner named)
   insert into custom_project_requests(user_id,title,project_type,project_level,platform,
                                       estimated_total,token_amount,token_payment_status)
     values (a,'A2','personal','standard','web',6000,3000,'paid') returning id into r;
+  perform test_as(adm);
+  perform custom_project_set_status(r, 'in_development', null);
+  perform custom_project_set_status(r, 'testing', null);
+  perform custom_project_set_status(r, 'ready', null);
+  perform custom_project_set_status(r, 'delivered', null);
+  perform test_reset();
+  if (select status from custom_project_requests where id = r) <> 'delivered' then raise exception 'FAIL setup: not delivered'; end if;
+
   insert into custom_project_payments(request_id,user_id,project_type,amount,status,kind,razorpay_order_id)
     values (r,a,'personal',3500,'created','balance','order_bal_3') returning id into l3;
   perform test_as(null,'service_role');
@@ -134,6 +188,9 @@ begin
   if (select status from custom_project_payments where id = l3) <> 'refund_due'
      or (select amount_paid from custom_project_requests where id = r) <> 3000 then
     raise exception 'FAIL over-remaining payment accepted';
+  end if;
+  if (select status from custom_project_requests where id = r) <> 'delivered' then
+    raise exception 'FAIL an over-remaining payment un-delivered the project';
   end if;
 
   -- the price is locked once fully paid ('A proj' is 8000 / 8000)
