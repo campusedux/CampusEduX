@@ -7,6 +7,7 @@ import { Pencil, Star, Globe, Smartphone, Lock } from 'lucide-react';
 import { DeleteButton } from '@/components/ui/DeleteButton';
 import { StatusPill } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/toast';
+import { useSiteNotice } from '@/components/learning/useSiteNotice';
 import { cn } from '@/lib/utils';
 import type { LearningGrid } from '@/lib/learning/queries';
 import { GRID_TYPE_LABEL, targetingSummary } from '@/lib/learning/constants';
@@ -123,11 +124,12 @@ export function VisibilityToggle({
   icon: React.ReactNode;
   on: boolean;
   disabled?: boolean;
-  onToggle: (next: boolean) => Promise<{ ok: boolean; error?: string }>;
+  onToggle: (next: boolean) => Promise<{ ok: boolean; error?: string; warning?: string; retryTags?: string[] }>;
 }) {
   const [pending, start] = useTransition();
   const router = useRouter();
   const { toast } = useToast();
+  const notify = useSiteNotice();
   return (
     <button
       type="button"
@@ -136,7 +138,10 @@ export function VisibilityToggle({
         start(async () => {
           const res = await onToggle(!on);
           if (!res?.ok) toast({ title: 'Update failed', description: res?.error, variant: 'error' });
-          else router.refresh();
+          else {
+            notify(res);
+            router.refresh();
+          }
         })
       }
       title={`${label}: ${on ? 'visible' : 'hidden'}`}

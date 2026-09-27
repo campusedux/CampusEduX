@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { SiteSync } from '@/lib/learning/siteRevalidate';
+import { syncPractice } from '@/lib/learning/siteSync';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
@@ -16,7 +18,7 @@ import { slugify, isValidSlug, CODING_LANGUAGES } from '@/lib/learning/constants
 const MODULE = 'learning' as const;
 const LIST_PATH = '/learning/practice';
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string } & SiteSync;
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const num = (fd: FormData, k: string, dflt: number) => {
@@ -103,7 +105,7 @@ export async function createPracticeCategory(_p: Result, fd: FormData): Promise<
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.practice.category.create', module: MODULE, resourceType: 'dsa_topics' });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncPractice()) };
 }
 
 export async function updatePracticeCategory(id: string, _p: Result, fd: FormData): Promise<Result> {
@@ -120,7 +122,7 @@ export async function updatePracticeCategory(id: string, _p: Result, fd: FormDat
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.practice.category.update', module: MODULE, resourceType: 'dsa_topics', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncPractice()) };
 }
 
 export async function deletePracticeCategory(id: string): Promise<Result> {
@@ -139,7 +141,7 @@ export async function deletePracticeCategory(id: string): Promise<Result> {
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.practice.category.delete', module: MODULE, resourceType: 'dsa_topics', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncPractice()) };
 }
 
 // ===========================================================================
@@ -241,7 +243,7 @@ export async function createPracticeProblem(_p: Result, fd: FormData): Promise<R
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.practice.problem.create', module: MODULE, resourceType: 'dsa_problems', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true, id };
+  return { ok: true, id, ...(await syncPractice()) };
 }
 
 export async function updatePracticeProblem(id: string, _p: Result, fd: FormData): Promise<Result> {
@@ -259,7 +261,7 @@ export async function updatePracticeProblem(id: string, _p: Result, fd: FormData
   await logActivity({ action: 'learning.practice.problem.update', module: MODULE, resourceType: 'dsa_problems', resourceId: id });
   revalidatePath(LIST_PATH);
   revalidatePath(`${LIST_PATH}/${id}`);
-  return { ok: true };
+  return { ok: true, ...(await syncPractice()) };
 }
 
 export async function deletePracticeProblem(id: string): Promise<Result> {
@@ -269,7 +271,7 @@ export async function deletePracticeProblem(id: string): Promise<Result> {
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.practice.problem.delete', module: MODULE, resourceType: 'dsa_problems', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncPractice()) };
 }
 
 export async function setPracticeProblemField(
@@ -283,5 +285,5 @@ export async function setPracticeProblemField(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: `learning.practice.problem.${field}`, module: MODULE, resourceType: 'dsa_problems', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncPractice()) };
 }

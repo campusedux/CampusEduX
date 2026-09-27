@@ -8,6 +8,7 @@ import { SubmitButton } from '@/components/auth/SubmitButton';
 import { ImageUploader } from '@/components/ui/ImageUploader';
 import { AcademicTargetingFields } from '@/components/ui/AcademicTargetingFields';
 import { useToast } from '@/components/ui/toast';
+import { useSiteNotice } from '@/components/learning/useSiteNotice';
 import type { AcademicOptions } from '@/lib/academic-targeting';
 import { LEARNING_BUCKET, LEARNING_PATH_PREFIX, GRID_TYPES, GRID_TYPE_LABEL } from '@/lib/learning/constants';
 import type { LearningGrid } from '@/lib/learning/queries';
@@ -30,6 +31,7 @@ export function GridForm({
   const [state, formAction] = useFormState(action as never, { ok: false } as Result);
   const router = useRouter();
   const { toast } = useToast();
+  const notify = useSiteNotice();
   const seen = useRef(state);
 
   useEffect(() => {
@@ -37,11 +39,11 @@ export function GridForm({
     seen.current = state;
     if (state.error) toast({ title: 'Could not save', description: state.error, variant: 'error' });
     else if (state.ok) {
-      toast({ title: isEdit ? 'Grid saved' : 'Grid created', variant: 'success' });
+      if (!notify(state)) toast({ title: isEdit ? 'Grid saved' : 'Grid created', variant: 'success' });
       if (!isEdit && state.id) router.push(`/learning/grids/${state.id}`);
       else router.refresh();
     }
-  }, [state, isEdit, router, toast]);
+  }, [state, isEdit, router, toast, notify]);
 
   return (
     <Card>

@@ -9,6 +9,7 @@ import { SubmitButton } from '@/components/auth/SubmitButton';
 import { DeleteButton } from '@/components/ui/DeleteButton';
 import type { LearningTopic } from '@/lib/learning/queries';
 import { SlugField } from '@/app/(panel)/learning/_components/FormFields';
+import { useSiteNotice } from '@/components/learning/useSiteNotice';
 import { ReorderButtons, StatusSelect, useActionToast, type ActionResult } from '@/app/(panel)/learning/_components/shared';
 import { VisibilityToggle } from '@/app/(panel)/learning/GridTable';
 import { createTopic, deleteTopic, reorderTopic, setTopicField } from '@/app/(panel)/learning/actions';
@@ -26,6 +27,7 @@ export function TopicManager({
   topics: LearningTopic[];
   perms: Perms;
 }) {
+  const notify = useSiteNotice();
   const base = `/learning/grids/${gridId}/sections/${sectionId}/topics`;
   return (
     <Card>
@@ -53,7 +55,7 @@ export function TopicManager({
                   <button
                     type="button"
                     title={t.is_premium ? 'Premium topic' : 'Free topic'}
-                    onClick={() => setTopicField(t.id, sectionId, gridId, 'is_premium', !t.is_premium)}
+                    onClick={() => setTopicField(t.id, sectionId, gridId, 'is_premium', !t.is_premium).then(notify)}
                     className={`inline-flex h-7 items-center gap-1 rounded-full border px-2 text-xs font-medium ${
                       t.is_premium ? 'border-warning/40 bg-warning/10 text-[#B77A1B]' : 'border-border text-ink-faint'
                     }`}

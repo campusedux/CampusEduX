@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { SiteSync } from '@/lib/learning/siteRevalidate';
+import { syncInterview } from '@/lib/learning/siteSync';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth';
 import { logActivity } from '@/lib/audit';
@@ -17,7 +19,7 @@ import { slugify, isValidSlug, DIFFICULTIES } from '@/lib/learning/constants';
 const MODULE = 'learning' as const;
 const LIST_PATH = '/learning/interview-questions';
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string } & SiteSync;
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const num = (fd: FormData, k: string, dflt: number) => {
@@ -84,7 +86,7 @@ export async function createInterviewCategory(_p: Result, fd: FormData): Promise
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.interview.category.create', module: MODULE, resourceType: 'interview_categories' });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 export async function updateInterviewCategory(id: string, _p: Result, fd: FormData): Promise<Result> {
@@ -97,7 +99,7 @@ export async function updateInterviewCategory(id: string, _p: Result, fd: FormDa
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.interview.category.update', module: MODULE, resourceType: 'interview_categories', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 export async function deleteInterviewCategory(id: string): Promise<Result> {
@@ -109,7 +111,7 @@ export async function deleteInterviewCategory(id: string): Promise<Result> {
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.interview.category.delete', module: MODULE, resourceType: 'interview_categories', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 // ===========================================================================
@@ -163,7 +165,7 @@ export async function createInterviewTopic(_p: Result, fd: FormData): Promise<Re
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.interview.topic.create', module: MODULE, resourceType: 'interview_topics' });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 export async function updateInterviewTopic(id: string, _p: Result, fd: FormData): Promise<Result> {
@@ -181,7 +183,7 @@ export async function updateInterviewTopic(id: string, _p: Result, fd: FormData)
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.interview.topic.update', module: MODULE, resourceType: 'interview_topics', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 export async function deleteInterviewTopic(id: string): Promise<Result> {
@@ -193,7 +195,7 @@ export async function deleteInterviewTopic(id: string): Promise<Result> {
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.interview.topic.delete', module: MODULE, resourceType: 'interview_topics', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 // ===========================================================================
@@ -248,7 +250,7 @@ export async function createInterviewQuestion(_p: Result, fd: FormData): Promise
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.interview.question.create', module: MODULE, resourceType: 'interview_questions', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true, id };
+  return { ok: true, id, ...(await syncInterview()) };
 }
 
 export async function updateInterviewQuestion(id: string, _p: Result, fd: FormData): Promise<Result> {
@@ -261,7 +263,7 @@ export async function updateInterviewQuestion(id: string, _p: Result, fd: FormDa
   await logActivity({ action: 'learning.interview.question.update', module: MODULE, resourceType: 'interview_questions', resourceId: id });
   revalidatePath(LIST_PATH);
   revalidatePath(`${LIST_PATH}/${id}`);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 export async function deleteInterviewQuestion(id: string): Promise<Result> {
@@ -271,7 +273,7 @@ export async function deleteInterviewQuestion(id: string): Promise<Result> {
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: 'learning.interview.question.delete', module: MODULE, resourceType: 'interview_questions', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 export async function setInterviewQuestionField(
@@ -285,7 +287,7 @@ export async function setInterviewQuestionField(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: `learning.interview.question.${field}`, module: MODULE, resourceType: 'interview_questions', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }
 
 export async function setInterviewTopicField(
@@ -299,5 +301,5 @@ export async function setInterviewTopicField(
   if (error) return { ok: false, error: pgError(error.message) };
   await logActivity({ action: `learning.interview.topic.${field}`, module: MODULE, resourceType: 'interview_topics', resourceId: id });
   revalidatePath(LIST_PATH);
-  return { ok: true };
+  return { ok: true, ...(await syncInterview()) };
 }

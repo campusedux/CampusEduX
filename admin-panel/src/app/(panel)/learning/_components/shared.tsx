@@ -4,25 +4,27 @@ import { useEffect, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
+import { useSiteNotice } from '@/components/learning/useSiteNotice';
 import { cn } from '@/lib/utils';
 
-export type ActionResult = { ok: boolean; error?: string };
+export type ActionResult = { ok: boolean; error?: string; warning?: string; retryTags?: string[] };
 
 /** Toast + refresh when a `useFormState` result changes. */
 export function useActionToast(state: ActionResult, onOk?: () => void) {
   const { toast } = useToast();
   const router = useRouter();
+  const notify = useSiteNotice();
   const seen = useRef(state);
   useEffect(() => {
     if (state === seen.current) return;
     seen.current = state;
     if (state.error) toast({ title: 'Could not save', description: state.error, variant: 'error' });
     else if (state.ok) {
-      toast({ title: 'Saved', variant: 'success' });
+      if (!notify(state)) toast({ title: 'Saved', variant: 'success' });
       onOk?.();
       router.refresh();
     }
-  }, [state, toast, router, onOk]);
+  }, [state, toast, router, onOk, notify]);
 }
 
 /** Up / down arrows bound to a reorder Server Action. */
@@ -36,12 +38,16 @@ export function ReorderButtons({
   const [pending, start] = useTransition();
   const router = useRouter();
   const { toast } = useToast();
+  const notify = useSiteNotice();
 
   const move = (dir: 'up' | 'down') =>
     start(async () => {
       const res = await onMove(dir);
       if (!res?.ok) toast({ title: 'Reorder failed', description: res?.error, variant: 'error' });
-      else router.refresh();
+      else {
+        notify(res);
+        router.refresh();
+      }
     });
 
   return (
@@ -81,6 +87,7 @@ export function StatusSelect({
   const [pending, start] = useTransition();
   const router = useRouter();
   const { toast } = useToast();
+  const notify = useSiteNotice();
   return (
     <select
       value={value}
@@ -90,7 +97,10 @@ export function StatusSelect({
         start(async () => {
           const res = await onChange(next);
           if (!res?.ok) toast({ title: 'Update failed', description: res?.error, variant: 'error' });
-          else router.refresh();
+          else {
+            notify(res);
+            router.refresh();
+          }
         });
       }}
       className={cn(

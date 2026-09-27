@@ -4,9 +4,10 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
+import { useSiteNotice } from '@/components/learning/useSiteNotice';
 import { cn } from '@/lib/utils';
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string; warning?: string; retryTags?: string[] };
 
 /**
  * Icon (or labelled) button that runs a bound Server Action behind a
@@ -28,6 +29,7 @@ export function DeleteButton({
   const [pending, start] = useTransition();
   const router = useRouter();
   const { toast } = useToast();
+  const notify = useSiteNotice();
 
   const run = () => {
     if (!window.confirm(confirmMessage)) return;
@@ -38,6 +40,7 @@ export function DeleteButton({
         return;
       }
       toast({ title: 'Deleted', variant: 'success' });
+      notify(res);
       if (redirectTo) router.push(redirectTo);
       else router.refresh();
     });
