@@ -3,10 +3,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, Clock, ListChecks, Lock, Gauge } from "lucide-react";
 import { getMockTest } from "@/lib/learning";
+import { absoluteUrl } from "@/lib/seo";
 import { MockTestRunner } from "./MockTestRunner";
 
-// Auth-gated attempt flow — never index.
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+// Auth-gated attempt flow — never index. The self-referencing canonical stops
+// the page inheriting the root layout's `canonical: "/"` (the homepage).
+export function generateMetadata({ params }: { params: { testId: string } }): Metadata {
+  return {
+    robots: { index: false, follow: false },
+    alternates: { canonical: absoluteUrl(`/mock-tests/${encodeURIComponent(params.testId)}`) },
+  };
+}
 export const dynamic = "force-dynamic";
 
 export default async function MockTestPage({ params }: { params: { testId: string } }) {
