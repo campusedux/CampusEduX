@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
  * Phase 4A: production SEO fixes from the Phase 4 verification audit.
  *
- *   1. Sitewide favicon (`src/app/icon.tsx`) and default OG image
- *      (`src/app/opengraph-image.tsx`) exist and render.
+ *   1. Sitewide favicon (`src/app/favicon.ico`, `icon.png`, `apple-icon.png`)
+ *      and default OG image (`public/brand/og-image.png`) exist.
  *   2. /login and /register carry page-specific titles instead of falling
  *      through to the root layout's default title.
  *   3. /projects/[id], /jobs/[id], /jobs/companies/[id] and
@@ -30,20 +30,33 @@ const appDir = (...segments: string[]) => resolve(__dirname, "..", "..", "src", 
 // 1. Favicon + default OG image
 // ---------------------------------------------------------------------------
 describe("Phase 4A: sitewide favicon and default OG image", () => {
-  it("src/app/icon.tsx renders a 32x32 PNG", async () => {
-    const { default: Icon, size, contentType } = await import("@/app/icon");
-    expect(contentType).toBe("image/png");
-    expect(size).toEqual({ width: 32, height: 32 });
-    const res = Icon();
-    expect(res.status).toBe(200);
+  // Static files generated from the master logo by scripts/generate-logos.mjs
+  // (they replaced the earlier generated "C"-tile icon.tsx / opengraph-image.tsx).
+  const pngSize = (file: string) => {
+    const buf = readFileSync(file);
+    expect(buf.subarray(1, 4).toString("latin1")).toBe("PNG");
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  };
+
+  it("src/app/icon.png is a 32x32 PNG and apple-icon.png is 180x180", () => {
+    expect(pngSize(appDir("icon.png"))).toEqual({ width: 32, height: 32 });
+    expect(pngSize(appDir("apple-icon.png"))).toEqual({ width: 180, height: 180 });
   });
 
-  it("src/app/opengraph-image.tsx renders a 1200x630 PNG", async () => {
-    const { default: OpengraphImage, size, contentType } = await import("@/app/opengraph-image");
-    expect(contentType).toBe("image/png");
-    expect(size).toEqual({ width: 1200, height: 630 });
-    const res = OpengraphImage();
-    expect(res.status).toBe(200);
+  it("src/app/favicon.ico is a real .ico with 16, 32 and 48px entries", () => {
+    const buf = readFileSync(appDir("favicon.ico"));
+    expect(buf.readUInt16LE(2)).toBe(1);
+    const count = buf.readUInt16LE(4);
+    const sizes = Array.from({ length: count }, (_, i) => buf.readUInt8(6 + i * 16));
+    expect(sizes).toEqual([16, 32, 48]);
+  });
+
+  it("the default OG image is a 1200x630 PNG and every fallback points at it", async () => {
+    expect(pngSize(resolve(__dirname, "..", "..", "public", "brand", "og-image.png"))).toEqual({ width: 1200, height: 630 });
+    const { DEFAULT_OG_IMAGE } = await import("@/lib/seo");
+    expect(DEFAULT_OG_IMAGE).toMatch(/\/brand\/og-image\.png$/);
+    const { metadata } = await import("@/app/layout");
+    expect(JSON.stringify(metadata.openGraph?.images)).toContain(DEFAULT_OG_IMAGE);
   });
 
   it("blog posts still define their own openGraph.images (unaffected by the default)", async () => {

@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
 import JsonLd from "@/components/JsonLd";
 import GoogleAnalytics from "@/components/analytics/GoogleAnalytics";
 import { BRAND } from "@/lib/brand";
-import { websiteJsonLd } from "@/lib/seo";
+import { BRAND_LOGO_URL, DEFAULT_OG_IMAGE, websiteJsonLd } from "@/lib/seo";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { Toaster } from "@/components/ui/Toast";
 
@@ -25,6 +25,7 @@ const organizationJsonLd = {
   "@type": "Organization",
   name: BRAND.name,
   url: siteUrl,
+  logo: BRAND_LOGO_URL,
 };
 
 const description =
@@ -50,7 +51,7 @@ export const metadata: Metadata = {
     siteName: BRAND.name,
     url: siteUrl,
     description,
-    images: ["/opengraph-image"],
+    images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: `${BRAND.name} logo` }],
   },
   twitter: {
     card: "summary_large_image",

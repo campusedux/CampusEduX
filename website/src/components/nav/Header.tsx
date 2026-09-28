@@ -18,8 +18,8 @@ import { BrandMark } from "./BrandMark";
  * - `< md`: wordmark · search icon + notifications + auth + hamburger; a fixed
  *   bottom tab bar (`<BottomNav>`) covers primary navigation on phones, and the
  *   theme control lives in the drawer.
- * Phones: tighter gaps and a smaller wordmark, which hides below 360px (the
- * logo tile stays), so the hamburger never slides off-screen at 320-360px.
+ * Phones: tighter gaps and a smaller logo, which becomes the CX mark alone
+ * below 360px, so the hamburger never slides off-screen at 320-360px.
  */
 export function Header() {
   return (

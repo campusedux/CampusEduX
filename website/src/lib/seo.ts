@@ -1,4 +1,5 @@
 import { BRAND } from "@/lib/brand";
+import { BRAND_ASSETS } from "@/lib/brandAssets";
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BRAND.website;
 
@@ -8,12 +9,14 @@ export function absoluteUrl(path: string): string {
 
 // Next.js metadata objects replace per-key rather than deep-merge: a page
 // that sets its own `openGraph` (almost every route here, for a custom
-// title/description) fully shadows the layout's `openGraph.images` *and*
-// the app/opengraph-image.tsx file-convention default for that page. So the
+// title/description) fully shadows the layout's `openGraph.images`. So the
 // sitewide fallback has to be listed explicitly in each page's own
 // `openGraph.images` when it has no image of its own — this is that shared
-// value, not a new asset (it's the same app/opengraph-image.tsx route).
-export const DEFAULT_OG_IMAGE = absoluteUrl("/opengraph-image");
+// value (the static full-logo card, public/brand/og-image.png, 1200x630).
+export const DEFAULT_OG_IMAGE = absoluteUrl(BRAND_ASSETS.ogImage.src);
+
+/** Absolute URL of the square CX logo mark, for schema.org `Organization.logo`. */
+export const BRAND_LOGO_URL = absoluteUrl(BRAND_ASSETS.logoMark.src);
 
 /** schema.org BreadcrumbList for a detail page. */
 export function breadcrumbJsonLd(items: { name: string; path: string }[]): Record<string, unknown> {
@@ -110,7 +113,7 @@ export function hiringOrganizationJsonLd(input: {
 
 /** The site's own Organization node (author/publisher of first-party content). */
 export function organizationRef(): Record<string, unknown> {
-  return { "@type": "Organization", name: BRAND.name, url: SITE_URL };
+  return { "@type": "Organization", name: BRAND.name, url: SITE_URL, logo: BRAND_LOGO_URL };
 }
 
 /**

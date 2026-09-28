@@ -1,17 +1,21 @@
 import { ImageResponse } from "next/og";
 import { BRAND } from "@/lib/brand";
 import { decodeEntities } from "@/lib/metaDescription";
+import { BRAND_LOGO_HORIZONTAL } from "@/lib/brandLogoData";
 
 /**
  * Shared renderer for the per-page Open Graph images (lesson, course, coding /
- * practice problem, blog post `opengraph-image.tsx` routes). Same palette and
- * brand mark as the sitewide `app/opengraph-image.tsx` (#F7F8FD canvas, #4F39F6
- * "C" tile, "Campus" + indigo "EduX" wordmark), with the page's own title and
- * its course / section as the eyebrow. Text comes only from the page's row;
+ * practice problem, blog post `opengraph-image.tsx` routes): the CampusEduX
+ * horizontal logo (mark + wordmark, embedded from lib/brandLogoData.ts) on the
+ * #F7F8FD canvas, with the page's own title and its course / section as the
+ * eyebrow. Text comes only from the page's row;
  * when the row is missing the caller passes the brand tagline instead.
  */
 export const OG_SIZE = { width: 1200, height: 630 };
 export const OG_CONTENT_TYPE = "image/png";
+
+// Rendered height of the logo in the card header (wordmark ≈ the old 40px text).
+const LOGO_HEIGHT = 88;
 
 function fit(text: string, max: number): string {
   const t = decodeEntities(String(text ?? "")).replace(/\s+/g, " ").trim();
@@ -42,25 +46,13 @@ export function renderOgCard(input: { title: string; eyebrow?: string | null; fo
         }}
       >
         <div style={{ display: "flex", alignItems: "center" }}>
-          <div
-            style={{
-              display: "flex",
-              height: 72,
-              width: 72,
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 18,
-              background: "#4F39F6",
-              color: "#fff",
-              fontSize: 44,
-              fontWeight: 900,
-            }}
-          >
-            C
-          </div>
-          <div style={{ display: "flex", marginLeft: 20, fontSize: 40, fontWeight: 800, color: "#111827" }}>
-            Campus<span style={{ color: "#4F39F6" }}>EduX</span>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element -- satori renders plain <img> only */}
+          <img
+            src={BRAND_LOGO_HORIZONTAL.src}
+            width={Math.round((LOGO_HEIGHT * BRAND_LOGO_HORIZONTAL.width) / BRAND_LOGO_HORIZONTAL.height)}
+            height={LOGO_HEIGHT}
+            alt=""
+          />
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>

@@ -1,14 +1,15 @@
 import { describe, it, expect } from "vitest";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 
 /**
  * Phase 4B: production SEO/performance audit follow-ups.
  *
  *   1. /favicon.ico previously 404'd — browsers/crawlers that request it
- *      directly (instead of following the <link rel="icon"> app/icon.tsx
- *      generates) got nothing. Fixed with a route handler at
- *      src/app/favicon.ico/route.tsx that renders the same shared brand
- *      mark (src/lib/brandIcon.tsx) as /icon, so there is exactly one mark
- *      defined and both paths stay in sync.
+ *      directly (instead of following the <link rel="icon">) got nothing.
+ *      It is now a static src/app/favicon.ico (16/32/48px) generated from
+ *      the CampusEduX logo mark by scripts/generate-logos.mjs, alongside
+ *      app/icon.png, so both paths show the same mark.
  *   2. /about and /faq previously fell through to the root layout's default
  *      description and were byte-identical. Both now set their own
  *      page-specific `description`.
@@ -21,18 +22,19 @@ const ROOT_LAYOUT_DEFAULT_DESCRIPTION =
   "CampusEduX is a student platform for the project marketplace, jobs & internships, placement preparation, resume building and custom project development.";
 
 describe("Phase 4B: /favicon.ico compatibility path", () => {
-  it("renders the same brand mark and size as /icon", async () => {
-    const { size: iconSize, contentType: iconContentType } = await import("@/app/icon");
-    const { BRAND_ICON_SIZE } = await import("@/lib/brandIcon");
-    expect(iconSize).toEqual(BRAND_ICON_SIZE);
-    expect(iconContentType).toBe("image/png");
+  const appDir = (...p: string[]) => resolve(__dirname, "..", "..", "src", "app", ...p);
+
+  it("is a static app/favicon.ico file (Next serves it at /favicon.ico), not a route folder", () => {
+    expect(statSync(appDir("favicon.ico")).isFile()).toBe(true);
+    expect(existsSync(appDir("favicon.ico", "route.tsx"))).toBe(false);
   });
 
-  it("GET /favicon.ico returns a 200 PNG image", async () => {
-    const { GET } = await import("@/app/favicon.ico/route");
-    const res = await GET();
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toBe("image/png");
+  it("is a valid multi-size .ico built from the same logo mark as app/icon.png", () => {
+    const buf = readFileSync(appDir("favicon.ico"));
+    expect(buf.readUInt16LE(0)).toBe(0);
+    expect(buf.readUInt16LE(2)).toBe(1);
+    expect(buf.readUInt16LE(4)).toBeGreaterThanOrEqual(3);
+    expect(existsSync(appDir("icon.png"))).toBe(true);
   });
 });
 

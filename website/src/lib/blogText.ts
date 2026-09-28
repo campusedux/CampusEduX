@@ -4,7 +4,7 @@
  * / reading time / JSON-LD) and unit tests.
  */
 
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, BRAND_LOGO_URL } from "@/lib/seo";
 import { BRAND } from "@/lib/brand";
 import type { BlogPostDetail } from "@/lib/blog.types";
 
@@ -146,6 +146,7 @@ export function articleJsonLd(post: BlogPostDetail): Record<string, unknown> {
       "@type": "Organization",
       name: BRAND.name,
       url: BRAND.website,
+      logo: { "@type": "ImageObject", url: BRAND_LOGO_URL },
     },
     mainEntityOfPage: { "@type": "WebPage", "@id": url },
     ...(post.tags.length ? { keywords: post.tags.join(", ") } : {}),
