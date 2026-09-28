@@ -27,7 +27,7 @@ export default async function ActivityLogsPage({
   let query = supabase
     .from('admin_activity_logs')
     .select('id, actor_email, action, module, resource_type, resource_id, details, ip_address, created_at', {
-      count: 'exact',
+      count: 'estimated',
     })
     .order('created_at', { ascending: false })
     .range(from, from + PAGE_SIZE - 1);

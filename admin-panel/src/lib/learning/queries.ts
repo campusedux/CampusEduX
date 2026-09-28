@@ -107,6 +107,24 @@ const GRID_COLS =
   'target_type,target_course_id,target_course_name,target_branch_ids,target_branch_names,target_year_id,target_year_label,' +
   'created_at,updated_at';
 
+const SECTION_COLS =
+  'id,grid_id,name,slug,description,sort_order,status,show_on_website,show_on_mobile,created_at,updated_at';
+
+const TARGETING_COLS =
+  'target_type,target_course_id,target_course_name,target_branch_ids,target_branch_names,target_year_id,target_year_label';
+
+const TOPIC_COLS =
+  'id,section_id,grid_id,title,slug,short_description,icon,icon_url,company_id,sort_order,is_premium,status,' +
+  'show_on_website,show_on_mobile,source_prep_note_id,source_kind,source_ref,' +
+  TARGETING_COLS +
+  ',created_at,updated_at';
+
+const CONTENT_COLS =
+  'id,topic_id,title,slug,short_description,heading,body,content_format,difficulty,estimated_minutes,tags,' +
+  'file_url,file_bucket,file_path,external_url,video_url,is_premium,metadata,sort_order,status,' +
+  TARGETING_COLS +
+  ',created_at,updated_at';
+
 // ---------------------------------------------------------------------------
 // Dashboard (spec §4)
 // ---------------------------------------------------------------------------
@@ -177,7 +195,7 @@ export async function listLearningGrids(opts: {
   const from = (opts.page - 1) * LEARNING_PAGE_SIZE;
   let query = supabase
     .from('learning_grids')
-    .select(GRID_COLS, { count: 'exact' })
+    .select(GRID_COLS, { count: 'estimated' })
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
     .range(from, from + LEARNING_PAGE_SIZE - 1);
@@ -241,7 +259,7 @@ export async function getGridSections(gridId: string): Promise<LearningSection[]
   return safe(
     supabase
       .from('learning_sections')
-      .select('*')
+      .select(SECTION_COLS)
       .eq('grid_id', gridId)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true }),
@@ -254,8 +272,8 @@ export async function getGridSections(gridId: string): Promise<LearningSection[]
 // ---------------------------------------------------------------------------
 export async function getLearningSection(id: string): Promise<LearningSection | null> {
   const supabase = createClient();
-  const { data } = await supabase.from('learning_sections').select('*').eq('id', id).maybeSingle();
-  return (data as LearningSection) ?? null;
+  const { data } = await supabase.from('learning_sections').select(SECTION_COLS).eq('id', id).maybeSingle();
+  return (data as unknown as LearningSection) ?? null;
 }
 
 export async function getSectionTopics(sectionId: string): Promise<LearningTopic[]> {
@@ -263,7 +281,7 @@ export async function getSectionTopics(sectionId: string): Promise<LearningTopic
   return safe(
     supabase
       .from('learning_topics')
-      .select('*')
+      .select(TOPIC_COLS)
       .eq('section_id', sectionId)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true }),
@@ -276,8 +294,8 @@ export async function getSectionTopics(sectionId: string): Promise<LearningTopic
 // ---------------------------------------------------------------------------
 export async function getLearningTopic(id: string): Promise<LearningTopic | null> {
   const supabase = createClient();
-  const { data } = await supabase.from('learning_topics').select('*').eq('id', id).maybeSingle();
-  return (data as LearningTopic) ?? null;
+  const { data } = await supabase.from('learning_topics').select(TOPIC_COLS).eq('id', id).maybeSingle();
+  return (data as unknown as LearningTopic) ?? null;
 }
 
 export async function getTopicContents(topicId: string): Promise<LearningContent[]> {
@@ -285,7 +303,7 @@ export async function getTopicContents(topicId: string): Promise<LearningContent
   return safe(
     supabase
       .from('learning_contents')
-      .select('*')
+      .select(CONTENT_COLS)
       .eq('topic_id', topicId)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true }),
@@ -473,7 +491,7 @@ export async function listPracticeProblems(opts: {
   const from = (opts.page - 1) * LEARNING_PAGE_SIZE;
   let query = supabase
     .from('dsa_problems')
-    .select(PRACTICE_PROBLEM_COLS, { count: 'exact' })
+    .select(PRACTICE_PROBLEM_COLS, { count: 'estimated' })
     .is('learning_topic_id', null)
     .in('topic_id', opts.category && catIds.includes(opts.category) ? [opts.category] : catIds)
     .order('sort_order', { ascending: true })
@@ -626,7 +644,7 @@ export async function listInterviewQuestions(opts: {
   const from = (opts.page - 1) * LEARNING_PAGE_SIZE;
   let query = supabase
     .from('interview_questions')
-    .select(INTERVIEW_QUESTION_COLS, { count: 'exact' })
+    .select(INTERVIEW_QUESTION_COLS, { count: 'estimated' })
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
     .range(from, from + LEARNING_PAGE_SIZE - 1);

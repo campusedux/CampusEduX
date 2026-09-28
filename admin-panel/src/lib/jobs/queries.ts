@@ -43,7 +43,7 @@ export async function listJobs(opts: {
     .from('jobs')
     .select(
       'id, title, company_id, company_name, location, salary_range, job_type, status, is_featured, posted_at, created_at',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(from, from + JOB_PAGE_SIZE - 1);
@@ -58,10 +58,19 @@ export async function listJobs(opts: {
   return { rows: error ? [] : (data ?? []), total: error ? 0 : count ?? 0, missing: Boolean(error) };
 }
 
+// Every column the detail page + JobForm read (the edit page spreads the row
+// into the form's `initial`, so the 0113/0114 fields must be listed here too).
+const JOB_DETAIL_COLS =
+  'id, title, company_id, company_name, location, salary_range, job_type, status, is_featured, posted_at, created_at, ' +
+  'recruiter_id, salary_min_lpa, salary_max_lpa, description, requirements, skills, experience, company_logo_url, ' +
+  'featured_priority, updated_at, apply_url, application_deadline, requisition_id, category, qualification, work_mode, ' +
+  'experience_level, shift, benefits, summary, responsibilities, candidate_note, ' +
+  'target_type, target_course_id, target_branch_ids, target_year_id';
+
 export async function getJob(id: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('jobs').select('*').eq('id', id).maybeSingle();
-  return data as
+  const { data } = await supabase.from('jobs').select(JOB_DETAIL_COLS).eq('id', id).maybeSingle();
+  return data as unknown as
     | (JobRow & {
         recruiter_id: string | null;
         salary_min_lpa: number | null;
@@ -103,7 +112,7 @@ export async function listCompanies(opts: { page: number; q?: string }) {
   let query = supabase
     .from('companies')
     .select('id, name, logo_url, website, rating, review_count, employee_count, open_jobs_count, created_at', {
-      count: 'exact',
+      count: 'estimated',
     })
     .order('open_jobs_count', { ascending: false })
     .range(from, from + COMPANY_PAGE_SIZE - 1);
@@ -114,7 +123,10 @@ export async function listCompanies(opts: { page: number; q?: string }) {
 
 export async function getCompany(id: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('companies').select('*').eq('id', id).maybeSingle();
+  const { data } = await supabase
+    .from('companies')
+    .select('id, name, logo_url, website, rating, review_count, employee_count, about, open_jobs_count, created_at, updated_at')
+    .eq('id', id).maybeSingle();
   return data as
     | {
         id: string;
@@ -165,7 +177,7 @@ export async function listApplications(opts: { page: number; q?: string; status?
     .from('applications')
     .select(
       'id, status, created_at, rejection_reason, job:jobs(title, company_name), applicant:profiles(full_name, email), resume:resumes(file_name)',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(from, from + APPLICATION_PAGE_SIZE - 1);

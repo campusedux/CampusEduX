@@ -92,7 +92,7 @@ export async function listSystemLogs(opts: { page: number; q?: string; module?: 
   const start = (opts.page - 1) * LOG_PAGE_SIZE;
   let query = supabase
     .from('admin_activity_logs')
-    .select('id, actor_email, action, module, resource_type, resource_id, ip_address, created_at', { count: 'exact' })
+    .select('id, actor_email, action, module, resource_type, resource_id, ip_address, created_at', { count: 'estimated' })
     .order('created_at', { ascending: false })
     .range(start, start + LOG_PAGE_SIZE - 1);
   if (opts.module) query = query.eq('module', opts.module);

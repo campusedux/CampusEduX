@@ -35,7 +35,7 @@ export async function listProjects(opts: {
     .from('projects')
     .select(
       'id, title, category_id, category_name, price, rating, review_count, sales_count, is_premium, is_best_seller, is_featured, status, thumbnail_url, created_at',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(from, from + PROJECT_PAGE_SIZE - 1);
@@ -70,10 +70,18 @@ export interface ProjectDetail extends ProjectRow {
   updated_at: string;
 }
 
+// ProjectDetail + the academic-targeting fields the edit form reads.
+const PROJECT_DETAIL_COLS =
+  'id, title, category_id, category_name, price, rating, review_count, sales_count, is_premium, is_best_seller, ' +
+  'is_featured, status, thumbnail_url, created_at, tech_stack, description, images, video_url, live_demo_url, ' +
+  'source_code_size_mb, documentation_size_mb, platform_fee_percent, license, developer_name, github_url, ' +
+  'featured_priority, best_seller_priority, view_count, updated_at, ' +
+  'target_type, target_course_id, target_branch_ids, target_year_id';
+
 export async function getProject(id: string): Promise<ProjectDetail | null> {
   const supabase = createClient();
-  const { data } = await supabase.from('projects').select('*').eq('id', id).maybeSingle();
-  return (data as ProjectDetail) ?? null;
+  const { data } = await supabase.from('projects').select(PROJECT_DETAIL_COLS).eq('id', id).maybeSingle();
+  return (data as unknown as ProjectDetail) ?? null;
 }
 
 export async function getProjectStats() {
@@ -126,13 +134,20 @@ export async function getProjectFiles(projectId: string, category: 'main' | 'doc
     [] as { id: string; label: string; file_name: string; size_mb: number; storage_path: string; sort_order: number }[],
   );
   // `project-files` is a private bucket (RLS: purchaser or admin); the admin
-  // session is is_admin(), so each row gets a fresh signed URL to download.
-  return Promise.all(
-    rows.map(async (row) => {
-      const { data } = await supabase.storage.from('project-files').createSignedUrl(row.storage_path, 60 * 10);
-      return { ...row, url: data?.signedUrl ?? null };
-    }),
-  );
+  // session is is_admin(), so each row gets a fresh signed URL to download —
+  // signed in one batched Storage call rather than one request per row.
+  if (rows.length === 0) return [];
+  const { data } = await supabase.storage
+    .from('project-files')
+    .createSignedUrls(
+      rows.map((row) => row.storage_path),
+      60 * 10,
+    );
+  const urlByPath = new Map<string, string>();
+  for (const s of data ?? []) {
+    if (s.path && s.signedUrl && !s.error) urlByPath.set(s.path, s.signedUrl);
+  }
+  return rows.map((row) => ({ ...row, url: urlByPath.get(row.storage_path) ?? null }));
 }
 
 export async function getProjectVersions(projectId: string) {

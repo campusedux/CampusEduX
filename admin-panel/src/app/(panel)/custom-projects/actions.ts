@@ -559,7 +559,7 @@ export async function duplicateFeature(id: string): Promise<Result> {
   const supabase = createClient();
   const { data: src } = await supabase
     .from('custom_project_features')
-    .select('*')
+    .select('name, description, category, project_types, project_levels, level, price, icon, image_url, dependencies, sort_order')
     .eq('id', id)
     .maybeSingle();
   if (!src) return { ok: false, error: 'Feature not found.' };

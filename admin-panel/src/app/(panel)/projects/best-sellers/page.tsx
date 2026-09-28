@@ -22,7 +22,7 @@ export default async function BestSellersPage({ searchParams }: { searchParams: 
 
   let query = supabase
     .from('projects')
-    .select('id, title, category_name, is_best_seller, best_seller_priority', { count: 'exact' })
+    .select('id, title, category_name, is_best_seller, best_seller_priority', { count: 'estimated' })
     .order('is_best_seller', { ascending: false })
     .order('best_seller_priority', { ascending: true })
     .order('sales_count', { ascending: false })

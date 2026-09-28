@@ -67,7 +67,10 @@ export async function getTemplates() {
 
 export async function getTemplate(id: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('resume_templates').select('*').eq('id', id).maybeSingle();
+  const { data } = await supabase
+    .from('resume_templates')
+    .select('id, name, accent_color, description, category, preview_image_url, features, status, is_premium, sort_order')
+    .eq('id', id).maybeSingle();
   return data as any;
 }
 
@@ -113,7 +116,7 @@ export async function listResumeDownloads(opts: { page: number; q?: string }) {
   const from = (opts.page - 1) * RESUME_PAGE_SIZE;
   let query = supabase
     .from('resume_downloads')
-    .select('id, resume_title, file_url, downloaded_at, user:profiles(full_name, email)', { count: 'exact' })
+    .select('id, resume_title, file_url, downloaded_at, user:profiles(full_name, email)', { count: 'estimated' })
     .order('downloaded_at', { ascending: false })
     .range(from, from + RESUME_PAGE_SIZE - 1);
   if (opts.q) query = query.ilike('resume_title', `%${opts.q}%`);

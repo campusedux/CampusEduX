@@ -15,7 +15,10 @@ import { PLACEMENT_PAGE_SIZE } from '@/lib/placement/constants';
 // --- MCQ questions -----------------------------------------------
 export async function getTestQuestion(id: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('test_questions').select('*').eq('id', id).maybeSingle();
+  const { data } = await supabase
+    .from('test_questions')
+    .select('id, test_id, question_text, options, correct_index, explanation, difficulty, marks, sort_order')
+    .eq('id', id).maybeSingle();
   return data as any;
 }
 
@@ -26,7 +29,7 @@ export async function listMockTests(opts: { page: number; q?: string; category?:
   let query = supabase
     .from('practice_tests')
     .select('id, title, category, question_count, duration_minutes, total_marks, is_published, company:companies(name)', {
-      count: 'exact',
+      count: 'estimated',
     })
     .order('created_at', { ascending: false })
     .range(from, from + PLACEMENT_PAGE_SIZE - 1);
@@ -39,7 +42,10 @@ export async function listMockTests(opts: { page: number; q?: string; category?:
 
 export async function getMockTest(id: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('practice_tests').select('*').eq('id', id).maybeSingle();
+  const { data } = await supabase
+    .from('practice_tests')
+    .select('id, title, description, category, company_id, difficulty, duration_minutes, total_marks, pass_marks, is_published')
+    .eq('id', id).maybeSingle();
   return data as any;
 }
 

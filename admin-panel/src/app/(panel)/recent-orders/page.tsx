@@ -26,7 +26,7 @@ export default async function RecentOrdersPage({
   let query = supabase
     .from('purchases')
     .select('id, total_amount, status, created_at, coupon_code, profile:profiles(full_name, email), project:projects(title)', {
-      count: 'exact',
+      count: 'estimated',
     })
     .order('created_at', { ascending: false })
     .range(from, from + PAGE_SIZE - 1);

@@ -22,7 +22,7 @@ export default async function FeaturedJobsPage({ searchParams }: { searchParams:
 
   let query = supabase
     .from('jobs')
-    .select('id, title, company_name, is_featured, featured_priority', { count: 'exact' })
+    .select('id, title, company_name, is_featured, featured_priority', { count: 'estimated' })
     .order('is_featured', { ascending: false })
     .order('featured_priority', { ascending: true })
     .order('created_at', { ascending: false })

@@ -74,7 +74,7 @@ export async function listReferralUsers(opts: { page: number; q?: string; status
     .from('referrals')
     .select(
       'id, status, reward_amount, source, created_at, completed_at, referred_user:profiles!referrals_referred_user_id_fkey(full_name, email, location), referrer:profiles!referrals_referrer_id_fkey(full_name, email)',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(start, start + REFERRAL_PAGE_SIZE - 1);
@@ -179,7 +179,12 @@ export async function getReferralLeaderboard(tab: 'earners' | 'referrals' | 'act
 
 export async function getRewardSettings() {
   const supabase = createClient();
-  const { data } = await supabase.from('reward_settings').select('*').eq('id', 1).maybeSingle();
+  const { data } = await supabase
+    .from('reward_settings')
+    .select(
+      'id, bonus_type, bonus_value, min_payout, max_payout, bonus_validity_days, reward_on_signup, reward_on_first_purchase, reward_on_subscription',
+    )
+    .eq('id', 1).maybeSingle();
   return (
     (data as any) ?? {
       bonus_type: 'flat',

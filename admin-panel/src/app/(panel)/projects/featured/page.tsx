@@ -23,7 +23,7 @@ export default async function FeaturedPage({ searchParams }: { searchParams: { q
 
   let query = supabase
     .from('projects')
-    .select('id, title, category_name, is_featured, featured_priority', { count: 'exact' })
+    .select('id, title, category_name, is_featured, featured_priority', { count: 'estimated' })
     .order('is_featured', { ascending: false })
     .order('featured_priority', { ascending: true })
     .order('created_at', { ascending: false })

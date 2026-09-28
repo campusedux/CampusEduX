@@ -46,6 +46,13 @@ export interface BlogPost {
   updated_at: string;
 }
 
+const POST_COLS =
+  'id,title,slug,excerpt,content,featured_image,featured_image_alt,author_id,author_name,category_id,category_name,tags,' +
+  'status,published_at,reading_time,seo_title,seo_description,seo_keywords,canonical_url,is_featured,' +
+  'created_by,updated_by,created_at,updated_at';
+
+const CATEGORY_COLS = 'id,name,slug,description,sort_order,created_at,updated_at';
+
 const LIST_COLS =
   'id,title,slug,excerpt,featured_image,author_name,category_id,category_name,tags,status,published_at,reading_time,is_featured,created_at,updated_at';
 
@@ -87,7 +94,7 @@ export async function listBlogPosts(opts: {
 
   let query = supabase
     .from('blog_posts')
-    .select(LIST_COLS, { count: 'exact' })
+    .select(LIST_COLS, { count: 'estimated' })
     .order(order.column, { ascending: order.ascending, nullsFirst: false })
     .order('created_at', { ascending: false })
     .range(from, from + BLOG_PAGE_SIZE - 1);
@@ -106,14 +113,14 @@ export async function listBlogPosts(opts: {
 
 export async function getBlogPost(id: string): Promise<BlogPost | null> {
   const supabase = createClient();
-  const { data } = await supabase.from('blog_posts').select('*').eq('id', id).maybeSingle();
-  return (data as BlogPost) ?? null;
+  const { data } = await supabase.from('blog_posts').select(POST_COLS).eq('id', id).maybeSingle();
+  return (data as unknown as BlogPost) ?? null;
 }
 
 export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> {
   const supabase = createClient();
-  const { data } = await supabase.from('blog_posts').select('*').ilike('slug', slug).maybeSingle();
-  return (data as BlogPost) ?? null;
+  const { data } = await supabase.from('blog_posts').select(POST_COLS).ilike('slug', slug).maybeSingle();
+  return (data as unknown as BlogPost) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +129,7 @@ export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> 
 export async function listBlogCategories(): Promise<BlogCategory[]> {
   const supabase = createClient();
   const cats = await safe<BlogCategory[]>(
-    supabase.from('blog_categories').select('*').order('sort_order').order('name'),
+    supabase.from('blog_categories').select(CATEGORY_COLS).order('sort_order').order('name'),
     [],
   );
   if (cats.length === 0) return cats;
@@ -136,8 +143,8 @@ export async function listBlogCategories(): Promise<BlogCategory[]> {
 
 export async function getBlogCategory(id: string): Promise<BlogCategory | null> {
   const supabase = createClient();
-  const { data } = await supabase.from('blog_categories').select('*').eq('id', id).maybeSingle();
-  return (data as BlogCategory) ?? null;
+  const { data } = await supabase.from('blog_categories').select(CATEGORY_COLS).eq('id', id).maybeSingle();
+  return (data as unknown as BlogCategory) ?? null;
 }
 
 /** `{ id, name }[]` for the post form's category `<select>`. */

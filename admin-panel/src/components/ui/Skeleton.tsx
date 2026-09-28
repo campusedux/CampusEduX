@@ -47,3 +47,23 @@ export function StatGridSkeleton({ count = 5 }: { count?: number }) {
     </div>
   );
 }
+
+/**
+ * Section-level route fallback (`loading.tsx` below the panel root): page
+ * header + a table card. The panel root's own `loading.tsx` only re-suspends
+ * when the top-level section changes, so without these a click deeper inside
+ * a section (list → detail → edit) showed nothing until the server responded.
+ */
+export function PageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-56" />
+        <Skeleton className="h-4 w-80" />
+      </div>
+      <div className="rounded-card border border-border bg-white p-5">
+        <TableSkeleton rows={8} />
+      </div>
+    </div>
+  );
+}

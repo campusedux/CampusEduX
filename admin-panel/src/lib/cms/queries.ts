@@ -71,9 +71,7 @@ export async function getPushHistory() {
   return safe(
     supabase
       .from('push_notifications')
-      // select('*') so the columns added in migration 012 (image_url,
-      // error_message) are picked up without breaking the page before it runs.
-      .select('*')
+      .select('id, title, body, category, target_audience, image_url, recipient_count, status, error_message, sent_by_email, created_at')
       .order('created_at', { ascending: false })
       .limit(50),
     [] as any[],

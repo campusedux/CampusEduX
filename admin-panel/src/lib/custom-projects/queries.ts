@@ -44,7 +44,7 @@ export async function listCustomRequests(opts: {
 
   let query = supabase
     .from('custom_project_requests')
-    .select(LIST_SELECT, { count: 'exact' })
+    .select(LIST_SELECT, { count: 'estimated' })
     .eq('token_payment_status', 'paid') // spec §16 — admin only sees paid requests
     .order('created_at', { ascending: false })
     .range(from, from + CUSTOM_PROJECTS_PAGE_SIZE - 1);
@@ -363,7 +363,7 @@ export async function listFeatures(
   const page = Math.max(1, opts.page ?? 1);
   const from = (page - 1) * FEATURES_PAGE_SIZE;
 
-  let query = supabase.from('custom_project_features').select(FEATURE_SELECT, { count: 'exact' });
+  let query = supabase.from('custom_project_features').select(FEATURE_SELECT, { count: 'estimated' });
   query = applyFeatureFilters(query, opts);
   query = applyFeatureSort(query, opts.sort);
   query = query.range(from, from + FEATURES_PAGE_SIZE - 1);
@@ -442,7 +442,7 @@ export async function listFeatureCategories(
   const supabase = createClient();
   let query = supabase
     .from('custom_project_feature_categories')
-    .select('*')
+    .select('id, name, description, icon, sort_order, is_active, created_at, updated_at')
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (opts.activeOnly) query = query.eq('is_active', true);
@@ -485,8 +485,8 @@ export async function listFeatureOptions(excludeId?: string) {
 
 export async function getFeature(id: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('custom_project_features').select('*').eq('id', id).maybeSingle();
-  return data as (FeatureRow & Record<string, unknown>) | null;
+  const { data } = await supabase.from('custom_project_features').select(FEATURE_SELECT).eq('id', id).maybeSingle();
+  return data as unknown as (FeatureRow & Record<string, unknown>) | null;
 }
 
 export async function featureKeyExists(id: string): Promise<boolean> {
@@ -501,11 +501,17 @@ export async function getPricingConfig() {
   const supabase = createClient();
   const [pricing, platforms] = await Promise.all([
     safe(
-      supabase.from('custom_project_pricing').select('*').order('project_type').order('project_level'),
+      supabase
+        .from('custom_project_pricing')
+        .select('project_type, project_level, base_price, token_amount, pricing_version, is_active')
+        .order('project_type').order('project_level'),
       [] as { project_type: string; project_level: string; base_price: number; token_amount: number; is_active: boolean }[],
     ),
     safe(
-      supabase.from('custom_project_platform_pricing').select('*').order('sort_order'),
+      supabase
+        .from('custom_project_platform_pricing')
+        .select('platform, label, charge, is_active, sort_order')
+        .order('sort_order'),
       [] as { platform: string; label: string; charge: number; is_active: boolean }[],
     ),
   ]);

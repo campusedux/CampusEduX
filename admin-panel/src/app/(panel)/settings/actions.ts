@@ -97,9 +97,10 @@ async function academicDuplicate(
   courseId?: string | null,
 ): Promise<boolean> {
   const field = kind === 'year' ? 'label' : 'name';
-  const { data } = await supabase.from(ACADEMIC_TABLE[kind]).select('*');
+  const cols: string = kind === 'year' ? 'id, label' : kind === 'branch' ? 'id, name, course_id' : 'id, name';
+  const { data } = await supabase.from(ACADEMIC_TABLE[kind]).select(cols);
   const norm = (x: string) => x.trim().toLowerCase();
-  return ((data ?? []) as Array<Record<string, string | null>>).some((row) => {
+  return ((data ?? []) as unknown as Array<Record<string, string | null>>).some((row) => {
     if (norm(String(row[field] ?? '')) !== norm(value)) return false;
     if (row.id === excludeId) return false;
     if (kind === 'branch' && (row.course_id ?? '') !== (courseId ?? '')) return false;

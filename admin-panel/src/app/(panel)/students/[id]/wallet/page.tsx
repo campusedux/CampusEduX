@@ -35,7 +35,7 @@ export default async function StudentWalletPage({
     ),
     supabase
       .from('wallet_transactions')
-      .select('id, type, category, amount, description, created_at', { count: 'exact' })
+      .select('id, type, category, amount, description, created_at', { count: 'estimated' })
       .eq('user_id', params.id)
       .order('created_at', { ascending: false })
       .range(from, from + SIZE - 1),

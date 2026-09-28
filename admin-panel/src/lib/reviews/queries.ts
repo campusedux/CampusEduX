@@ -9,7 +9,7 @@ export async function listReviews(opts: { page: number; q?: string; status?: str
   let query = supabase
     .from('reviews')
     .select('id, rating, comment, status, entity_type, created_at, project:projects(id, title), profile:profiles(full_name, email)', {
-      count: 'exact',
+      count: 'estimated',
     })
     .order('created_at', { ascending: false })
     .range(start, start + REVIEW_PAGE_SIZE - 1);
@@ -75,7 +75,7 @@ export async function listReportedReviews(opts: { page: number; status?: string 
     .from('review_reports')
     .select(
       'id, reason, category, status, resolution, resolved_at, created_at, reporter:profiles!review_reports_reported_by_fkey(full_name, email), review:reviews(id, rating, comment, status, project:projects(title))',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(start, start + REVIEW_PAGE_SIZE - 1);
@@ -92,7 +92,7 @@ export async function listReviewsForDeletion(opts: { page: number; category?: st
     .from('review_reports')
     .select(
       'id, category, reason, status, review:reviews(id, rating, comment, status, created_at, profile:profiles(full_name, email), project:projects(title))',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(start, start + REVIEW_PAGE_SIZE - 1);

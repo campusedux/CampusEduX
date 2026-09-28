@@ -22,7 +22,7 @@ export default async function StudentPurchasesPage({
   const { data, count, error } = await supabase
     .from('purchases')
     .select('id, total_amount, price, discount, status, coupon_code, created_at, project:projects(title)', {
-      count: 'exact',
+      count: 'estimated',
     })
     .eq('user_id', params.id)
     .order('created_at', { ascending: false })

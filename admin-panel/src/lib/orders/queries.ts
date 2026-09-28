@@ -16,7 +16,7 @@ export async function listOrders(opts: {
     .from('purchases')
     .select(
       'id, total_amount, price, discount, platform_fee, status, coupon_code, payment_method, razorpay_payment_id, failure_reason, created_at, profile:profiles(full_name, email), project:projects(title)',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(start, start + ORDER_PAGE_SIZE - 1);
@@ -74,7 +74,7 @@ export async function listRefundRequests(opts: { page: number; status?: string }
     .from('refund_requests')
     .select(
       'id, amount, reason, status, refund_to, decision_note, decided_at, created_at, user:profiles(full_name, email), purchase:purchases(project:projects(title))',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(start, start + ORDER_PAGE_SIZE - 1);
@@ -95,7 +95,10 @@ export async function getCoupons() {
 }
 export async function getCoupon(id: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('coupons').select('*').eq('id', id).maybeSingle();
+  const { data } = await supabase
+    .from('coupons')
+    .select('id, code, description, discount_type, discount_value, max_discount, min_order, usage_limit, used_count, valid_from, valid_till, status')
+    .eq('id', id).maybeSingle();
   return data as any;
 }
 
@@ -112,7 +115,7 @@ export async function listTransactions(opts: { page: number; q?: string; type?: 
   const start = (opts.page - 1) * ORDER_PAGE_SIZE;
   let query = supabase
     .from('wallet_transactions')
-    .select('id, type, category, amount, description, created_at, user:profiles(full_name, email)', { count: 'exact' })
+    .select('id, type, category, amount, description, created_at, user:profiles(full_name, email)', { count: 'estimated' })
     .order('created_at', { ascending: false })
     .range(start, start + ORDER_PAGE_SIZE - 1);
   if (opts.type) query = query.eq('type', opts.type);

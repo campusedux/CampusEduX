@@ -12,7 +12,7 @@ export async function listWithdrawalRequests(opts: { page: number; status?: stri
   const run = (columns: string) => {
     let query = supabase
       .from('withdrawal_requests')
-      .select(columns, { count: 'exact' })
+      .select(columns, { count: 'estimated' })
       .order('created_at', { ascending: false })
       .range(start, start + WITHDRAWAL_PAGE_SIZE - 1);
     if (opts.status) query = query.eq('status', opts.status);

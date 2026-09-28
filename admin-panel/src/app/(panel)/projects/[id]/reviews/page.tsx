@@ -29,7 +29,7 @@ export default async function ProjectReviewsPage({
     safe(supabase.from('reviews').select('rating').eq('project_id', params.id), [] as { rating: number }[]),
     supabase
       .from('reviews')
-      .select('id, rating, comment, created_at, profile:profiles(full_name, avatar_url)', { count: 'exact' })
+      .select('id, rating, comment, created_at, profile:profiles(full_name, avatar_url)', { count: 'estimated' })
       .eq('project_id', params.id)
       .order('created_at', { ascending: false })
       .range(from, from + SIZE - 1),

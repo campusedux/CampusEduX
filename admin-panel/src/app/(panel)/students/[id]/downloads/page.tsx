@@ -21,7 +21,7 @@ export default async function StudentDownloadsPage({
 
   const { data, count, error } = await supabase
     .from('downloads')
-    .select('id, file_label, file_size_mb, downloaded_at, project:projects(title)', { count: 'exact' })
+    .select('id, file_label, file_size_mb, downloaded_at, project:projects(title)', { count: 'estimated' })
     .eq('user_id', params.id)
     .order('downloaded_at', { ascending: false })
     .range(from, from + SIZE - 1);

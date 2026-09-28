@@ -30,7 +30,7 @@ export async function listStudents(opts: {
     .from('profiles')
     .select(
       'id, full_name, email, mobile_number, course, branch, year, is_premium, status, created_at',
-      { count: 'exact' },
+      { count: 'estimated' },
     )
     .order('created_at', { ascending: false })
     .range(from, from + STUDENT_PAGE_SIZE - 1);

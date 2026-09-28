@@ -70,9 +70,10 @@ async function nextSortOrder(table: string, col: string, val: string | null): Pr
 /** Swap a row with its previous / next sibling (scoped by a parent column). */
 async function moveRow(table: string, id: string, parentCol: string, dir: 'up' | 'down'): Promise<Result> {
   const supabase = createClient();
-  const { data: row } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+  const cols: string = `id, ${parentCol}`;
+  const { data: row } = await supabase.from(table).select(cols).eq('id', id).maybeSingle();
   if (!row) return { ok: false, error: 'Item not found.' };
-  const parentVal = (row as Record<string, unknown>)[parentCol] as string | null;
+  const parentVal = (row as unknown as Record<string, unknown>)[parentCol] as string | null;
 
   let sq = supabase
     .from(table)

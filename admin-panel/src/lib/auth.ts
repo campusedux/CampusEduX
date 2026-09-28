@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -12,6 +13,25 @@ import {
 } from '@/lib/permissions';
 
 export type { AdminRole } from '@/lib/permissions';
+
+/**
+ * `cache()` de-dupes a call for the lifetime of ONE server request (layout +
+ * page + any Server Action in that request share the result); it is never a
+ * module-level or cross-request store, so one admin's lookup can't leak into
+ * another's request. The plain `react` build used by the Node test runner does
+ * not ship it, so fall back to an un-memoised pass-through there — same
+ * results, only the per-request de-dupe is skipped. (Mirrors website/src/lib/auth.ts.)
+ */
+const requestCache: typeof cache = typeof cache === 'function' ? cache : (fn) => fn;
+
+/** Request-scoped `auth.getUser()` — one Supabase Auth round-trip per request. */
+const getSessionUser = requestCache(async () => {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});
 
 export interface AdminUser {
   id: string;
@@ -30,12 +50,16 @@ export interface AdminUser {
  * matching `admin_users` row — or one that's suspended — is bounced straight
  * back to /login. This is in addition to, never instead of, the RLS policies
  * and `has_permission()` checks on every table the panel touches.
+ *
+ * Request-scoped via `cache()`: the layout's call and the page's
+ * `requireModule()` share one `getUser` + `admin_users` + `role_permissions`
+ * round-trip. Both gates still run — the middleware only refreshes the session
+ * cookie and does no role check, and Next renders layout and page in parallel,
+ * so the page-level gate is what guards the page's own data fetch.
  */
-export async function requireAdmin(): Promise<AdminUser> {
+export const requireAdmin = requestCache(async (): Promise<AdminUser> => {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
 
   if (!user) redirect('/login');
 
@@ -65,7 +89,7 @@ export async function requireAdmin(): Promise<AdminUser> {
     avatarUrl: row.avatar_url ?? null,
     perms: await loadPermissions(role),
   };
-}
+});
 
 /**
  * The role's live permission matrix. Reads `role_permissions` (edited in
@@ -74,7 +98,7 @@ export async function requireAdmin(): Promise<AdminUser> {
  * the sidebar/UI react to matrix edits without a redeploy. super_admin always
  * gets everything.
  */
-export async function loadPermissions(role: AdminRole): Promise<PermissionMatrix> {
+export const loadPermissions = requestCache(async (role: AdminRole): Promise<PermissionMatrix> => {
   const base = permsFor(role);
   if (role === 'super_admin') return base;
 
@@ -99,7 +123,7 @@ export async function loadPermissions(role: AdminRole): Promise<PermissionMatrix
     } satisfies ModulePerms;
   }
   return out;
-}
+});
 
 /** Like requireAdmin, but also bounces the route if the role can't `view` the module. */
 export async function requireModule(module: ModuleKey): Promise<AdminUser> {
@@ -112,13 +136,12 @@ export async function requireModule(module: ModuleKey): Promise<AdminUser> {
  * Server-side permission check backed by the DB `has_permission()` function
  * (so a super_admin editing the matrix in Settings takes effect immediately,
  * without a redeploy). Falls back to the static matrix if the function isn't
- * there yet.
+ * there yet. Request-scoped per (module, action), and shares the cached
+ * session lookup with `requireAdmin()`.
  */
-export async function hasPermission(module: ModuleKey, action: PermAction): Promise<boolean> {
+export const hasPermission = requestCache(async (module: ModuleKey, action: PermAction): Promise<boolean> => {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return false;
 
   const { data, error } = await supabase.rpc('has_permission', {
@@ -133,7 +156,7 @@ export async function hasPermission(module: ModuleKey, action: PermAction): Prom
     return row ? can(row.role as AdminRole, module, action) : false;
   }
   return Boolean(data);
-}
+});
 
 /** Throws inside a Server Action when the caller lacks a permission. */
 export async function requirePermission(module: ModuleKey, action: PermAction): Promise<AdminUser> {
