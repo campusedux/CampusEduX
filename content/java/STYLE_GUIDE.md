@@ -54,6 +54,9 @@ marked **(checked)**. The rewrite expands the thin lessons of the existing `java
   `**Output:**` block must match the real stdout exactly **(checked)**. Output must be deterministic, so no
   timestamps, random numbers or thread races. Join threads and print in a fixed order.
 - Imports are only `java.*` (the site's Run button needs it) **(checked)**. One public class per program.
+- A program that needs a driver (JDBC) uses the H2 in-memory database (`jdbc:h2:mem:<name>`), and its manifest
+  entry has `"classpath": ["h2"]`. The verifier then runs it with the local H2 jar. The online compiler has no
+  driver, so the lesson has a `> **Note:**` saying to run these programs locally with the H2 jar on the classpath.
   Class names are unique inside a lesson.
 - Java 11 features only. The online judge is older than 21, so avoid records, `instanceof` patterns,
   switch expressions and `Stream.toList()`.

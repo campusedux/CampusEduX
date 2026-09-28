@@ -50,3 +50,23 @@ Words = prose words outside code fences (target 1200-1500).
 | 18 | try-catch | `try-catch` | 1 | 1252 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
 | 19 | Thread | `thread` | 1 | 1339 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
 | 20 | JDK, JRE and JVM | `jdk-jre-and-jvm` | 1 | 1488 | existing (0070) | existing (0070) | Written and verified; SQL not applied |
+| 21 | LinkedList | `linkedlist` | 2 | 1439 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 22 | HashSet | `hashset` | 2 | 1304 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 23 | TreeMap | `treemap` | 2 | 1350 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 24 | TreeSet | `treeset` | 2 | 1309 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 25 | Iterator | `iterator` | 2 | 1283 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 26 | Comparable | `comparable` | 2 | 1396 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 27 | Comparator | `comparator` | 2 | 1362 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 28 | Generics | `generics` | 2 | 1316 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 29 | Wrapper Classes | `wrapper-classes` | 2 | 1285 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 30 | Enum | `enum` | 2 | 1302 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 31 | Access Modifiers | `access-modifiers` | 2 | 1484 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 32 | Encapsulation | `encapsulation` | 2 | 1421 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 33 | final Keyword | `final-keyword` | 2 | 1439 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 34 | super Keyword | `super-keyword` | 2 | 1388 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 35 | StringBuilder | `stringbuilder` | 2 | 1443 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 36 | String Pool | `string-pool` | 2 | 1458 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 37 | Synchronization | `synchronization` | 2 | 1398 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 38 | Executor Framework | `executor-framework` | 2 | 1332 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 39 | Garbage Collection | `garbage-collection` | 2 | 1455 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 40 | JDBC | `jdbc` | 2 | 1319 | 2 problems | 10 MCQs | Written and verified; SQL not applied |

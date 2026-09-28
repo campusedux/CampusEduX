@@ -17,7 +17,9 @@
  *
  * Every java fence with `static void main` (lesson and practice) is compiled
  * with `javac --release <course.javaRelease>` and run; its stdout must equal the
- * text fence after the next **Output:** label.
+ * text fence after the next **Output:** label. A lesson's manifest `classpath`
+ * (e.g. ["h2"] for JDBC) adds local ~/.m2 jars from course.libraries at run time;
+ * the code itself still imports only java.*.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -172,8 +174,19 @@ const javaTmp = fs.mkdtempSync(path.join(os.tmpdir(), "verify-java-"));
 process.on("exit", () => fs.rmSync(javaTmp, { recursive: true, force: true }));
 let progN = 0;
 
+/** A lesson's `classpath` names (manifest) → local jars from ~/.m2 (course.libraries), for running only. */
+function libraryJars(names = []) {
+  return names.map((n) => {
+    const rel = course.libraries?.[n];
+    if (!rel) throw new Error(`unknown library "${n}" (add it to course.libraries)`);
+    const jar = path.join(os.homedir(), ".m2", "repository", rel);
+    if (!fs.existsSync(jar)) throw new Error(`library "${n}" not found at ${jar}`);
+    return jar;
+  });
+}
+
 /** Compile + run one program; returns an error string or null. */
-function runProgram(code, expected) {
+function runProgram(code, expected, jars = []) {
   const m = code.match(/public\s+(?:final\s+|abstract\s+)*class\s+(\w+)/);
   if (!m) return "no public class";
   const dir = path.join(javaTmp, `p${++progN}`);
@@ -181,7 +194,7 @@ function runProgram(code, expected) {
   fs.writeFileSync(path.join(dir, `${m[1]}.java`), code);
   const javac = spawnSync("javac", ["--release", course.javaRelease, "-Xlint:none", "-d", dir, path.join(dir, `${m[1]}.java`)], { encoding: "utf8" });
   if (javac.status !== 0) return `does not compile: ${(javac.stderr || "").split("\n").slice(0, 3).join(" | ")}`;
-  const run = spawnSync("java", ["-cp", dir, m[1]], { encoding: "utf8", timeout: 15000 });
+  const run = spawnSync("java", ["-cp", [dir, ...jars].join(path.delimiter), m[1]], { encoding: "utf8", timeout: 15000 });
   if (run.error) return `run failed: ${run.error.message}`;
   if (run.status !== 0) return `exits with ${run.status}: ${(run.stderr || "").split("\n").slice(0, 2).join(" | ")}`;
   if (expected === null) return "no **Output:** text block after the program";
@@ -197,7 +210,7 @@ function runProgram(code, expected) {
   return null;
 }
 
-function checkCode(md, where, errors, warnings) {
+function checkCode(md, where, errors, warnings, jars = []) {
   const { fences } = splitFences(md);
   for (const f of fences) {
     if (!f.closed) errors.push(`${where}: unclosed code fence at line ${f.start + 1}`);
@@ -220,7 +233,7 @@ function checkCode(md, where, errors, warnings) {
   const progs = programs(md);
   if (runCode) {
     for (const p of progs) {
-      const err = runProgram(p.code, p.expected);
+      const err = runProgram(p.code, p.expected, jars);
       if (err) errors.push(`${where}: program at line ${p.line} ${err}`);
     }
   }
@@ -383,7 +396,13 @@ function checkLesson(l) {
   }
 
   // --- code
-  const bodyProgs = checkCode(body, "body", errors, warnings);
+  let jars = [];
+  try {
+    jars = libraryJars(l.classpath);
+  } catch (e) {
+    errors.push(e.message);
+  }
+  const bodyProgs = checkCode(body, "body", errors, warnings, jars);
 
   // --- practice problems
   let practiceProgs = [];
@@ -400,7 +419,7 @@ function checkLesson(l) {
         if (!/^\*\*Answer:\*\*/m.test(chunk)) errors.push(`"${name}": no **Answer:**`);
         if (programs(chunk).length !== 1) errors.push(`"${name}": needs exactly one java solution with main`);
       }
-      practiceProgs = checkCode(practice, "practice", errors, warnings);
+      practiceProgs = checkCode(practice, "practice", errors, warnings, jars);
     }
   } else if (practice) errors.push("manifest has practice: false but a .practice.md exists (it would not be published)");
 

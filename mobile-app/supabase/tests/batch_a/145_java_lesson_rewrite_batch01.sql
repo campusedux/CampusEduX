@@ -131,7 +131,9 @@ begin
    where t.source_kind = 'java_tutorial' and t.slug in (select slug from jr_b1) and c.metadata ->> 'source' = 'java_tutorial_seed'
      and c.body like '## 1. What %' and c.body not like '%## Interview Questions%';
   if n <> 20 then raise exception 'rollback: expected 20 original bodies back, found %', n; end if;
-  if exists (select 1 from public.learning_contents where metadata ->> 'origin' = 'java_lesson_rewrite') then
+  if exists (select 1 from public.learning_contents c join public.learning_topics t on t.id = c.topic_id
+              where c.metadata ->> 'origin' = 'java_lesson_rewrite' and t.source_kind = 'java_tutorial'
+                and t.slug in (select slug from jr_b1)) then
     raise exception 'rollback left practice blocks behind'; end if;
   if exists (select 1 from public.practice_tests where id in (select 'pt-java-' || slug from jr_b1 where slug <> 'jdk-jre-and-jvm')) then
     raise exception 'rollback left tests behind'; end if;
