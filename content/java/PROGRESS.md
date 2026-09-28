@@ -33,7 +33,7 @@ Words = prose words outside code fences (target 1200-1500).
 | 1 | HashMap | `hashmap` | 1 | 1457 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
 | 2 | ArrayList | `arraylist` | 1 | 1257 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
 | 3 | Collection Framework | `collection-framework` | 1 | 1254 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
-| 4 | Stream API | `stream-api` | 1 | 1264 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
+| 4 | Stream API | `stream-api` | 1 | 1291 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
 | 5 | Lambda Expressions | `lambda-expressions` | 1 | 1331 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
 | 6 | Constructors | `constructors` | 1 | 1396 | 2 problems | 10 MCQs | Written and verified; SQL not applied |
 | 7 | Inheritance | `inheritance` | 1 | 1424 | 2 problems | 10 MCQs | Written and verified; SQL not applied |

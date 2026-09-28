@@ -16,7 +16,7 @@ from (values
   ('hashmap', 'collections-framework/hashmap', '49e66a666d79037ff550179404e2bbc8', '50cf9f5408282ff0dc1a752dd627a454', true),
   ('arraylist', 'collections-framework/arraylist', '733533a342d65d2376cf7fbad6fb7f51', 'e9cc7f553719b7668d1f01957140630f', true),
   ('collection-framework', 'collections-framework/collection-framework', 'f1871c96d9302b9ae7a61fc5f384f2b9', 'c84a4093cb395fb2caef25c0191b1bf8', true),
-  ('stream-api', 'advanced-java/stream-api', '7c7e3c4d1cbbb6e53b9cd65263caf958', '30bda7b5f8c671e5ba4b07a4fc565956', true),
+  ('stream-api', 'advanced-java/stream-api', '7c7e3c4d1cbbb6e53b9cd65263caf958', '04e1fa1a11a24ea88e2a934ff662ee20', true),
   ('lambda-expressions', 'advanced-java/lambda-expressions', 'dce3a38244d63842dd9ae803cfa9ec86', '1cc97bcee79eea05ba7dbdd31f0f5983', true),
   ('constructors', 'object-oriented-programming/constructors', '19b6352fd27184e61fa5190f4e39f127', 'fc8a3229846f164d5670990fc077ad35', true),
   ('inheritance', 'object-oriented-programming/inheritance', 'd2a31c5dbda7ee7cc315e6e1bc2ea7d1', '7ad2478f9be4e6cf5681c1b3468cc762', true),

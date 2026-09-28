@@ -252,7 +252,7 @@ public class StreamDemo {
 - A stream doesn't store data itself — it simply processes data from an existing source, like a `List`.
 - Stream operations don't modify the original collection; they produce a new result.
 - Common operations include `filter()`, `map()`, `sorted()`, `collect()`, and `forEach()`.$jr693$,
-  $jr694$The Stream API lets you process collections of data (like lists) in a clean, declarative style — describing what should happen (filter, transform, count) rather than manually writing loops to do it step-by-step.$jr694$, '30bda7b5f8c671e5ba4b07a4fc565956', '4922ea97e18493852d13cb0369ac784c')),
+  $jr694$The Stream API lets you process collections of data (like lists) in a clean, declarative style — describing what should happen (filter, transform, count) rather than manually writing loops to do it step-by-step.$jr694$, '04e1fa1a11a24ea88e2a934ff662ee20', '4922ea97e18493852d13cb0369ac784c')),
 tp as (select id from public.learning_topics where source_kind = 'java_tutorial' and source_ref = 'advanced-java/stream-api'),
 upd as (
   update public.learning_contents c set body = src.old_body, updated_at = now()

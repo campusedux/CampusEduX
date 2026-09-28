@@ -56,7 +56,7 @@ Biryani x 3
 Momos x 2
 ```
 
-> **Hint:** First build a `Map<String, Long>` with `groupingBy(d -> d, counting())`. Then stream its `entrySet()`, sort with a comparator, and `limit(3)`.
+> **Hint:** First build a `Map<String, Long>` with `Collectors.groupingBy(d -> d, Collectors.counting())`. Then stream its `entrySet()`, sort with a comparator, and `limit(3)`.
 
 **Answer:** Grouping turns the order list into counts. A second stream over the map entries sorts them by count and then by name, so the tie between Momos and Pizza goes to Momos.
 
@@ -64,9 +64,7 @@ Momos x 2
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-
-import static java.util.stream.Collectors.counting;
-import static java.util.stream.Collectors.groupingBy;
+import java.util.stream.Collectors;
 
 public class TopDishes {
     public static void main(String[] args) {
@@ -75,7 +73,8 @@ public class TopDishes {
                 "Pizza", "Biryani", "Momos", "Dosa");
 
         Map<String, Long> counts = orders.stream()
-                .collect(groupingBy(d -> d, counting()));
+                .collect(Collectors.groupingBy(d -> d,
+                        Collectors.counting()));
 
         counts.entrySet().stream()
                 .sorted((a, b) -> {

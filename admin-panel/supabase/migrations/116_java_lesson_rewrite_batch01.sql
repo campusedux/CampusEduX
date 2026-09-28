@@ -47,7 +47,7 @@ begin
       ('collections-framework/hashmap', '49e66a666d79037ff550179404e2bbc8', '50cf9f5408282ff0dc1a752dd627a454'),
       ('collections-framework/arraylist', '733533a342d65d2376cf7fbad6fb7f51', 'e9cc7f553719b7668d1f01957140630f'),
       ('collections-framework/collection-framework', 'f1871c96d9302b9ae7a61fc5f384f2b9', 'c84a4093cb395fb2caef25c0191b1bf8'),
-      ('advanced-java/stream-api', '7c7e3c4d1cbbb6e53b9cd65263caf958', '30bda7b5f8c671e5ba4b07a4fc565956'),
+      ('advanced-java/stream-api', '7c7e3c4d1cbbb6e53b9cd65263caf958', '04e1fa1a11a24ea88e2a934ff662ee20'),
       ('advanced-java/lambda-expressions', 'dce3a38244d63842dd9ae803cfa9ec86', '1cc97bcee79eea05ba7dbdd31f0f5983'),
       ('object-oriented-programming/constructors', '19b6352fd27184e61fa5190f4e39f127', 'fc8a3229846f164d5670990fc077ad35'),
       ('object-oriented-programming/inheritance', 'd2a31c5dbda7ee7cc315e6e1bc2ea7d1', '7ad2478f9be4e6cf5681c1b3468cc762'),
@@ -1609,21 +1609,23 @@ In stream terms, the conveyor belt is the stream, the pile of orders is the sour
 ## Syntax
 
 ```java
-import static java.util.stream.Collectors.toList;
+import java.util.stream.Collectors;
 
-List<R> result = source.stream()   // source
-        .filter(x -> condition)    // intermediate
-        .map(x -> newValue)        // intermediate
-        .sorted()                  // intermediate
-        .collect(toList());        // terminal
+List<R> result = source.stream()          // source
+        .filter(x -> condition)           // intermediate
+        .map(x -> newValue)               // intermediate
+        .sorted()                         // intermediate
+        .collect(Collectors.toList());    // terminal
 ```
 
-- `import static` brings in `Collectors.toList()` so you can write just `toList()`. It is the same method, and it works on Java 8 and later.
+- `Collectors` is a helper class full of ready-made collectors. `Collectors.toList()` works on Java 8 and later.
 - `source.stream()` opens a stream on any collection. For arrays, use `Arrays.stream(array)`.
 - `filter` keeps only elements for which the condition is `true`.
 - `map` turns each element into something else, such as an order into its amount.
 - `sorted` puts elements in natural order, or in the order of a `Comparator` you pass in.
-- `collect(toList())` gathers the survivors into a new `List`. Other terminal operations include `count`, `forEach`, `reduce`, `sum` and `findFirst`.
+- `collect(Collectors.toList())` gathers the survivors into a new `List`. Other terminal operations include `count`, `forEach`, `reduce`, `sum` and `findFirst`.
+
+> **Note:** From Java 16 you can also end a pipeline with `stream.toList()`. It is shorter and returns a list you cannot modify. This page uses `Collectors.toList()` so every example runs on Java 8 and later.
 
 ## How the Stream API Works
 
@@ -1639,7 +1641,8 @@ orders.stream()     source
 .map(amount)        lazy
       |
       v
-.collect(toList())  runs all
+.collect(          runs all
+  Collectors.toList())
       |
       v
 [250, 180, 420]
@@ -1656,8 +1659,7 @@ There are two kinds of intermediate operations. Stateless ones like `filter` and
 ```java
 import java.util.Arrays;
 import java.util.List;
-
-import static java.util.stream.Collectors.toList;
+import java.util.stream.Collectors;
 
 public class DeliveryTotals {
     static class Order {
@@ -1680,7 +1682,7 @@ public class DeliveryTotals {
                 .filter(o -> o.amount > 200)
                 .map(o -> o.amount)
                 .sorted((a, b) -> b - a)
-                .collect(toList());
+                .collect(Collectors.toList());
         System.out.println("Big orders: " + big);
 
         int earned = orders.stream()
@@ -1708,9 +1710,8 @@ Two pipelines read the same list. The cancelled thali was skipped in both, and t
 ```java
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;
 
 public class LazyKitchen {
     public static void main(String[] args) {
@@ -1730,7 +1731,7 @@ public class LazyKitchen {
                     return d.toUpperCase();
                 })
                 .limit(2)
-                .collect(toList());
+                .collect(Collectors.toList());
         System.out.println(firstTwo);
     }
 }
@@ -1757,10 +1758,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.summingInt;
+import java.util.stream.Collectors;
 
 public class RestaurantReport {
     static class Order {
@@ -1778,16 +1776,16 @@ public class RestaurantReport {
                 new Order("Dosa Point", "Vada", 90));
 
         Map<String, Integer> totals = orders.stream()
-                .collect(groupingBy(o -> o.place,
+                .collect(Collectors.groupingBy(o -> o.place,
                         TreeMap::new,
-                        summingInt(o -> o.amount)));
+                        Collectors.summingInt(o -> o.amount)));
         totals.forEach((place, sum) ->
                 System.out.println(place + ": Rs " + sum));
 
         String menu = orders.stream()
                 .map(o -> o.dish)
                 .distinct()
-                .collect(joining(", "));
+                .collect(Collectors.joining(", "));
         System.out.println(menu);
     }
 }
@@ -1918,7 +1916,7 @@ Biryani x 3
 Momos x 2
 ```
 
-> **Hint:** First build a `Map<String, Long>` with `groupingBy(d -> d, counting())`. Then stream its `entrySet()`, sort with a comparator, and `limit(3)`.
+> **Hint:** First build a `Map<String, Long>` with `Collectors.groupingBy(d -> d, Collectors.counting())`. Then stream its `entrySet()`, sort with a comparator, and `limit(3)`.
 
 **Answer:** Grouping turns the order list into counts. A second stream over the map entries sorts them by count and then by name, so the tie between Momos and Pizza goes to Momos.
 
@@ -1926,9 +1924,7 @@ Momos x 2
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-
-import static java.util.stream.Collectors.counting;
-import static java.util.stream.Collectors.groupingBy;
+import java.util.stream.Collectors;
 
 public class TopDishes {
     public static void main(String[] args) {
@@ -1937,7 +1933,8 @@ public class TopDishes {
                 "Pizza", "Biryani", "Momos", "Dosa");
 
         Map<String, Long> counts = orders.stream()
-                .collect(groupingBy(d -> d, counting()));
+                .collect(Collectors.groupingBy(d -> d,
+                        Collectors.counting()));
 
         counts.entrySet().stream()
                 .sorted((a, b) -> {
@@ -10344,7 +10341,7 @@ begin
       ('collections-framework/hashmap', '50cf9f5408282ff0dc1a752dd627a454', '6a05cdb265aeb245612599a4c618bca5'),
       ('collections-framework/arraylist', 'e9cc7f553719b7668d1f01957140630f', 'e71210c7668df3297081fb037a30d3ea'),
       ('collections-framework/collection-framework', 'c84a4093cb395fb2caef25c0191b1bf8', '2979446ebd10dce37f3c2428a2cf4c7c'),
-      ('advanced-java/stream-api', '30bda7b5f8c671e5ba4b07a4fc565956', '4922ea97e18493852d13cb0369ac784c'),
+      ('advanced-java/stream-api', '04e1fa1a11a24ea88e2a934ff662ee20', '4922ea97e18493852d13cb0369ac784c'),
       ('advanced-java/lambda-expressions', '1cc97bcee79eea05ba7dbdd31f0f5983', '2cc60c6fce8764b191548edb500fa142'),
       ('object-oriented-programming/constructors', 'fc8a3229846f164d5670990fc077ad35', '29924d5000838b0f4915c9c9b7a4e0ed'),
       ('object-oriented-programming/inheritance', '7ad2478f9be4e6cf5681c1b3468cc762', '196c6e610b6fcb2d927620791644849a'),

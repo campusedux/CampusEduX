@@ -35,21 +35,23 @@ In stream terms, the conveyor belt is the stream, the pile of orders is the sour
 ## Syntax
 
 ```java
-import static java.util.stream.Collectors.toList;
+import java.util.stream.Collectors;
 
-List<R> result = source.stream()   // source
-        .filter(x -> condition)    // intermediate
-        .map(x -> newValue)        // intermediate
-        .sorted()                  // intermediate
-        .collect(toList());        // terminal
+List<R> result = source.stream()          // source
+        .filter(x -> condition)           // intermediate
+        .map(x -> newValue)               // intermediate
+        .sorted()                         // intermediate
+        .collect(Collectors.toList());    // terminal
 ```
 
-- `import static` brings in `Collectors.toList()` so you can write just `toList()`. It is the same method, and it works on Java 8 and later.
+- `Collectors` is a helper class full of ready-made collectors. `Collectors.toList()` works on Java 8 and later.
 - `source.stream()` opens a stream on any collection. For arrays, use `Arrays.stream(array)`.
 - `filter` keeps only elements for which the condition is `true`.
 - `map` turns each element into something else, such as an order into its amount.
 - `sorted` puts elements in natural order, or in the order of a `Comparator` you pass in.
-- `collect(toList())` gathers the survivors into a new `List`. Other terminal operations include `count`, `forEach`, `reduce`, `sum` and `findFirst`.
+- `collect(Collectors.toList())` gathers the survivors into a new `List`. Other terminal operations include `count`, `forEach`, `reduce`, `sum` and `findFirst`.
+
+> **Note:** From Java 16 you can also end a pipeline with `stream.toList()`. It is shorter and returns a list you cannot modify. This page uses `Collectors.toList()` so every example runs on Java 8 and later.
 
 ## How the Stream API Works
 
@@ -65,7 +67,8 @@ orders.stream()     source
 .map(amount)        lazy
       |
       v
-.collect(toList())  runs all
+.collect(          runs all
+  Collectors.toList())
       |
       v
 [250, 180, 420]
@@ -82,8 +85,7 @@ There are two kinds of intermediate operations. Stateless ones like `filter` and
 ```java
 import java.util.Arrays;
 import java.util.List;
-
-import static java.util.stream.Collectors.toList;
+import java.util.stream.Collectors;
 
 public class DeliveryTotals {
     static class Order {
@@ -106,7 +108,7 @@ public class DeliveryTotals {
                 .filter(o -> o.amount > 200)
                 .map(o -> o.amount)
                 .sorted((a, b) -> b - a)
-                .collect(toList());
+                .collect(Collectors.toList());
         System.out.println("Big orders: " + big);
 
         int earned = orders.stream()
@@ -134,9 +136,8 @@ Two pipelines read the same list. The cancelled thali was skipped in both, and t
 ```java
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;
 
 public class LazyKitchen {
     public static void main(String[] args) {
@@ -156,7 +157,7 @@ public class LazyKitchen {
                     return d.toUpperCase();
                 })
                 .limit(2)
-                .collect(toList());
+                .collect(Collectors.toList());
         System.out.println(firstTwo);
     }
 }
@@ -183,10 +184,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.summingInt;
+import java.util.stream.Collectors;
 
 public class RestaurantReport {
     static class Order {
@@ -204,16 +202,16 @@ public class RestaurantReport {
                 new Order("Dosa Point", "Vada", 90));
 
         Map<String, Integer> totals = orders.stream()
-                .collect(groupingBy(o -> o.place,
+                .collect(Collectors.groupingBy(o -> o.place,
                         TreeMap::new,
-                        summingInt(o -> o.amount)));
+                        Collectors.summingInt(o -> o.amount)));
         totals.forEach((place, sum) ->
                 System.out.println(place + ": Rs " + sum));
 
         String menu = orders.stream()
                 .map(o -> o.dish)
                 .distinct()
-                .collect(joining(", "));
+                .collect(Collectors.joining(", "));
         System.out.println(menu);
     }
 }
