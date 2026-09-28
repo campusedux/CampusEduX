@@ -59,14 +59,14 @@ export function AuthMenu() {
     };
   }, [open]);
 
-  if (loading) return <span className="h-9 w-[5.25rem] shrink-0 animate-pulse rounded-xl bg-surface" aria-hidden />;
+  if (loading) return <span className="h-9 w-16 shrink-0 animate-pulse rounded-xl bg-surface sm:w-[5.25rem]" aria-hidden />;
 
   if (!profile) {
     return (
       <div className="flex shrink-0 items-center gap-1.5">
         <Link
           href={loginHrefFor(pathname)}
-          className="inline-flex h-11 items-center whitespace-nowrap rounded-xl px-4 text-[0.8rem] font-semibold text-ink transition hover:bg-surface max-sm:bg-primary max-sm:text-white max-sm:hover:bg-primary-600 sm:h-9 sm:px-3"
+          className="inline-flex h-11 items-center whitespace-nowrap rounded-xl px-3 text-[0.8rem] font-semibold text-ink transition hover:bg-surface max-sm:bg-primary max-sm:text-white max-sm:hover:bg-primary-600 sm:h-9"
         >
           Log in
         </Link>

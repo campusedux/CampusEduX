@@ -18,20 +18,22 @@ import { BrandMark } from "./BrandMark";
  * - `< md`: wordmark · search icon + notifications + auth + hamburger; a fixed
  *   bottom tab bar (`<BottomNav>`) covers primary navigation on phones, and the
  *   theme control lives in the drawer.
+ * Phones: tighter gaps and a smaller wordmark, which hides below 360px (the
+ * logo tile stays), so the hamburger never slides off-screen at 320-360px.
  */
 export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-line/70 bg-card/80 backdrop-blur-xl supports-[backdrop-filter]:bg-card/70">
-      <div className="container-page flex h-16 items-center gap-3">
+      <div className="container-page flex h-16 items-center gap-2 sm:gap-3">
         <Link href="/" className="flex h-11 shrink-0 items-center rounded-xl transition-opacity hover:opacity-90" aria-label={`${BRAND.name} home`}>
-          <BrandMark />
+          <BrandMark compact />
         </Link>
 
         <div className="flex min-w-0 flex-1 justify-center">
           <HeaderLinks />
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-1 sm:gap-2">
           <div className="hidden xl:block">
             <GlobalSearchField variant="header" />
           </div>
