@@ -115,6 +115,7 @@ export function RegisterScreen() {
         subtitle="Join CampusEduX and start your journey"
         onBack={() => goBackSafely(navigation, "Login")}
         className="mb-8"
+        showLogo
       />
 
       <Controller

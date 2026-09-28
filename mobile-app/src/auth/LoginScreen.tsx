@@ -107,6 +107,7 @@ export function LoginScreen() {
         subtitle="Login to continue"
         onBack={() => goBackSafely(navigation, "Onboarding1")}
         className="mb-8"
+        showLogo
       />
 
       <Controller

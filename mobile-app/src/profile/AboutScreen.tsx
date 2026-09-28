@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, Pressable, Linking, Share } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen } from "@/components/ui";
+import { BrandLogo, Screen } from "@/components/ui";
 import { currentAppVersion } from "@/lib/appVersion";
 
 
@@ -34,9 +34,7 @@ export function AboutScreen() {
       </View>
 
       <View className="items-center mb-8">
-        <View className="w-20 h-20 rounded-2xl items-center justify-center mb-3" style={{ backgroundColor: "#4F39F6" }}>
-          <Ionicons name="school" size={36} color="#FBBF24" />
-        </View>
+        <BrandLogo variant="mark" height={80} style={{ marginBottom: 12 }} />
         <Text className="text-xl font-bold text-gray-900">CampusEduX</Text>
         <Text className="text-gray-400 text-sm mt-1">Version {currentAppVersion() ?? "—"}</Text>
         <Text className="text-gray-500 text-sm text-center mt-3 px-6">

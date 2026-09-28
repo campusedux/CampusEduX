@@ -4,6 +4,7 @@ export * from "./Screen";
 export * from "./PressableScale";
 export * from "./DrawerMenuButton";
 export * from "./AuthHeader";
+export * from "./BrandLogo";
 export * from "./SelectableCard";
 export * from "./StateViews";
 export * from "./SectionHeader";

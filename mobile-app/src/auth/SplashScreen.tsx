@@ -1,43 +1,26 @@
 import React from "react";
 import { View, Text, ActivityIndicator, StatusBar } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { BrandLogo } from "@/components/ui/BrandLogo";
 
 /**
  * Branded loading screen shown by RootNavigator while the auth session is
  * being restored on startup. Purely presentational — routing is decided
  * declaratively in RootNavigator from the auth store (see useAuthBootstrap).
+ * White with the full logo, matching the native splash (app.json
+ * expo-splash-screen), so there is no colour flash between the two.
  */
 export function SplashScreen() {
   return (
-    <LinearGradient
-      colors={["#4F39F6", "#3A28C8", "#312E81"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{ flex: 1 }}
-    >
-      <StatusBar barStyle="light-content" />
+    <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View className="flex-1 items-center justify-center px-8">
-        <View
-          className="w-24 h-24 rounded-3xl items-center justify-center mb-6"
-          style={{ backgroundColor: "rgba(255,255,255,0.14)" }}
-        >
-          <Text className="text-white text-5xl font-extrabold">C</Text>
-        </View>
-        <Text className="text-3xl font-bold mb-2">
-          <Text className="text-white">Campus</Text>
-          <Text style={{ color: "#FBBF24" }}>EduX</Text>
-        </Text>
-        <Text style={{ color: "#C7CBFF" }} className="text-base">
-          Learn. Build. Get Placed.
-        </Text>
+        <BrandLogo variant="full" height={230} />
       </View>
       <View className="items-center pb-16">
-        <ActivityIndicator color="#ffffff" />
-        <Text style={{ color: "#C7CBFF" }} className="mt-3 text-sm">
-          Loading...
-        </Text>
+        <ActivityIndicator color="#4F39F6" />
+        <Text className="mt-3 text-sm text-gray-500">Loading...</Text>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
