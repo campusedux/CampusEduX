@@ -16,7 +16,9 @@ import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { BRAND } from "@/lib/brand";
 
-export const revalidate = 300;
+// Blog mutations invalidate the `blog` tag on demand (admin-panel blog actions),
+// so the timer is only the fallback for out-of-band writes.
+export const revalidate = 1800;
 
 const HERO_TITLE = "Insights, Ideas & Technology";
 const DESCRIPTION =

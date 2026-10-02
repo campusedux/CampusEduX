@@ -26,7 +26,9 @@ import { authoredDescription } from "@/lib/metaDescription";
 import { plainTitle } from "@/lib/seoTitles";
 import { BRAND } from "@/lib/brand";
 
-export const revalidate = 300;
+// Blog mutations invalidate the `blog` tag on demand (admin-panel blog actions),
+// so the timer is only the fallback for out-of-band writes.
+export const revalidate = 1800;
 export const dynamicParams = true;
 
 // Prerender the most recent posts at build; the long tail renders on demand and
