@@ -503,6 +503,7 @@ describe("robots.txt", () => {
       "/projects/category/web-development",
       "/blog/hello",
       "/custom-projects",
+      "/search",
       "/sitemap.xml",
       "/sitemaps/learning.xml",
     ];
@@ -514,7 +515,7 @@ describe("robots.txt", () => {
   it("still blocks the private / utility areas", async () => {
     const { default: robots } = await import("@/app/robots");
     const { disallow } = robots().rules as { disallow: string[] };
-    for (const path of ["/account/wallet", "/api/session", "/auth/callback", "/r/abc123", "/search", "/custom-projects/checkout", "/practice/submissions"]) {
+    for (const path of ["/account/wallet", "/api/session", "/auth/callback", "/r/abc123", "/custom-projects/checkout", "/practice/submissions"]) {
       expect(disallow.some((rule) => path.startsWith(rule)), path).toBe(true);
     }
   });

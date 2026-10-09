@@ -12,7 +12,6 @@ export const ROBOTS_DISALLOW = [
   "/auth/",
   "/api/",
   "/admin",
-  "/search",
   "/r/",
   "/practice/submissions",
   "/custom-projects/start",
