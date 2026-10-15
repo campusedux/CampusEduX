@@ -7,6 +7,7 @@ import { AnnouncementBar } from "@/components/home/AnnouncementBar";
 import Footer from "@/components/Footer";
 import JsonLd from "@/components/JsonLd";
 import GoogleAnalytics from "@/components/analytics/GoogleAnalytics";
+import CookieConsentBanner from "@/components/analytics/CookieConsent";
 import { BRAND } from "@/lib/brand";
 import { BRAND_LOGO_URL, DEFAULT_OG_IMAGE, websiteJsonLd } from "@/lib/seo";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
@@ -104,6 +105,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Clears the fixed mobile bottom nav. */}
         <div className="h-[calc(4rem+env(safe-area-inset-bottom))] md:hidden" aria-hidden />
         <BottomNav />
+        <CookieConsentBanner />
         <Toaster />
       </body>
     </html>

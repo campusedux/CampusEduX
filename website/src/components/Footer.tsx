@@ -3,6 +3,7 @@ import { ArrowRight, GraduationCap } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
 import { BrandMark } from "@/components/nav/BrandMark";
+import { CookieSettingsLink } from "@/components/analytics/CookieConsent";
 
 /*
  * Site footer — renders on every route, so it is a Server Component with
@@ -215,7 +216,7 @@ export default function Footer() {
           <p className="text-xs text-ink-muted">
             © {year} {entity}. All rights reserved.
           </p>
-          <nav aria-label="Legal and site map" className="flex items-center gap-3 text-xs text-ink-muted">
+          <nav aria-label="Legal and site map" className="flex flex-wrap items-center gap-3 text-xs text-ink-muted">
             {BOTTOM_LINKS.map((l, i) => (
               <span key={l.href} className="flex items-center gap-3">
                 {i > 0 && (
@@ -234,6 +235,8 @@ export default function Footer() {
                 )}
               </span>
             ))}
+            <span aria-hidden className="text-ink-faint">·</span>
+            <CookieSettingsLink />
           </nav>
         </div>
       </div>

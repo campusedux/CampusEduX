@@ -25,7 +25,7 @@ export const CURRENT_LEGAL_VERSION = raw.currentLegalVersion;
 
 /** Website-only documents/pages that are not part of the mobile canonical set. */
 const WEB_ONLY_VERSIONS: Record<"cookie-policy" | "grievance", LegalDocumentVersion> = {
-  "cookie-policy": { version: "1.1.0", effectiveDate: "2026-09-18" },
+  "cookie-policy": { version: "1.2.0", effectiveDate: "2026-10-15" },
   grievance: { version: "1.1.0", effectiveDate: "2026-09-18" },
 };
 
