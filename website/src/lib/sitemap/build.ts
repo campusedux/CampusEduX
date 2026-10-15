@@ -54,24 +54,14 @@ export const STATIC_SITEMAP_PATHS = [
   "/community-guidelines",
   "/disclaimer",
   "/grievance",
+  "/refund-policy",
+  "/cookie-policy",
+  "/data-and-permissions",
+  "/delete-account",
 ] as const;
 
-/**
- * Public pages deliberately NOT promoted through the sitemap. They stay
- * reachable and indexable as-is (no noindex added); they're just not content
- * we ask search engines to prioritise:
- *   - /delete-account, /data-and-permissions: Play-Store compliance / account utilities
- *   - /cookie-policy, /refund-policy: boilerplate policy pages
- *   - /referral: logged-in program promo whose own metadata turns noindex
- *     whenever no reward rule is configured.
- */
-export const SITEMAP_EXCLUDED_PATHS = [
-  "/delete-account",
-  "/cookie-policy",
-  "/refund-policy",
-  "/data-and-permissions",
-  "/referral",
-] as const;
+/** Referral is omitted because its metadata can noindex when no reward rule exists. */
+export const SITEMAP_EXCLUDED_PATHS = ["/referral"] as const;
 
 // ---------------------------------------------------------------------------
 // Dates

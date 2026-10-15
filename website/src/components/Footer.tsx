@@ -65,14 +65,14 @@ const NAV_GROUPS: readonly FooterNavGroup[] = [
   {
     id: "legal",
     title: "Legal",
-    // Only the four most-requested policies live on the footer; the rest
-    // (Cookie Policy, Data & Permissions, Project License, Community
-    // Guidelines, Disclaimer, Grievance Redressal) stay reachable from the
-    // "All policies" index at /legal.
     links: [
       { href: "/privacy-policy", label: "Privacy Policy" },
       { href: "/terms", label: "Terms & Conditions" },
       { href: "/refund-policy", label: "Refund Policy" },
+      { href: "/cookie-policy", label: "Cookie Policy" },
+      { href: "/disclaimer", label: "Disclaimer" },
+      { href: "/community-guidelines", label: "Community Guidelines" },
+      { href: "/grievance", label: "Grievance Redressal" },
       { href: "/delete-account", label: "Delete Account" },
       { href: "/legal", label: "All policies →" },
     ],

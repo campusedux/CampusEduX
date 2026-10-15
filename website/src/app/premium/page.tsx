@@ -5,7 +5,8 @@ import { PremiumCard, SectionHeader, EmptyState } from "@/components/ui";
 import { formatINR } from "@/lib/format";
 import PremiumSubscribeButton from "@/components/PremiumSubscribeButton";
 import { Sparkles, Zap, BookOpen, Headphones, Crown, ShieldCheck, Check, Minus, Plus, Lock, Smartphone, ArrowDown } from "lucide-react";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const revalidate = 300;
 
@@ -38,7 +39,8 @@ async function getPremiumData(): Promise<{ plans: Plan[]; features: Feature[] }>
 export async function generateMetadata(): Promise<Metadata> {
   const { plans } = await getPremiumData();
   return {
-    title: "Premium",
+    title: { absolute: "CampusEduX Premium: Plans & Benefits" },
+    description: "Compare CampusEduX Premium plans and benefits for learning and practice. See current pricing, access and cancellation details.",
     alternates: { canonical: absoluteUrl("/premium") },
     // No plans published yet -> don't index a page with no pricing to show.
     robots: plans.length === 0 ? { index: false, follow: true } : undefined,
@@ -88,6 +90,7 @@ export default async function PremiumPage() {
 
   return (
     <div className="page-shell">
+      <JsonLd data={breadcrumbJsonLd([{ name: "Premium", path: "/premium" }])} />
       {/* Hero — fixed dark panel in both themes */}
       <section className="relative overflow-hidden rounded-3xl bg-[#0F0B2E] px-6 py-12 text-center text-white shadow-card-lg sm:px-10 sm:py-16">
         <div aria-hidden className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/50 blur-3xl" />

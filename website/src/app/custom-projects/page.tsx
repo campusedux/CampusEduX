@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { formatINR } from "@/lib/format";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const revalidate = 300;
 export const metadata: Metadata = {
-  title: "Custom Projects",
+  title: "Custom Final Year Projects for Students",
+  description: "Plan a custom academic, personal or business project. Explore options, starting prices and the CampusEduX request process.",
   alternates: { canonical: absoluteUrl("/custom-projects") },
 };
 
@@ -62,6 +64,7 @@ export default async function CustomProjectsPage() {
 
   return (
     <div className="page-shell">
+      <JsonLd data={breadcrumbJsonLd([{ name: "Custom Projects", path: "/custom-projects" }])} />
       <section className="relative overflow-hidden rounded-3xl bg-[#0F0B2E] px-6 py-10 text-white shadow-card-lg sm:px-10 sm:py-14">
         <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-primary/50 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-28 right-0 h-72 w-80 rounded-full bg-accent-pink/30 blur-3xl" />

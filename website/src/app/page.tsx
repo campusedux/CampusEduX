@@ -63,15 +63,14 @@ type FaqRow = { id: string; question: string; answer: string };
 export async function generateMetadata(): Promise<Metadata> {
   const { banner } = await getHomeData();
   return {
-    title: "CampusEduX — Projects, Jobs, Placement Prep & Resume, in one app",
-    description:
-      "Buy or sell final-year projects, apply to jobs and internships, prepare for placements, build a resume, and get a custom project built — one account across web and the CampusEduX app.",
+    title: { absolute: "CampusEduX: Projects, Jobs & Placement Prep" },
+    description: "Explore student projects, fresher jobs, tutorials, coding practice and resume tools on CampusEduX.",
     // Declared here, not in the root layout, so pages without their own
     // canonical (404s, redirects) never inherit the homepage's.
     alternates: { canonical: "/" },
     openGraph: {
-      title: "CampusEduX",
-      description: "Projects · Jobs · Placement Prep · Resume · Custom Projects — for students.",
+      title: "CampusEduX: Projects, Jobs & Placement Prep",
+      description: "Explore student projects, fresher jobs, tutorials, coding practice and resume tools on CampusEduX.",
       images: safeHref(banner?.image_url) ? [{ url: safeHref(banner?.image_url) as string }] : [DEFAULT_OG_IMAGE],
     },
   };

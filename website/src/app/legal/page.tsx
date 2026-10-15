@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
-import { LEGAL, CURRENT_LEGAL_VERSION, formatLegalDate } from "@/legal/config";
+import { LEGAL, formatLegalDate } from "@/legal/config";
 import { fillTokens } from "@/legal/interpolate";
 import { LEGAL_INDEX } from "@/legal/registry";
 
+const lastUpdated = LEGAL_INDEX.map((item) => item.effectiveDate).sort().at(-1)!;
+
 export const metadata: Metadata = {
-  title: "Legal & Privacy",
-  description: `Privacy Policy, Terms, Refund Policy and the other policies that govern your use of ${LEGAL.appName}.`,
+  title: { absolute: "CampusEduX Legal & Privacy Policies" },
+  description: "Find CampusEduX privacy, terms, refund, cookie, grievance and other policies in one place.",
   alternates: { canonical: "/legal" },
   openGraph: {
     title: `${LEGAL.appName} — Legal & Privacy`,
@@ -26,11 +28,11 @@ export default function LegalHubPage() {
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Legal &amp; Privacy</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Policies</h1>
       <p className="mt-3 text-[15px] leading-relaxed text-ink-muted">
-        These are the policies that govern your use of {LEGAL.appName}, on this website and in the CampusEduX app. The
-        same policy text is used in both places.
+        These policies govern your use of {LEGAL.appName}. Each policy shows its own effective date; the Cookie Policy
+        and Grievance Redressal page apply to this website.
       </p>
       <p className="mt-1 text-sm text-ink-faint">
-        Policies version {CURRENT_LEGAL_VERSION} · Effective {formatLegalDate(LEGAL.effectiveDate)}
+        Last updated {formatLegalDate(lastUpdated)}
       </p>
 
       <ul className="mt-8 divide-y divide-line border-y border-line">

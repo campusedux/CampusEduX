@@ -166,7 +166,22 @@ async function loadInterview(supabase: Client): Promise<SitemapEntry[]> {
   const rows = await readAllPages<InterviewSitemapRow>((from, to) =>
     supabase.rpc("interview_questions_sitemap", { p_platform: "website" }).range(from, to),
   );
-  return buildInterviewEntries(rows);
+  const populated: InterviewSitemapRow[] = [];
+  // Match the topic page's own published/visible question result. Bound
+  // concurrency so sitemap generation does not fan out without limit.
+  for (let i = 0; i < rows.length; i += 20) {
+    const batch = await Promise.all(rows.slice(i, i + 20).map(async (row) => {
+      const { data, error } = await supabase.rpc("interview_topic_detail", {
+        p_category_slug: row.category_slug,
+        p_topic_slug: row.topic_slug,
+        p_platform: "website",
+      });
+      if (error) throw new SitemapReadFailed();
+      return Array.isArray(data?.questions) && data.questions.length > 0 ? row : null;
+    }));
+    populated.push(...batch.filter((row): row is InterviewSitemapRow => row !== null));
+  }
+  return buildInterviewEntries(populated);
 }
 
 async function loadJobs(supabase: Client): Promise<SitemapEntry[]> {

@@ -4,7 +4,8 @@ import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
 import { absoluteUrl } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Support",
+  title: { absolute: "CampusEduX Support: Get Help" },
+  description: "Find help with your account, projects, payments, jobs and learning. Browse FAQs or contact CampusEduX support by email or WhatsApp.",
   alternates: { canonical: absoluteUrl("/support") },
 };
 

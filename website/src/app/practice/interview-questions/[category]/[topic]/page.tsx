@@ -27,7 +27,7 @@ export async function generateMetadata({
   params: { category: string; topic: string };
 }): Promise<Metadata> {
   const detail = await getInterviewTopicDetail(params.category, params.topic);
-  if (!detail) return { title: "Not found", robots: { index: false, follow: false } };
+  if (!detail || detail.questions.length === 0) return { title: "Not found", robots: { index: false, follow: false } };
   const { category, topic, questions } = detail;
   const title = interviewTopicTitle({ categoryName: category.name, topicName: topic.name });
   const description = interviewTopicDescription({
@@ -59,7 +59,7 @@ export default async function InterviewTopicPage({
   params: { category: string; topic: string };
 }) {
   const detail = await getInterviewTopicDetail(params.category, params.topic);
-  if (!detail) notFound();
+  if (!detail || detail.questions.length === 0) notFound();
   const { category, topic, questions, prev, next } = detail;
   const basePath = `/practice/interview-questions/${category.slug}`;
   const learningLink = category.slug === "java" ? JAVA_TOPIC_LEARNING_LINKS[topic.slug] : undefined;

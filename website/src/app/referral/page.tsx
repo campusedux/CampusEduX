@@ -4,7 +4,8 @@ import { ArrowRight, BadgeIndianRupee } from "lucide-react";
 import { EmptyState } from "@/components/ui";
 import { ReferralHero } from "@/components/referral/ReferralHero";
 import { ReferralHowItWorks } from "@/components/referral/ReferralHowItWorks";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 import { getRewardSettings } from "@/lib/referral";
 
 export const revalidate = 300;
@@ -12,7 +13,8 @@ export const revalidate = 300;
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getRewardSettings();
   return {
-    title: "Referral Program",
+    title: { absolute: "CampusEduX Referral Rewards" },
+    description: "Invite friends to CampusEduX and see how current referral rewards, wallet credit and eligibility work.",
     alternates: { canonical: absoluteUrl("/referral") },
     // No reward rule configured yet -> don't index a page with no terms to show.
     robots: settings ? undefined : { index: false, follow: true },
@@ -24,6 +26,7 @@ export default async function ReferralPage() {
 
   return (
     <div className="page-shell space-y-12">
+      <JsonLd data={breadcrumbJsonLd([{ name: "Referral", path: "/referral" }])} />
       <ReferralHero
         title="Invite friends, earn wallet credit"
         subtitle="Every CampusEduX student gets a referral code. When a friend joins through it, credit is added directly to your wallet — tracked on a running dashboard in your account."

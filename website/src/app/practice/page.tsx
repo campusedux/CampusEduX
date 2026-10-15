@@ -9,13 +9,12 @@ import { getPracticeCategories } from "@/lib/practice";
 export const revalidate = 21600;
 
 export const metadata: Metadata = {
-  title: "Practice",
-  description:
-    "Practise programming with CampusEduX — a global library of coding problems solvable in Java, Python, C, C++ and JavaScript, an online compiler, and your submission history.",
+  title: "Coding Practice & Interview Prep",
+  description: "Solve coding problems, prepare for interviews and run code online with CampusEduX practice tools for students.",
   alternates: { canonical: absoluteUrl("/practice") },
   openGraph: {
-    title: "Practice | CampusEduX",
-    description: "Coding problems, an online compiler, and your submissions — all in one place.",
+    title: "Coding Practice & Interview Prep | CampusEduX",
+    description: "Solve coding problems, prepare for interviews and run code online with CampusEduX practice tools for students.",
     url: absoluteUrl("/practice"),
     type: "website",
     images: [DEFAULT_OG_IMAGE],

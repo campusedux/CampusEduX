@@ -3,12 +3,9 @@ import Link from "next/link";
 import { absoluteUrl } from "@/lib/seo";
 import { LEGAL } from "@/legal/config";
 
-const DESCRIPTION =
-  "CampusEduX brings together the project marketplace, jobs & internships, learning resources, a resume builder and custom project development — all in one app, backed by one account.";
-
 export const metadata: Metadata = {
-  title: "About CampusEduX",
-  description: DESCRIPTION,
+  title: { absolute: "About CampusEduX: Tools for Indian Students" },
+  description: "Learn who operates CampusEduX and how its projects, jobs, tutorials and resume tools help college students prepare for careers.",
   alternates: { canonical: absoluteUrl("/about") },
 };
 
@@ -16,6 +13,10 @@ export default function AboutPage() {
   return (
     <div className="page-shell-narrow">
       <h1 className="text-3xl font-bold text-ink">About CampusEduX</h1>
+      <p className="mt-2 text-sm text-ink-faint">Last updated: 15 October 2026</p>
+      {/* TODO (owner): Complete an About details section here with verified founder
+          background, credentials (if any), editorial process, and source links.
+          Publish it only after the facts and links are supplied. */}
       <p className="mt-3 text-ink-muted">
         CampusEduX brings together the tools a student needs across a college career: a project marketplace to buy, sell
         or find final-year and mini projects; a jobs and internships board; structured learning resources and tutorials;
