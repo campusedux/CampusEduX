@@ -10,8 +10,9 @@ import { Button } from "@/components/ui";
 export default function TopUpForm() {
   const router = useRouter();
   const [amount, setAmount] = useState(500);
-  const [status, setStatus] = useState<"idle" | "processing" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "processing" | "error" | "pending">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [retryVerification, setRetryVerification] = useState<(() => Promise<void>) | null>(null);
 
   async function handleTopUp() {
     if (!Number.isFinite(amount) || amount < 10 || amount > 100000) {
@@ -42,7 +43,11 @@ export default function TopUpForm() {
         order_id: order.razorpayOrderId,
         name: "CampusEduX",
         description: "Wallet top-up",
-        handler: async (response: any) => {
+        handler: async function verifyHandler(response: any) {
+          setStatus("processing");
+          setError(null);
+          setRetryVerification(null);
+          try {
           // 2. Hand the payment signature to the existing
           //    verify-wallet-topup-payment function — it does the real
           //    HMAC-SHA256 check server-side before crediting the wallet.
@@ -57,15 +62,20 @@ export default function TopUpForm() {
             }),
           );
           if (!verdict.ok) {
-            setStatus("error");
-            setError(verdict.message);
-            return;
+            throw new Error(verdict.message);
           }
+          setRetryVerification(null);
           setStatus("idle");
-          router.refresh();
+          } catch (err) {
+            setStatus("pending");
+            setError("Payment received, verification pending. Check Purchases/Wallet, then retry verification.");
+            setRetryVerification(() => () => verifyHandler(response));
+          } finally {
+            router.refresh();
+          }
         },
         modal: {
-          ondismiss: () => setStatus("idle"),
+          ondismiss: () => setStatus((current) => current === "pending" ? current : "idle"),
         },
         theme: { color: "#4F39F6" },
       });
@@ -93,9 +103,10 @@ export default function TopUpForm() {
         }}
         className="h-11 w-28 rounded-xl border border-line bg-card px-3.5 text-sm"
       />
-      <Button onClick={handleTopUp} loading={status === "processing"}>
+      <Button onClick={handleTopUp} disabled={status === "pending"} loading={status === "processing"}>
         {status === "processing" ? "Opening checkout…" : "Top up"}
       </Button>
+      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
       {error && <p className="w-full text-sm text-danger">{error}</p>}
     </div>
   );

@@ -26,8 +26,12 @@ export async function GET(req: Request) {
     );
   }
 
-  const result = await runGlobalSearch(term, SUGGEST_LIMIT);
-  return NextResponse.json(result, {
+  try {
+    const result = await runGlobalSearch(term, SUGGEST_LIMIT);
+    return NextResponse.json(result, {
     headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
-  });
+    });
+  } catch {
+    return NextResponse.json({ error: "Search is temporarily unavailable. Please retry." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
 }

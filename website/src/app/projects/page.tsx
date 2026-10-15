@@ -61,7 +61,7 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
     },
     // No results for this view (e.g. the catalog is empty, or the filters
     // matched nothing) -> don't index an empty shell page.
-    robots: (count ?? 0) === 0 ? { index: false, follow: true } : undefined,
+    robots: count === 0 ? { index: false, follow: true } : undefined,
   };
 }
 

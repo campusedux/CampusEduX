@@ -9,7 +9,7 @@ import { interpretVerifyResponse } from "@/lib/payments";
 import { formatINR } from "@/lib/format";
 import { Button } from "@/components/ui";
 
-type Phase = "loading" | "anon" | "owned" | "buy" | "processing" | "error";
+type Phase = "loading" | "anon" | "owned" | "buy" | "processing" | "error" | "pending";
 
 /**
  * Direct project purchase — reuses the existing `create-razorpay-order` /
@@ -31,6 +31,7 @@ export default function ProjectPurchasePanel({
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [retryVerification, setRetryVerification] = useState<(() => Promise<void>) | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createBrowserSupabase();
@@ -74,7 +75,11 @@ export default function ProjectPurchasePanel({
         order_id: order.razorpayOrderId,
         name: "CampusEduX",
         description: title,
-        handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+        handler: async function verifyHandler(response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
+          setPhase("processing");
+          setError(null);
+          setRetryVerification(null);
+          try {
           const verdict = interpretVerifyResponse(
             await supabase.functions.invoke("verify-razorpay-payment", {
               body: {
@@ -86,15 +91,20 @@ export default function ProjectPurchasePanel({
             }),
           );
           if (!verdict.ok) {
-            setPhase("error");
-            setError(verdict.message);
-            return;
+            throw new Error(verdict.message);
           }
+          setRetryVerification(null);
           setPhase("owned");
           router.push("/account/purchases");
-          router.refresh();
+          } catch (err) {
+            setPhase("pending");
+            setError("Payment received, verification pending. Check Purchases/Wallet, then retry verification.");
+            setRetryVerification(() => () => verifyHandler(response));
+          } finally {
+            router.refresh();
+          }
         },
-        modal: { ondismiss: () => setPhase("buy") },
+        modal: { ondismiss: () => setPhase((current) => current === "pending" ? current : "buy") },
         theme: { color: "#4F39F6" },
       });
       checkout.open();
@@ -142,12 +152,13 @@ export default function ProjectPurchasePanel({
 
   return (
     <div className="mt-5">
-      <Button onClick={handleBuy} loading={phase === "processing"} fullWidth className="sm:w-auto">
+      <Button onClick={handleBuy} disabled={phase === "pending"} loading={phase === "processing"} fullWidth className="sm:w-auto">
         {phase === "processing" ? "Opening checkout…" : `Buy now · ${formatINR(price)}`}
       </Button>
       <p className="mt-2 text-xs text-ink-faint">
         Secure payment via Razorpay. Source code &amp; docs unlock in your account after payment.
       </p>
+      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );

@@ -22,6 +22,7 @@ export async function GET(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ topics: [] }, { status: 401, headers: PRIVATE });
 
-  const { data } = await supabase.rpc("learning_progress_summary", { p_grid_slug: grid, p_platform: "website" });
+  const { data , error } = await supabase.rpc("learning_progress_summary", { p_grid_slug: grid, p_platform: "website" });
+  if (error) return NextResponse.json({ error: "Progress is unavailable. Please retry." }, { status: 503, headers: PRIVATE });
   return NextResponse.json({ topics: Array.isArray(data?.topics) ? data.topics : [] }, { headers: PRIVATE });
 }

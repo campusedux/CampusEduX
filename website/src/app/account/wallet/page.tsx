@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR, timeAgo } from "@/lib/format";
-import { computeWalletBalance, WITHDRAWAL_STATUS_LABEL, type WithdrawalStatus } from "@/lib/wallet";
+import { WITHDRAWAL_STATUS_LABEL, type WithdrawalStatus } from "@/lib/wallet";
 import { EmptyState } from "@/components/ui";
 import TopUpForm from "./TopUpForm";
 import WithdrawForm from "./WithdrawForm";
@@ -12,7 +12,7 @@ export default async function WalletPage() {
   const user = await requireUser();
   const supabase = createAuthedServerSupabase();
 
-  const [{ data: txns }, { data: withdrawals }, { data: rewardSettings }] = await Promise.all([
+  const [{ data: txns }, { data: withdrawals }, { data: rewardSettings }, { data: balance, error: balanceError }] = await Promise.all([
     supabase
       .from("wallet_transactions")
       .select("id,type,category,amount,description,created_at")
@@ -26,9 +26,11 @@ export default async function WalletPage() {
       .eq("user_id", user.id)
       .not("wallet_transaction_id", "is", null),
     supabase.from("reward_settings").select("min_payout").eq("id", 1).maybeSingle(),
+    supabase.rpc("wallet_available_balance"),
   ]);
 
-  const balance = computeWalletBalance(txns ?? []);
+  if (balanceError || balance === null) throw new Error("Wallet balance is unavailable. Please retry.");
+  const availableBalance = Number(balance);
   const withdrawalStatusByTxn = new Map<string, WithdrawalStatus>(
     (withdrawals ?? []).map((w) => [w.wallet_transaction_id as string, w.status as WithdrawalStatus]),
   );
@@ -44,13 +46,13 @@ export default async function WalletPage() {
           <div className="relative flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-white/75">
             <Wallet className="h-4 w-4" aria-hidden /> Current balance
           </div>
-          <div className="relative mt-1 font-display text-4xl font-bold">{formatINR(balance)}</div>
+          <div className="relative mt-1 font-display text-4xl font-bold">{formatINR(availableBalance)}</div>
         </div>
         <div className="px-6 pb-6 pt-1">
           <p className="mt-4 text-sm font-semibold text-ink">Top up your wallet</p>
           <TopUpForm />
           <p className="mt-6 text-sm font-semibold text-ink">Withdraw to UPI</p>
-          <WithdrawForm balance={balance} minPayout={minPayout} hasPending={hasPendingWithdrawal} />
+          <WithdrawForm balance={availableBalance} minPayout={minPayout} hasPending={hasPendingWithdrawal} />
         </div>
       </div>
 

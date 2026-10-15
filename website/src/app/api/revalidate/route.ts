@@ -68,13 +68,28 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as typeof body;
   } catch {
-    /* empty / invalid body → fall through to the /learning default below */
+    return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
   }
 
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid revalidation request" }, { status: 400 });
+  }
+  const prefixes = ["/learning", "/practice", "/projects", "/jobs", "/blog", "/premium", "/resume", "/faq", "/sitemap.xml", "/sitemaps/"];
+  const path = typeof body.path === "string" ? body.path : "";
+  const validPath = typeof body.path === "string" && path.length <= 200 &&
+    prefixes.some((prefix) => path === prefix || (prefix.endsWith("/") ? path.startsWith(prefix) : path.startsWith(`${prefix}/`))) &&
+    !path.includes("//") && !path.includes("..") && !path.includes("%") && !path.includes("\\") && !path.includes("?") && !path.includes("#");
+  const validTags = Array.isArray(body.tags) && body.tags.length > 0 && body.tags.length <= MAX_TAGS &&
+    body.tags.every((tag) => typeof tag === "string" && (ALLOWED_TAGS.has(tag) || isAllowedContentTag(tag)));
+  if ((body.path !== undefined && !validPath) || (body.tags !== undefined && !validTags) ||
+      (body.type !== undefined && body.type !== "page" && body.type !== "layout") ||
+      (!validPath && !validTags)) {
+    return NextResponse.json({ error: "Invalid revalidation request" }, { status: 400 });
+  }
   const done: { tags: string[]; paths: string[] } = { tags: [], paths: [] };
 
   if (Array.isArray(body.tags)) {
-    for (const t of body.tags.slice(0, MAX_TAGS)) {
+    for (const t of body.tags) {
       if (typeof t === "string" && (ALLOWED_TAGS.has(t) || isAllowedContentTag(t))) {
         revalidateTag(t);
         done.tags.push(t);
@@ -86,16 +101,10 @@ export async function POST(req: Request) {
     }
   }
 
-  if (typeof body.path === "string" && body.path.startsWith("/")) {
+  if (validPath) {
     const type = body.type === "layout" ? "layout" : "page";
-    revalidatePath(body.path, type);
-    done.paths.push(body.path);
-  }
-
-  // Back-compat: a bare call with no tags and no path still refreshes /learning.
-  if (done.tags.length === 0 && done.paths.length === 0) {
-    revalidatePath("/learning", "layout");
-    done.paths.push("/learning");
+    revalidatePath(path, type);
+    done.paths.push(path);
   }
 
   return NextResponse.json({ revalidated: true, ...done, at: Date.now() });

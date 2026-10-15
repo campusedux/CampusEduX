@@ -3,7 +3,6 @@ import { ArrowRight, Wallet, ShoppingBag, Briefcase, Users, Bookmark, Heart, Wre
 import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR } from "@/lib/format";
-import { computeWalletBalance } from "@/lib/wallet";
 import { getLearningGrids } from "@/lib/learning";
 import { AccountLearningCard } from "@/components/account/AccountLearningCard";
 
@@ -12,14 +11,14 @@ export default async function AccountOverviewPage() {
   const supabase = createAuthedServerSupabase();
 
   const [
-    { data: txns },
+    { data: balance, error: balanceError },
     { count: purchaseCount },
     { count: applicationCount },
     { count: savedProjects },
     { data: referralCode },
     grids,
   ] = await Promise.all([
-      supabase.from("wallet_transactions").select("type,category,amount").eq("user_id", user.id),
+      supabase.rpc("wallet_available_balance"),
       supabase.from("purchases").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "success"),
       supabase.from("applications").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       supabase.from("wishlists").select("project_id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -28,7 +27,7 @@ export default async function AccountOverviewPage() {
       getLearningGrids(),
     ]);
 
-  const balance = computeWalletBalance(txns ?? []);
+  if (balanceError || balance === null) throw new Error("Wallet balance is unavailable. Please retry.");
 
   const firstName = user.fullName ? user.fullName.split(" ")[0] : "";
   const STATS = [

@@ -48,8 +48,6 @@ const REVALIDATE = 60;
 
 type SubResult = { items: SearchResultItem[]; total: number };
 
-const EMPTY: SubResult = { items: [], total: 0 };
-
 /** `col.ilike.%term%` for each column, joined for a PostgREST `.or(...)`. */
 function orIlike(cols: string[], term: string): string {
   return cols.map((c) => `${c}.ilike.%${term}%`).join(",");
@@ -71,7 +69,7 @@ function mergeById(base: SearchResultItem[], extra: SearchResultItem[], limit: n
 // ---- Projects -------------------------------------------------------------
 async function searchProjects(term: string, limit: number): Promise<SubResult> {
   const supabase = getPublicSupabase();
-  if (!supabase) return EMPTY;
+  if (!supabase) throw new Error("Search is unavailable");
   try {
     const toItem = (r: {
       id: string;
@@ -109,19 +107,20 @@ async function searchProjects(term: string, limit: number): Promise<SubResult> {
         .limit(limit),
     ]);
 
+    if (text.error || tech.error) throw new Error("Project search failed");
     const base = (text.data ?? []).map(toItem);
     const items = mergeById(base, (tech.data ?? []).map(toItem), limit);
     const extra = items.length - base.length;
     return { items, total: (text.count ?? base.length) + Math.max(0, extra) };
-  } catch {
-    return EMPTY;
+  } catch (error) {
+    throw error;
   }
 }
 
 // ---- Jobs --------------------------------------------------------------
 async function searchJobs(term: string, limit: number): Promise<SubResult> {
   const supabase = getPublicSupabase();
-  if (!supabase) return EMPTY;
+  if (!supabase) throw new Error("Search is unavailable");
   try {
     const toItem = (r: {
       id: string;
@@ -149,19 +148,20 @@ async function searchJobs(term: string, limit: number): Promise<SubResult> {
         .limit(limit),
     ]);
 
+    if (text.error || skills.error) throw new Error("Job search failed");
     const base = (text.data ?? []).map(toItem);
     const items = mergeById(base, (skills.data ?? []).map(toItem), limit);
     const extra = items.length - base.length;
     return { items, total: (text.count ?? base.length) + Math.max(0, extra) };
-  } catch {
-    return EMPTY;
+  } catch (error) {
+    throw error;
   }
 }
 
 // ---- Blog --------------------------------------------------------------
 async function searchBlog(term: string, limit: number): Promise<SubResult> {
   const supabase = getPublicSupabase();
-  if (!supabase) return EMPTY;
+  if (!supabase) throw new Error("Search is unavailable");
   try {
     const toItem = (r: {
       id: string;
@@ -194,12 +194,13 @@ async function searchBlog(term: string, limit: number): Promise<SubResult> {
         .limit(limit),
     ]);
 
+    if (text.error || tags.error) throw new Error("Blog search failed");
     const base = (text.data ?? []).map(toItem);
     const items = mergeById(base, (tags.data ?? []).map(toItem), limit);
     const extra = items.length - base.length;
     return { items, total: (text.count ?? base.length) + Math.max(0, extra) };
-  } catch {
-    return EMPTY;
+  } catch (error) {
+    throw error;
   }
 }
 
@@ -218,23 +219,24 @@ async function searchLearningGroup(term: string, limit: number): Promise<SubResu
       isPremium: h.is_premium,
     }));
     return { items, total: Math.min(hits.length, Math.max(limit, 12)) };
-  } catch {
-    return EMPTY;
+  } catch (error) {
+    throw error;
   }
 }
 
 // ---- Resume templates (active set) ------------------------------------
 async function searchResumeTemplates(term: string, limit: number): Promise<SubResult> {
   const supabase = getPublicSupabase();
-  if (!supabase) return EMPTY;
+  if (!supabase) throw new Error("Search is unavailable");
   try {
-    const { data, count } = await supabase
+    const { data, count, error } = await supabase
       .from("resume_templates")
       .select("id,name,description,is_premium", { count: "exact" })
       .eq("status", "active")
       .or(orIlike(["name", "description"], term))
       .order("sort_order")
       .limit(limit);
+    if (error) throw new Error("Resume template search failed");
     const items: SearchResultItem[] = (data ?? []).map(
       (t: { id: string; name: string | null; description: string | null; is_premium: boolean | null }) => ({
         id: t.id,
@@ -245,8 +247,8 @@ async function searchResumeTemplates(term: string, limit: number): Promise<SubRe
       }),
     );
     return { items, total: count ?? items.length };
-  } catch {
-    return EMPTY;
+  } catch (error) {
+    throw error;
   }
 }
 

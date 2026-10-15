@@ -44,6 +44,11 @@ export async function POST(req: Request) {
   });
   if (limited) return limited;
 
+  const contentLength = req.headers.get("content-length");
+  if (contentLength !== null && (!/^\d+$/.test(contentLength) || Number(contentLength) > RESUME_MAX_BYTES + 64 * 1024)) {
+    return corsJson({ error: `That file is too large (max ${RESUME_MAX_MB} MB).` }, 413);
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();

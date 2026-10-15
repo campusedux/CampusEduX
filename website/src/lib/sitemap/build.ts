@@ -133,6 +133,7 @@ export type LearningSitemapRow = { grid_slug: string; topic_slug: string | null;
 export function buildLearningEntries(
   rows: LearningSitemapRow[],
   thinGenerativeAiTopicSlugs: ReadonlySet<string>,
+  topicsWithContent?: ReadonlySet<string>,
 ): SitemapEntry[] {
   const gridDates = new Map<string, unknown[]>();
   const topics: SitemapEntry[] = [];
@@ -142,6 +143,7 @@ export function buildLearningEntries(
     dates.push(row.updated_at);
     gridDates.set(row.grid_slug, dates);
     if (!row.topic_slug) continue;
+    if (topicsWithContent && !topicsWithContent.has(`${row.grid_slug}/${row.topic_slug}`)) continue;
     if (row.grid_slug === GENERATIVE_AI_GRID_SLUG && thinGenerativeAiTopicSlugs.has(row.topic_slug)) continue;
     topics.push({
       path: `/learning/${seg(row.grid_slug)}/${seg(row.topic_slug)}`,

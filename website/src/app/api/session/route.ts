@@ -25,11 +25,13 @@ export async function GET() {
     return NextResponse.json({ profile: null }, { headers: PRIVATE });
   }
 
-  const { data: p } = await supabase
+  const { data: p , error } = await supabase
     .from("profiles")
     .select("full_name, avatar_url, is_premium, email")
     .eq("id", user.id)
     .maybeSingle();
+
+  if (error) return NextResponse.json({ error: "Profile is unavailable. Please retry." }, { status: 503, headers: PRIVATE });
 
   return NextResponse.json(
     {

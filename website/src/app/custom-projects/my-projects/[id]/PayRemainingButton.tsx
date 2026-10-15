@@ -18,8 +18,9 @@ import { Button } from "@/components/ui";
  */
 export default function PayRemainingButton({ requestId, remaining }: { requestId: string; remaining: number }) {
   const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "processing" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "processing" | "error" | "pending">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [retryVerification, setRetryVerification] = useState<(() => Promise<void>) | null>(null);
 
   async function handlePay() {
     setStatus("processing");
@@ -41,7 +42,11 @@ export default function PayRemainingButton({ requestId, remaining }: { requestId
         order_id: order.razorpayOrderId,
         name: "CampusEduX",
         description: "Custom project — remaining balance",
-        handler: async (response: any) => {
+        handler: async function verifyHandler(response: any) {
+          setStatus("processing");
+          setError(null);
+          setRetryVerification(null);
+          try {
           const verdict = interpretVerifyResponse(
             await supabase.functions.invoke("verify-custom-project-balance-payment", {
               body: {
@@ -53,14 +58,19 @@ export default function PayRemainingButton({ requestId, remaining }: { requestId
             }),
           );
           if (!verdict.ok) {
-            setStatus("error");
-            setError(verdict.message);
-            return;
+            throw new Error(verdict.message);
           }
+          setRetryVerification(null);
           setStatus("idle");
-          router.refresh();
+          } catch (err) {
+            setStatus("pending");
+            setError("Payment received, verification pending. Check Purchases/Wallet, then retry verification.");
+            setRetryVerification(() => () => verifyHandler(response));
+          } finally {
+            router.refresh();
+          }
         },
-        modal: { ondismiss: () => setStatus("idle") },
+        modal: { ondismiss: () => setStatus((current) => current === "pending" ? current : "idle") },
         theme: { color: "#4F39F6" },
       });
       checkout.open();
@@ -76,11 +86,12 @@ export default function PayRemainingButton({ requestId, remaining }: { requestId
         type="button"
         leftIcon={Lock}
         onClick={handlePay}
-        disabled={status === "processing"}
+        disabled={status === "processing" || status === "pending"}
         loading={status === "processing"}
       >
         {status === "processing" ? "Opening checkout…" : `Pay remaining ${formatINRExact(remaining)}`}
       </Button>
+      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );

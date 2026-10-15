@@ -42,7 +42,7 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
       images: [DEFAULT_OG_IMAGE],
     },
     // No results for this view -> don't index an empty shell page.
-    robots: (count ?? 0) === 0 ? { index: false, follow: true } : undefined,
+    robots: count === 0 ? { index: false, follow: true } : undefined,
   };
 }
 

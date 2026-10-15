@@ -27,8 +27,9 @@ export default function CustomProjectCheckout({
   tokenAmount: number;
 }) {
   const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "processing" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "processing" | "error" | "pending">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [retryVerification, setRetryVerification] = useState<(() => Promise<void>) | null>(null);
 
   async function handlePay() {
     setStatus("processing");
@@ -64,7 +65,11 @@ export default function CustomProjectCheckout({
         order_id: order.razorpayOrderId,
         name: "CampusEduX",
         description: `Custom project token — ${order.requestCode}`,
-        handler: async (response: any) => {
+        handler: async function verifyHandler(response: any) {
+          setStatus("processing");
+          setError(null);
+          setRetryVerification(null);
+          try {
           const verdict = interpretVerifyResponse(
             await supabase.functions.invoke("verify-custom-project-payment", {
               body: {
@@ -76,20 +81,25 @@ export default function CustomProjectCheckout({
             }),
           );
           if (!verdict.ok) {
-            setStatus("error");
-            setError(verdict.message);
-            return;
+            throw new Error(verdict.message);
           }
           // The request is real now — clear the draft and open it.
           const {
             data: { user },
           } = await supabase.auth.getUser();
           if (user) await supabase.from("custom_project_drafts").delete().eq("user_id", user.id);
+          setRetryVerification(null);
           setStatus("idle");
           router.push(`/custom-projects/my-projects/${order.requestId}`);
-          router.refresh();
+          } catch (err) {
+            setStatus("pending");
+            setError("Payment received, verification pending. Check Purchases/Wallet, then retry verification.");
+            setRetryVerification(() => () => verifyHandler(response));
+          } finally {
+            router.refresh();
+          }
         },
-        modal: { ondismiss: () => setStatus("idle") },
+        modal: { ondismiss: () => setStatus((current) => current === "pending" ? current : "idle") },
         theme: { color: "#4F39F6" },
       });
       checkout.open();
@@ -107,11 +117,12 @@ export default function CustomProjectCheckout({
         fullWidth
         leftIcon={Lock}
         onClick={handlePay}
-        disabled={status === "processing"}
+        disabled={status === "processing" || status === "pending"}
         loading={status === "processing"}
       >
         {status === "processing" ? "Opening checkout…" : `Pay ${formatINR(tokenAmount)} token`}
       </Button>
+      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );

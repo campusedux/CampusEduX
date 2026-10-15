@@ -179,21 +179,30 @@ export async function POST(req: Request) {
   const inserted = typeof insertedId === "string" ? { id: insertedId } : null;
   if (insErr) saved = false;
 
+  let progressSaved = true;
   if (allPassed) {
-    await supabase
+    const { error: progressError } = await supabase
       .from("user_dsa_progress")
       .upsert(
         { user_id: user.id, problem_id: problemId, status: "solved", solved_at: new Date().toISOString() },
         { onConflict: "user_id,problem_id" },
       );
+    if (progressError) {
+      console.error("Progress save failed", progressError);
+      progressSaved = false;
+    }
   } else {
     // Record an attempt only if there is no row yet — never downgrade "solved".
-    await supabase
+    const { error: progressError } = await supabase
       .from("user_dsa_progress")
       .upsert(
         { user_id: user.id, problem_id: problemId, status: "attempted" },
         { onConflict: "user_id,problem_id", ignoreDuplicates: true },
       );
+    if (progressError) {
+      console.error("Progress save failed", progressError);
+      progressSaved = false;
+    }
   }
 
   return NextResponse.json({
@@ -202,10 +211,11 @@ export async function POST(req: Request) {
     compileError,
     verdict,
     saved,
+    progressSaved,
     submissionId: inserted?.id ?? null,
     summary: { passed, total },
     results,
-  });
+  }, { status: saved && progressSaved ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function GET() {

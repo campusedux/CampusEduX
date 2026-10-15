@@ -402,13 +402,13 @@ export async function searchLearning(q: string, limit = 20): Promise<LearningSea
   const term = q.trim();
   if (!term) return [];
   const supabase = getPublicSupabase();
-  if (!supabase) return [];
+  if (!supabase) throw new Error("Learning search is unavailable");
   const { data, error } = await supabase.rpc("learning_search", {
     p_q: term,
     p_platform: PLATFORM,
     p_limit: limit,
   });
-  if (error || !Array.isArray(data)) return [];
+  if (error || !Array.isArray(data)) throw new Error("Learning search failed");
   return data as LearningSearchHit[];
 }
 

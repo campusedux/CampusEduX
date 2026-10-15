@@ -173,9 +173,9 @@ export interface ProjectsPageArgs {
 }
 
 export const getCachedProjectsPage = unstable_cache(
-  async (a: ProjectsPageArgs): Promise<{ projects: unknown[]; count: number | null }> => {
+  async (a: ProjectsPageArgs): Promise<{ ok: true; projects: unknown[]; count: number }> => {
     const supabase = getPublicSupabase();
-    if (!supabase) return { projects: [], count: 0 };
+    if (!supabase) throw new Error("Projects catalog is unavailable");
 
     let query = supabase
       .from("projects")
@@ -190,8 +190,9 @@ export const getCachedProjectsPage = unstable_cache(
     if (a.flag === "premium") query = query.eq("is_premium", true);
     if (a.flag === "bestseller") query = query.eq("is_best_seller", true);
 
-    const { data, count } = await query;
-    return { projects: data ?? [], count };
+    const { data, count, error } = await query;
+    if (error || count === null) throw new Error("Projects catalog query failed");
+    return { ok: true, projects: data ?? [], count };
   },
   ["catalog:projects-page"],
   { revalidate: TWO_MIN, tags: [CACHE_TAGS.projects] },
@@ -210,9 +211,9 @@ export interface JobsPageArgs {
 }
 
 export const getCachedJobsPage = unstable_cache(
-  async (a: JobsPageArgs): Promise<{ jobs: unknown[]; count: number | null }> => {
+  async (a: JobsPageArgs): Promise<{ ok: true; jobs: unknown[]; count: number }> => {
     const supabase = getPublicSupabase();
-    if (!supabase) return { jobs: [], count: 0 };
+    if (!supabase) throw new Error("Jobs catalog is unavailable");
 
     let query = onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS, { count: "exact" }))
       .order(a.sortColumn, { ascending: a.sortAscending, nullsFirst: false })
@@ -223,8 +224,9 @@ export const getCachedJobsPage = unstable_cache(
     if (a.type) query = query.eq("job_type", a.type);
     if (a.experience) query = query.eq("experience_level", a.experience);
 
-    const { data, count } = await query;
-    return { jobs: data ?? [], count };
+    const { data, count, error } = await query;
+    if (error || count === null) throw new Error("Jobs catalog query failed");
+    return { ok: true, jobs: data ?? [], count };
   },
   ["catalog:jobs-page"],
   { revalidate: TWO_MIN, tags: [CACHE_TAGS.jobs] },

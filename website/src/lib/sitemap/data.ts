@@ -89,13 +89,26 @@ async function loadStatic(supabase: Client): Promise<SitemapEntry[]> {
 }
 
 async function loadLearning(supabase: Client): Promise<SitemapEntry[]> {
-  const [rows, genAiBodies] = await Promise.all([
+  const [rows, genAiBodies, topicsWithContent] = await Promise.all([
     readAllPages<LearningSitemapRow>((from, to) =>
       supabase.rpc("learning_sitemap", { p_platform: "website" }).range(from, to),
     ),
     loadGenerativeAiBodies(supabase),
+    loadTopicsWithContent(supabase),
   ]);
-  return buildLearningEntries(rows, thinGenerativeAiTopicSlugs(genAiBodies));
+  return buildLearningEntries(rows, thinGenerativeAiTopicSlugs(genAiBodies), topicsWithContent);
+}
+
+/** Public topic IDs with at least one content block, for sitemap exclusion. */
+async function loadTopicsWithContent(supabase: Client): Promise<Set<string>> {
+  const [grids, topics, contents] = await Promise.all([
+    readAllPages<{ id: string; slug: string }>((from, to) => supabase.from("learning_grids").select("id,slug").order("id").range(from, to)),
+    readAllPages<{ id: string; slug: string; grid_id: string }>((from, to) => supabase.from("learning_topics").select("id,slug,grid_id").order("id").range(from, to)),
+    readAllPages<{ topic_id: string }>((from, to) => supabase.from("learning_contents").select("id,topic_id").order("id").range(from, to)),
+  ]);
+  const gridSlugs = new Map(grids.map((grid) => [grid.id, grid.slug]));
+  const topicSlugs = new Map(topics.map((topic) => [topic.id, `${gridSlugs.get(topic.grid_id)}/${topic.slug}`]));
+  return new Set(contents.map((content) => topicSlugs.get(content.topic_id)).filter((slug): slug is string => Boolean(slug)));
 }
 
 /** Concatenated content bodies per Generative-AI topic slug (for the templated-content exclusion). */

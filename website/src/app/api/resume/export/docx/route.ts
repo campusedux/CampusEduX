@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
+import { limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { z } from "zod";
 import { loadOwnResumeForExport, recordResumeDownload, snapshotBeforeExport } from "@/lib/resumeBuilder/loadForExport";
 import { renderResumeDocxBuffer } from "@/lib/resumeBuilder/docxBuilder";
@@ -22,6 +24,9 @@ export async function GET(req: Request) {
 
   const result = await loadOwnResumeForExport(parsed.data.resumeId);
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
+
+  const limited = limitResponse(await rlHit(createAuthedServerSupabase(), "resume-export", 10, 600), { message: "Too many exports. Please retry shortly." });
+  if (limited) return limited;
 
   const buffer = await renderResumeDocxBuffer(result.resume, result.accentColor);
   const fileName = `${slugifyFileName(result.resume.title)}.docx`;

@@ -63,13 +63,14 @@ export const getAccountUser = requestCache(async (): Promise<AccountUser | null>
   if (!user) return null;
 
   const supabase = createAuthedServerSupabase();
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select(
       "id, email, full_name, mobile_number, avatar_url, course, branch, year, is_premium, referral_code, linkedin_url, github_url, portfolio_url",
     )
     .eq("id", user.id)
     .maybeSingle();
+  if (error) throw new Error("Account profile is unavailable. Please retry.");
 
   return {
     id: user.id,

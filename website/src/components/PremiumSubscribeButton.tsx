@@ -16,8 +16,9 @@ export default function PremiumSubscribeButton({
 }) {
   const router = useRouter();
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
-  const [status, setStatus] = useState<"idle" | "processing" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "processing" | "error" | "pending">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [retryVerification, setRetryVerification] = useState<(() => Promise<void>) | null>(null);
   // Resolved client-side so /premium can stay statically cached (ISR) — the
   // page no longer reads the session on the server. Mirrors the same pattern
   // ProjectPurchasePanel uses on the ISR-cached /projects/[id] page.
@@ -68,7 +69,11 @@ export default function PremiumSubscribeButton({
         order_id: order.razorpayOrderId,
         name: "CampusEduX Premium",
         description: `${order.planName} — ${order.billingCycle}`,
-        handler: async (response: any) => {
+        handler: async function verifyHandler(response: any) {
+          setStatus("processing");
+          setError(null);
+          setRetryVerification(null);
+          try {
           const verdict = interpretVerifyResponse(
             await supabase.functions.invoke("verify-premium-payment", {
               body: {
@@ -80,15 +85,20 @@ export default function PremiumSubscribeButton({
             }),
           );
           if (!verdict.ok) {
-            setStatus("error");
-            setError(verdict.message);
-            return;
+            throw new Error(verdict.message);
           }
+          setRetryVerification(null);
           setStatus("idle");
           router.push("/account");
-          router.refresh();
+          } catch (err) {
+            setStatus("pending");
+            setError("Payment received, verification pending. Check Purchases/Wallet, then retry verification.");
+            setRetryVerification(() => () => verifyHandler(response));
+          } finally {
+            router.refresh();
+          }
         },
-        modal: { ondismiss: () => setStatus("idle") },
+        modal: { ondismiss: () => setStatus((current) => current === "pending" ? current : "idle") },
         theme: { color: "#4F39F6" },
       });
       checkout.open();
@@ -116,11 +126,12 @@ export default function PremiumSubscribeButton({
       </div>
       <button
         onClick={handleSubscribe}
-        disabled={status === "processing"}
+        disabled={status === "processing" || status === "pending"}
         className="btn-primary mt-3 w-full"
       >
         {status === "processing" ? "Opening checkout…" : `Subscribe to ${planName}`}
       </button>
+      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
     </div>
   );

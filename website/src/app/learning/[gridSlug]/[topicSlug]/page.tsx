@@ -78,7 +78,7 @@ export async function generateMetadata({
     getLearningTopicPage(params.gridSlug, params.topicSlug),
     getLearningTree(params.gridSlug),
   ]);
-  if (!page) return { title: "Topic not found", robots: { index: false, follow: false } };
+  if (!page || (!page.locked && page.contents.length === 0)) return { title: "Topic not found", robots: { index: false, follow: false } };
   const { topic, grid } = page;
   const bodyText = page.contents.map((c) => c.body).join(" ").replace(/[#>*`_|\-]+/g, " ").trim();
   const title = lessonTitle({ topicTitle: topic.title, gridSlug: grid.slug, courseName: grid.name, topicSlug: topic.slug });
@@ -116,6 +116,7 @@ export default async function TopicPage({
   // The course exists but this lesson doesn't (renamed / removed by an admin,
   // or an old "Continue learning" link): land on the course, not a 404.
   if (!page) redirect(`/learning/${tree.grid.slug}`);
+  if (!page.locked && page.contents.length === 0) notFound();
   const { topic, section, grid, locked, contents, prev, next } = page;
   // Internal-linking glossary for this page — built once from the already-
   // fetched grid tree (no extra query), shared across every content block's
