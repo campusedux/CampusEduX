@@ -109,19 +109,18 @@ describe("calculateEstimate — included features & balance", () => {
     expect(est.addOns).toEqual([]);
     expect(est.addOnsTotal).toBe(0);
     expect(est.total).toBe(7999);
-    expect(est.includedFeatures.map((f) => f.id)).toEqual(["login"]);
-    expect(est.includedFeatures[0].price).toBe(0);
+    expect(est.includedFeatures).toEqual([]);
   });
 
   it("switching Standard -> Advanced moves a feature from add-on to included", () => {
     const std = calculateEstimate(cfg("standard", ["search-filters"]), PRICING, PLATFORMS, INCL);
-    expect(std.addOns.map((f) => f.id)).toEqual(["search-filters"]);
-    expect(std.addOnsTotal).toBe(55); // Academic override, not the 800 catalog price
-    expect(std.total).toBe(7999 + 55);
+    expect(std.addOns).toEqual([]);
+    expect(std.addOnsTotal).toBe(0);
+    expect(std.total).toBe(7999);
 
     const adv = calculateEstimate(cfg("advanced", ["search-filters"]), PRICING, PLATFORMS, INCL);
     expect(adv.addOns).toEqual([]);
-    expect(adv.includedFeatures.map((f) => f.id)).toEqual(["login", "search-filters"]);
+    expect(adv.includedFeatures).toEqual([]);
     expect(adv.total).toBe(9999);
   });
 

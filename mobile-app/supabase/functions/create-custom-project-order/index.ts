@@ -39,6 +39,7 @@ import { adminClient, getUser } from "../_shared/client.ts";
 import { enforceRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 import { createRazorpayOrder, razorpayConfigured, razorpayKeyId } from "../_shared/razorpay.ts";
 import { priceFeatures, type FeatureRow } from "../_shared/customProjectPricing.ts";
+import { validateAcademicOrder } from "../_shared/academicIntegrity.ts";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -111,6 +112,18 @@ Deno.serve(async (req) => {
           .slice(0, 20)
       : [];
 
+    const integrityError = validateAcademicOrder({
+      projectType,
+      serviceScope: body.serviceScope,
+      assessmentUse: body.assessmentUse,
+      studentAuthored: body.studentAuthored,
+      integrityAcknowledged: body.integrityAcknowledged,
+      featureIds: body.featureIds,
+      text: [title, body.objective, body.problemStatement, body.description, body.targetUsers,
+        ...(Array.isArray(body.customRequirements) ? body.customRequirements.map((r: { text?: unknown }) => r?.text) : [])].map((value) => String(value ?? "")),
+    });
+    if (integrityError) return json({ error: integrityError }, 400);
+
     // 1. base price + pricing version (trusted, from the DB) --------------
     const { data: pricing, error: pricingError } = await db
       .from("custom_project_pricing")
@@ -134,7 +147,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (platformError) throw platformError;
     if (!platformRow) return json({ error: "That platform option is not available." }, 400);
-    const platformCharge = Number(platformRow.charge) || 0;
+    const platformCharge = projectType === "academic" ? 0 : Number(platformRow.charge) || 0;
 
     // 3a. AI-recommended feature ids from this user's own draft — the same
     // draft the website's Estimate page already priced from. Read here
@@ -166,10 +179,12 @@ Deno.serve(async (req) => {
     const tierKey = `${projectType}:${projectLevel}`;
     const featureSelect = "id, name, price, category, project_types, project_levels, included_in_levels";
     const [selectedRes, includedRes] = await Promise.all([
-      featureIds.length > 0
+      projectType !== "academic" && featureIds.length > 0
         ? db.from("custom_project_features").select(featureSelect).in("id", featureIds).eq("is_active", true)
         : Promise.resolve({ data: [] as FeatureRow[], error: null }),
-      db.from("custom_project_features").select(featureSelect).contains("included_in_levels", [tierKey]).eq("is_active", true),
+      projectType === "academic"
+        ? Promise.resolve({ data: [] as FeatureRow[], error: null })
+        : db.from("custom_project_features").select(featureSelect).contains("included_in_levels", [tierKey]).eq("is_active", true),
     ]);
     if (selectedRes.error) throw selectedRes.error;
     if (includedRes.error) throw includedRes.error;
@@ -206,6 +221,10 @@ Deno.serve(async (req) => {
         target_users: String(body.targetUsers ?? "").trim(),
         technology_preference: String(body.technologyPreference ?? "").trim(),
         project_type: projectType,
+        service_scope: projectType === "academic" ? "mentoring" : "custom_software",
+        assessment_use: body.assessmentUse,
+        integrity_acknowledged_at: new Date().toISOString(),
+        student_authored_confirmed: projectType === "academic" ? true : null,
         project_level: projectLevel,
         platform,
         custom_requirements: customRequirements,

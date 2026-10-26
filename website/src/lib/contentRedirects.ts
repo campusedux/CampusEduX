@@ -21,3 +21,10 @@ const SOURCES = new Set(CONTENT_REDIRECTS.map((r) => r.source));
 export function isRedirectedPath(path: string): boolean {
   return SOURCES.has(path);
 }
+
+const DESTINATIONS = new Map(CONTENT_REDIRECTS.map((r) => [r.source, r.destination]));
+
+/** Link directly to the destination of an approved merge, preserving other paths. */
+export function canonicalContentPath(path: string): string {
+  return DESTINATIONS.get(path) ?? path;
+}

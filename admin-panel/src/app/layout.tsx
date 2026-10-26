@@ -8,6 +8,7 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jet
 export const metadata: Metadata = {
   title: 'CampusEduX · Admin Panel',
   description: 'Staff portal for CampusEduX — manage students, projects, jobs, placement prep and more.',
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

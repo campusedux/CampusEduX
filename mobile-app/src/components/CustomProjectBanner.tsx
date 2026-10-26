@@ -73,7 +73,7 @@ const SERVICES: { title: string; sub: string; icon: IconName; color: string; bg:
   { title: "Website Development", sub: "Business, Portfolio, E-commerce & more", icon: "globe-outline", color: "#2563EB", bg: "#DBEAFE" },
   { title: "Mobile App Development", sub: "Android & iOS Apps", icon: "phone-portrait-outline", color: "#DB2777", bg: "#FCE7F3" },
   { title: "Web Application", sub: "Custom Web Apps and Platforms", icon: "code-slash-outline", color: "#7C3AED", bg: "#EDE9FE" },
-  { title: "Final Year Projects", sub: "Academic & Research Projects", icon: "school-outline", color: "#0D9488", bg: "#CCFBF1" },
+  { title: "Project Mentoring", sub: "Review, debugging & feedback", icon: "school-outline", color: "#0D9488", bg: "#CCFBF1" },
   { title: "Custom Software", sub: "Any kind of software solution", icon: "settings-outline", color: "#059669", bg: "#D1FAE5" },
   { title: "Have a Unique Idea?", sub: "We'll help you plan and build it", icon: "bulb-outline", color: "#D97706", bg: "#FEF3C7" },
 ];
@@ -85,7 +85,7 @@ const STATS: { title: string; sub: string; icon: IconName; color: string; bg: st
   { title: "Ongoing Support", sub: "Even After Delivery", icon: "headset", color: "#7C3AED", bg: "#EDE9FE" },
 ];
 
-const STEPS = ["Share Idea", "Discuss Requirements", "We Build It", "You Launch It"];
+const STEPS = ["Share Idea", "Discuss Requirements", "We Guide or Build", "You Learn or Launch"];
 
 const GRADIENT: [string, string] = ["#2563EB", "#7C3AED"];
 const CARD_SHADOW = { shadowColor: "#0F172A", shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 } as const;
@@ -281,7 +281,7 @@ export function CustomProjectBanner() {
       </T>
       <View style={{ alignSelf: "flex-start", maxWidth: "100%" }}>
         <GradientText loaded={loaded} style={headingStyle}>
-          {"We'll Build It for You."}
+          {"Get Guidance or Custom Software."}
         </GradientText>
         <Svg
           width={100}
@@ -309,7 +309,7 @@ export function CustomProjectBanner() {
       </View>
       {heading}
       <T loaded={loaded} style={{ color: C.body, fontSize: 14, lineHeight: 21, marginTop: 10 }} numberOfLines={phone ? undefined : 3}>
-        Share your idea for a website, mobile app, or any software project. Our team will turn your idea into a complete, working solution.
+        Share your idea for a website, mobile app, or any software project. Students receive mentoring on their own work. Personal and business customers can commission complete software.
       </T>
       <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 12, rowGap: 6, marginTop: 12 }}>
         {CHIPS.map((c) => (
@@ -402,7 +402,7 @@ export function CustomProjectBanner() {
     <View style={{ flexDirection: phone ? "column" : "row", alignItems: phone ? "flex-start" : "center", justifyContent: "space-between", gap: 12 }}>
       <View style={{ flex: phone ? 0 : 1 }}>
         <T loaded={loaded} weight="semibold" style={{ color: C.heading, fontSize: 13, lineHeight: 18, fontStyle: "italic" }}>
-          “Your idea + Our development = A better tomorrow.”
+          “Your work + guidance, or your business idea + our development.”
         </T>
         <T loaded={loaded} weight="semibold" style={{ color: C.body, fontSize: 12, marginTop: 2 }}>— CampusEduX</T>
       </View>

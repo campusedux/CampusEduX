@@ -78,7 +78,7 @@ function BlockFields({
         </div>
         <div>
           <Label htmlFor="status">Status</Label>
-          <Select name="status" defaultValue={block?.status ?? 'published'} onChange={onDirty}>
+          <Select name="status" defaultValue={block?.status ?? 'draft'} onChange={onDirty}>
             <option value="published">Published</option>
             <option value="draft">Draft</option>
             <option value="archived">Archived</option>

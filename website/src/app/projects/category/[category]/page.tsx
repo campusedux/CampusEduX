@@ -29,9 +29,15 @@ const getData = cache(async (categoryId: string) => {
 
 export async function generateMetadata({ params }: { params: { category: string } }): Promise<Metadata> {
   const { name, projects, missing } = await getData(params.category);
-  if (missing) return { title: "Category not found", robots: { index: false, follow: false } };
-  const description = `${name} projects on CampusEduX — browse student-built final-year and mini projects in this category.`;
-  const url = absoluteUrl(`/projects/category/${encodeURIComponent(params.category)}`);
+  if (missing)
+    return {
+      title: "Category not found",
+      robots: { index: false, follow: false },
+    };
+  const description = `${name} projects on CampusEduX — browse educational source-code examples in this category.`;
+  const url = absoluteUrl(
+    `/projects/category/${encodeURIComponent(params.category)}`,
+  );
   return {
     title: `${name} projects`,
     description,

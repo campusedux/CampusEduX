@@ -45,7 +45,7 @@ export default async function Page({ params }: Params) {
   const { data: request } = await supabase
     .from("custom_project_requests")
     .select(
-      "id,request_code,title,objective,problem_statement,description,target_users,technology_preference,project_type,project_level,platform,custom_requirements,base_price,platform_charge,feature_total,estimated_total,token_amount,deadline,status,created_at",
+      "id,request_code,title,objective,problem_statement,description,target_users,technology_preference,project_type,service_scope,project_level,platform,custom_requirements,base_price,platform_charge,feature_total,estimated_total,token_amount,deadline,status,created_at",
     )
     .eq("id", params.id)
     // RLS lets admins read every row; this keeps the student page owner-only.
@@ -281,10 +281,23 @@ export default async function Page({ params }: Params) {
         </section>
       )}
 
-      <section className="card mt-5 p-5 sm:p-6" aria-label="Extra features">
-        <h2 className={sectionTitle}>Extra features</h2>
-        <AddonsPanel requestId={request.id} addons={addons} canAdd={request.status !== "cancelled"} />
-      </section>
+      {request.service_scope === "mentoring" && (
+        <p className="card mt-5 p-5 text-sm text-ink-muted">
+          This request covers code review, debugging, architecture guidance and
+          feedback on your own work. Use the message thread to share questions
+          and receive feedback.
+        </p>
+      )}
+      {request.service_scope !== "mentoring" && (
+        <section className="card mt-5 p-5 sm:p-6" aria-label="Extra features">
+          <h2 className={sectionTitle}>Extra features</h2>
+          <AddonsPanel
+            requestId={request.id}
+            addons={addons}
+            canAdd={request.status !== "cancelled"}
+          />
+        </section>
+      )}
 
       {fileLinks.length > 0 && (
         <section className="card mt-5 p-5 sm:p-6">

@@ -24,11 +24,17 @@ export const metadata: Metadata = {
 };
 
 const RECEIVE: string[] = [
-  "Completed project implementation",
+  "Completed software implementation",
   "Selected features configured",
   "Project requirements considered",
   "Direct messaging with the team during development",
   "Project handover",
+];
+const MENTORING_RECEIVE = [
+  "Code review of work you author",
+  "Debugging and architecture guidance",
+  "Feedback and answers through the message thread",
+  "No completed assessment deliverables",
 ];
 
 const BEFORE_YOU_CONTINUE: string[] = [
@@ -104,6 +110,8 @@ function EstimateBody({
   draft: Awaited<ReturnType<typeof loadDraftWithEstimate>>["draft"];
   estimate: Awaited<ReturnType<typeof loadDraftWithEstimate>>["estimate"];
 }) {
+  const receive =
+    draft.projectType === "academic" ? MENTORING_RECEIVE : RECEIVE;
   const included = estimate.selectedFeatures.filter(
     (f) =>
       f.isIncluded ||
@@ -222,7 +230,7 @@ function EstimateBody({
           </h2>
 
           <ul className="mt-4 space-y-2 rounded-2xl border border-line bg-card p-5 shadow-card">
-            {RECEIVE.map((r) => (
+            {receive.map((r) => (
               <li
                 key={r}
                 className="flex items-center gap-2.5 text-sm text-ink"

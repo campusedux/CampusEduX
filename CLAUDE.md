@@ -19,3 +19,20 @@ Use this workflow for every change:
 ## Surface-Specific Rules
 
 Follow the focused instructions in `.claude/rules/` for architecture, frontend, database, security, testing, and Git. For specialized work, use the matching Skill in `.claude/skills/` and relevant Agent in `.claude/agents/`.
+
+
+# CampusEduX – Working Rules
+Monorepo: website/ (Next.js, Vercel), admin-panel/ (web), mobile-app/ (Expo). All share ONE Supabase DB.
+Stack: Next.js, TS, React, Supabase, Tailwind. No new libraries unless essential.
+
+Rules:
+- Schema changes ONLY via new migration files in supabase/migrations (idempotent, no DROP of data). I run `supabase db push` myself.
+- Never break mobile-app/ queries — check its usage before changing any table/column.
+- Never delete prod data, never disable RLS, never break existing URLs (add redirects if slug changes).
+- Commit only. Never push.
+- No new .md/doc files except this one.
+- Keep it simple. No over-engineering.
+- Output: short. No code dumps in chat, no long explanations. Report = bullet list, max 15 lines.
+
+## Architecture Map
+(filled after Phase 1)

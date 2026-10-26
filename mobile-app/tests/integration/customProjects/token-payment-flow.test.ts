@@ -39,7 +39,7 @@ describe("integration: custom project token payment (create order -> verify)", (
       },
     });
 
-    const order = await customProjectsService.createOrder(config);
+    const order = await customProjectsService.createOrder(config, { assessmentUse: "no", studentAuthored: false, integrityAcknowledged: true });
 
     expect(supabase.functions.invoke).toHaveBeenCalledWith(
       "create-custom-project-order",

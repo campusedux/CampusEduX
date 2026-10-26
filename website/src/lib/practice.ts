@@ -52,9 +52,8 @@ export const getPracticeCategories = unstable_cache(
  *  never receives the full catalogue or any hidden test case. */
 export const getPracticeProblemsPage = cache(
   async (query: PracticeQuery): Promise<PracticeProblemsPage> => {
-    const empty: PracticeProblemsPage = { total: 0, items: [] };
     const supabase = getPublicSupabase();
-    if (!supabase) return empty;
+    if (!supabase) throw new RpcFailed("Practice listing is unavailable");
     const { data, error } = await supabase.rpc("practice_problems_list", {
       p_platform: PLATFORM,
       p_difficulty: query.difficulty ?? null,
@@ -63,9 +62,11 @@ export const getPracticeProblemsPage = cache(
       p_limit: PRACTICE_PAGE_SIZE,
       p_offset: (query.page - 1) * PRACTICE_PAGE_SIZE,
     });
-    if (error || !data || typeof data !== "object") return empty;
+    if (error || !data || typeof data !== "object") throw new RpcFailed("Practice listing is unavailable");
     const payload = data as Partial<PracticeProblemsPage>;
-    const items = Array.isArray(payload.items) ? payload.items : [];
+    // Fail explicitly rather than emit a successful empty/noindex listing.
+    if (!Array.isArray(payload.items)) throw new RpcFailed("Practice listing is unavailable");
+    const items = payload.items;
     // `lang` is authored for all 5 languages on every problem, so filtering by it
     // is effectively a no-op — apply it client-side against `supported_languages`
     // to stay correct if a future problem drops a language.

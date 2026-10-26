@@ -58,6 +58,15 @@ export function BuilderFeaturesScreen() {
   const levelLabel = projectLevel ? LEVEL_LABEL[projectLevel] : "";
   const nothingToAdd = addOnCatalog.length === 0 && lockedFeatures.length === 0;
 
+  if (projectType === "academic") return (
+    <WizardScreen step={5} title="Mentoring scope" helper="You create any assessed deliverables; we guide and review your work." onBack={() => navigation.goBack()} onNext={() => navigation.navigate("BuilderUploads")} nextLabel="Continue to references">
+      <View className="rounded-2xl border border-gray-100 bg-white p-5">
+        <Text className="text-gray-900 font-bold">What we can help with</Text>
+        <Text className="text-gray-700 mt-2">Code review, debugging, architecture guidance, and feedback on work you author. Implementation packages, project reports, slides and viva-answer bundles are unavailable.</Text>
+      </View>
+    </WizardScreen>
+  );
+
   return (
     <WizardScreen
       step={5}

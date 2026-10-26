@@ -166,6 +166,7 @@ export interface CustomProjectEstimate {
 
 export interface CustomProjectRequest {
   id: string;
+  serviceScope?: "mentoring" | "custom_software" | null;
   requestCode: string;
   title: string;
   projectType: CustomProjectType;

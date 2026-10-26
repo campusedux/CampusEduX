@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text } from "react-native";
+import React, { useState } from "react";
+import { View, Text, Pressable } from "react-native";
 import { useNavigation, CommonActions } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -33,13 +33,19 @@ export function BuilderPaymentScreen() {
   const navigation = useNavigation<Nav>();
   const { config, estimate, isLoading, isError, refetch } = useBuilderEstimate();
   const { submit, isProcessing } = useCustomProjectSubmit();
+  const [assessmentUse, setAssessmentUse] = useState<"yes" | "no" | null>(null);
+  const [studentAuthored, setStudentAuthored] = useState(false);
+  const [integrityAcknowledged, setIntegrityAcknowledged] = useState(false);
+  const academic = config.projectType === "academic";
+  const canPay = assessmentUse !== null && integrityAcknowledged && (academic ? studentAuthored : assessmentUse === "no");
 
   const handlePay = async () => {
     if (!isComplete(config)) {
       notify("Missing details", "Please complete the project type, level, platform and title.");
       return;
     }
-    const result = await submit(config);
+    if (!canPay || !assessmentUse) return;
+    const result = await submit(config, { assessmentUse, studentAuthored: academic && studentAuthored, integrityAcknowledged });
     if (result.status === "success") {
       navigation.dispatch(
         CommonActions.reset({
@@ -50,6 +56,7 @@ export function BuilderPaymentScreen() {
               name: "SubmitSuccess",
               params: {
                 requestId: result.requestId,
+                projectType: config.projectType ?? undefined,
                 requestCode: result.requestCode,
                 tokenAmount: result.tokenAmount,
                 title: result.title,
@@ -74,7 +81,7 @@ export function BuilderPaymentScreen() {
       onBack={() => navigation.goBack()}
       onNext={handlePay}
       nextLabel={`Pay ${rupees(estimate.token)} & submit request`}
-      nextDisabled={!isComplete(config) || isLoading || isError}
+      nextDisabled={!isComplete(config) || !canPay || isLoading || isError}
       nextLoading={isProcessing}
       disabledReason={!isComplete(config) ? "Complete your project type, level, platform and title first." : undefined}
     >
@@ -84,6 +91,13 @@ export function BuilderPaymentScreen() {
         <ErrorState message="Couldn't prepare the payment." onRetry={refetch} />
       ) : (
         <>
+          <SectionCard title="Academic-integrity check">
+            <Text className="text-gray-900 mb-2">Will this request relate to work assessed by a school, college, or university?</Text>
+            {(["yes", "no"] as const).map((answer) => <Pressable key={answer} accessibilityRole="radio" accessibilityState={{ selected: assessmentUse === answer }} onPress={() => setAssessmentUse(answer)} className="py-2"><Text>{assessmentUse === answer ? "◉" : "○"} {answer === "yes" ? "Yes" : "No"}</Text></Pressable>)}
+            {!academic && assessmentUse === "yes" && <Text className="text-red-700">Choose project mentoring for assessed work. We cannot build it for you.</Text>}
+            {academic && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: studentAuthored }} onPress={() => setStudentAuthored(!studentAuthored)} className="py-2"><Text>{studentAuthored ? "☑" : "☐"} I will author any assessed code, report, slides and answers myself. I request guidance only.</Text></Pressable>}
+            <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: integrityAcknowledged }} onPress={() => setIntegrityAcknowledged(!integrityAcknowledged)} className="py-2"><Text>{integrityAcknowledged ? "☑" : "☐"} CampusEduX will not complete assessed work or provide submission-ready deliverables for me.</Text></Pressable>
+          </SectionCard>
           <SectionCard title="Order summary">
             <SummaryLine label={<Text className="text-gray-500">Project</Text>} value={config.title.trim() || "Untitled"} />
             <SummaryLine

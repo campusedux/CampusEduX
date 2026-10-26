@@ -18,11 +18,11 @@ export function useBuilderEstimate() {
   const { projectType, projectLevel } = config;
 
   const split = useMemo(
-    () => splitFeaturesFor(projectType, projectLevel, features ?? []),
+    () => projectType === "academic" ? { included: [], addOnCatalog: [] } : splitFeaturesFor(projectType, projectLevel, features ?? []),
     [projectType, projectLevel, features]
   );
   const lockedFeatures = useMemo(
-    () => getAdvancedOnlyFeatures(projectType, projectLevel, features ?? []),
+    () => projectType === "academic" ? [] : getAdvancedOnlyFeatures(projectType, projectLevel, features ?? []),
     [projectType, projectLevel, features]
   );
 

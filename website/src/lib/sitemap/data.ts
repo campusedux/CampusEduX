@@ -65,8 +65,8 @@ export async function readAllPages<T>(
   const out: T[] = [];
   while (out.length < maxRows) {
     const { data, error } = await page(out.length, out.length + pageSize - 1);
-    if (error) throw new SitemapReadFailed();
-    const rows = Array.isArray(data) ? (data as T[]) : [];
+    if (error || !Array.isArray(data)) throw new SitemapReadFailed();
+    const rows = data as T[];
     if (rows.length === 0) break;
     out.push(...rows);
   }
@@ -103,12 +103,16 @@ async function loadLearning(supabase: Client): Promise<SitemapEntry[]> {
 async function loadTopicsWithContent(supabase: Client): Promise<Set<string>> {
   const [grids, topics, contents] = await Promise.all([
     readAllPages<{ id: string; slug: string }>((from, to) => supabase.from("learning_grids").select("id,slug").order("id").range(from, to)),
-    readAllPages<{ id: string; slug: string; grid_id: string }>((from, to) => supabase.from("learning_topics").select("id,slug,grid_id").order("id").range(from, to)),
+    readAllPages<{ id: string; slug: string; grid_id: string; is_premium: boolean }>((from, to) => supabase.from("learning_topics").select("id,slug,grid_id,is_premium").order("id").range(from, to)),
     readAllPages<{ topic_id: string }>((from, to) => supabase.from("learning_contents").select("id,topic_id").order("id").range(from, to)),
   ]);
   const gridSlugs = new Map(grids.map((grid) => [grid.id, grid.slug]));
   const topicSlugs = new Map(topics.map((topic) => [topic.id, `${gridSlugs.get(topic.grid_id)}/${topic.slug}`]));
-  return new Set(contents.map((content) => topicSlugs.get(content.topic_id)).filter((slug): slug is string => Boolean(slug)));
+  // Anonymous RLS deliberately hides premium bodies. The page still renders an
+  // indexable locked teaser; missing body rows must not classify it as a 404.
+  // The website-visible sitemap RPC remains the authority for publication.
+  const visibleTopicIds = [...contents.map((content) => content.topic_id), ...topics.filter((topic) => topic.is_premium).map((topic) => topic.id)];
+  return new Set(visibleTopicIds.map((id) => topicSlugs.get(id)).filter((slug): slug is string => Boolean(slug)));
 }
 
 /** Concatenated content bodies per Generative-AI topic slug (for the templated-content exclusion). */

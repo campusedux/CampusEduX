@@ -61,22 +61,34 @@ describe("POST /api/revalidate", () => {
     expect(revalidateTag).not.toHaveBeenCalled();
   });
 
-  it("revalidates only allowlisted tags and refreshes the sitemap for learning:sitemap", async () => {
+  it("rejects a mixed invalid batch atomically without refreshing caches", async () => {
     const { POST } = await load();
     const res = await POST(
       post({ tags: ["learning:list", "learning:grid:spring-boot-tutorial", "learning:sitemap", "evil:tag", "learning:grid:a b", 42] }, CONFIGURED),
     );
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.tags).toEqual(["learning:list", "learning:grid:spring-boot-tutorial", "learning:sitemap"]);
-    expect(revalidateTag.mock.calls.map((c) => c[0])).toEqual(json.tags);
-    expect(revalidatePath).toHaveBeenCalledWith("/sitemap.xml");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid revalidation request" });
+    expect(revalidateTag).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("accepts the granular practice / interview tags and rejects malformed ones", async () => {
+  it("rejects mixed valid and malformed granular tags without side effects", async () => {
     const { POST } = await load();
     const res = await POST(post({ tags: ["practice:problem:two-sum", "interview:category:java", "interview:topic:java:collections", "interview:topic:java", "practice:problem:a b"] }, CONFIGURED));
-    expect((await res.json()).tags).toEqual(["practice:problem:two-sum", "interview:category:java", "interview:topic:java:collections"]);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid revalidation request" });
+    expect(revalidateTag).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("accepts valid learning and granular tags and refreshes the sitemap", async () => {
+    const { POST } = await load();
+    const tags = ["learning:list", "learning:grid:spring-boot-tutorial", "learning:sitemap", "practice:problem:two-sum", "interview:category:java", "interview:topic:java:collections"];
+    const res = await POST(post({ tags }, CONFIGURED));
+    expect(res.status).toBe(200);
+    expect((await res.json()).tags).toEqual(tags);
+    expect(revalidateTag.mock.calls.map((c) => c[0])).toEqual(tags);
+    expect(revalidatePath).toHaveBeenCalledWith("/sitemap.xml");
   });
 
   it("keeps the coarse legacy tags working", async () => {

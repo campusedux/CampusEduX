@@ -74,6 +74,7 @@ function mapFeatureRow(row: any): CustomFeature {
 function mapRequestRow(row: any): CustomProjectRequest {
   return {
     id: row.id,
+    serviceScope: row.service_scope ?? null,
     requestCode: row.request_code ?? "",
     title: row.title ?? "",
     projectType: row.project_type,
@@ -295,9 +296,11 @@ export function calculateEstimate(
     (p) => p.projectType === projectType && p.projectLevel === projectLevel
   );
   const basePrice = priceRow?.basePrice ?? 0;
-  const platformCharges = platformPricing.find((p) => p.platform === platform)?.charge ?? 0;
+  const platformCharges = projectType === "academic" ? 0 : platformPricing.find((p) => p.platform === platform)?.charge ?? 0;
 
-  const { included, addOnCatalog } = splitFeaturesFor(projectType, projectLevel, features);
+  const { included, addOnCatalog } = projectType === "academic"
+    ? { included: [], addOnCatalog: [] }
+    : splitFeaturesFor(projectType, projectLevel, features);
   const includedFeatures = included.map((f) => ({ ...f, price: 0 }));
   const addOns = addOnCatalog
     .filter((f) => featureIds.includes(f.id))
@@ -479,7 +482,7 @@ export const customProjectsService = {
 
   // --- payment (server-authoritative) --------------------------
 
-  async createOrder(config: CustomProjectBuilderConfig): Promise<{
+  async createOrder(config: CustomProjectBuilderConfig, integrity: { assessmentUse: "yes" | "no"; studentAuthored: boolean; integrityAcknowledged: boolean }): Promise<{
     requestId: string;
     requestCode: string;
     razorpayOrderId: string;
@@ -494,6 +497,10 @@ export const customProjectsService = {
     const { data, error } = await supabase.functions.invoke("create-custom-project-order", {
       body: {
         projectType: config.projectType,
+        serviceScope: config.projectType === "academic" ? "mentoring" : "custom_software",
+        assessmentUse: integrity.assessmentUse,
+        studentAuthored: integrity.studentAuthored,
+        integrityAcknowledged: integrity.integrityAcknowledged,
         projectLevel: config.projectLevel,
         platform: config.platform,
         title: config.title,
@@ -502,7 +509,7 @@ export const customProjectsService = {
         description: config.description,
         targetUsers: config.targetUsers,
         technologyPreference: config.technologyPreference,
-        featureIds: config.featureIds,
+        featureIds: config.projectType === "academic" ? [] : config.featureIds,
         customRequirements: config.customRequirements,
         projectImagePath: config.projectImagePath,
         referenceFiles: config.referenceFiles,

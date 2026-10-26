@@ -47,9 +47,11 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
   const canEdit = admin.perms.custom_projects.edit;
   const pct = PROGRESS_BY_STATUS[r.status as CustomProjectStatus] ?? 0;
   const reqs: { text: string }[] = Array.isArray(r.custom_requirements) ? r.custom_requirements : [];
+  const mentoring = r.service_scope === 'mentoring';
 
   return (
     <div className="space-y-5">
+      {mentoring && <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-ink">Mentoring only: provide code review, debugging help, architecture guidance and feedback through messages. The student authors assessed deliverables. Do not upload source code, reports, slides or viva answers.</div>}
       <div>
         <Link href="/custom-projects" className="mb-2 inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
           <ArrowLeft size={14} /> Custom Projects
@@ -141,7 +143,7 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
                         <span className="font-mono">{a.price != null ? formatINR(Number(a.price)) : '—'}</span>
                       </div>
                     </div>
-                    {canEdit && (a.status === 'pending' || a.status === 'priced') ? (
+                    {canEdit && !mentoring && (a.status === 'pending' || a.status === 'priced') ? (
                       <div className="flex flex-wrap items-end justify-between gap-2">
                         <AddonPriceForm
                           addonId={a.id}
@@ -253,7 +255,7 @@ export default async function CustomProjectDetailPage({ params }: { params: { id
             <CardHeader
               title="Delivery"
               action={
-                canEdit ? (
+                canEdit && !mentoring ? (
                   <Link href={`/custom-projects/${r.id}/delivery`}>
                     <Button variant="secondary" size="sm">
                       <PackageCheck size={14} /> Manage delivery

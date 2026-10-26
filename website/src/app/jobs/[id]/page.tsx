@@ -133,7 +133,13 @@ export default async function JobDetailPage({ params }: { params: { id: string }
     jobJsonLd.baseSalary = {
       "@type": "MonetaryAmount",
       currency: "INR",
-      value: { "@type": "QuantitativeValue", minValue: job.salary_min_lpa, maxValue: job.salary_max_lpa, unitText: "YEAR" },
+      // Source columns are lakhs per annum; schema.org expects rupees per year.
+      value: {
+        "@type": "QuantitativeValue",
+        minValue: job.salary_min_lpa * 100000,
+        maxValue: job.salary_max_lpa * 100000,
+        unitText: "YEAR",
+      },
     };
   }
 

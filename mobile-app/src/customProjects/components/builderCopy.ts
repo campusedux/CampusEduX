@@ -16,7 +16,7 @@ export const BUILDER_STEPS: { step: number; name: string; route: keyof CustomPro
 export const stepName = (step: number): string => BUILDER_STEPS.find((s) => s.step === step)?.name ?? "";
 
 export const TYPE_LABEL: Record<CustomProjectType, string> = {
-  academic: "Academic",
+  academic: "Mentoring",
   personal: "Personal",
   business: "Business",
 };

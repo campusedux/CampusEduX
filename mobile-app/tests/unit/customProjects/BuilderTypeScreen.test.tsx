@@ -59,7 +59,7 @@ describe("Step 1 — Project type", () => {
   it("renders one card per project type with its description", () => {
     const r = render(<BuilderTypeScreen />);
     expect(cards(r)).toHaveLength(3);
-    expect(allText(r)).toEqual(expect.arrayContaining(["Academic Project", "Personal Project", "Business Project"]));
+    expect(allText(r)).toEqual(expect.arrayContaining(["Project Mentoring", "Personal Project", "Business Project"]));
   });
 
   it("shows 'Starting from' from live pricing (lowest level) and the fixed token per type", () => {

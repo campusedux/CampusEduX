@@ -63,7 +63,8 @@ async function logRequest(supabase: SupabaseClient, userId: string): Promise<voi
 function buildSystemPrompt(catalog: { id: string; name: string; category: string; price: number }[]): string {
   const catalogLines = catalog.map((f) => `- ${f.id} | ${f.name} | ${f.category} | ${f.price === 0 ? "free" : `₹${f.price}`}`).join("\n");
   return [
-    "You help scope custom software projects for a student/business project-builder service.",
+    "You help scope project mentoring and personal or business software services.",
+    "Academic requests are mentoring only: code review, debugging, architecture guidance, and feedback on student-authored work. Never offer to complete assessed code, reports, slides, or viva answers for a student. Do not suggest implementation features for academic mentoring.",
     "Given a project name and a plain-language description of what it should achieve, infer the project's shape and suggest features from a fixed catalog — never invent a feature id that isn't in the catalog below.",
     "",
     `Valid projectType values: ${PROJECT_TYPES.join(", ")}.`,
@@ -146,6 +147,17 @@ export async function getProjectUnderstanding(supabase: SupabaseClient, req: Und
     const platform = req.platformHint ?? parsed.data.platform;
 
     await logRequest(supabase, req.userId);
+
+    if (projectType === "academic") {
+      return {
+        projectType,
+        projectLevel,
+        platform,
+        overview: "Code review, debugging, architecture guidance, and feedback on your own work.",
+        recommendedFeatureIds: [],
+        suggestedExtraFeatureIds: [],
+      };
+    }
 
     return {
       projectType,

@@ -42,10 +42,12 @@ export default function BuilderFeatures({
   features,
   pricing,
   platforms,
+  catalogAvailable,
 }: {
   features: FeatureRow[];
   pricing: PricingRow[];
   platforms: PlatformRow[];
+  catalogAvailable: boolean;
 }) {
   const router = useRouter();
   const { draft, update, patch, saveNow, loaded, userId } = useDraft();
@@ -113,12 +115,58 @@ export default function BuilderFeatures({
   // One-time default selection: every included feature, the first time this
   // tier is seen. Re-visits never stomp a user's explicit toggles.
   useEffect(() => {
-    if (!loaded || draft.featuresSeeded || includedBucket.length === 0) return;
-    patch({ featureIds: includedBucket.map((f) => f.id), featuresSeeded: true });
+    if (
+      !loaded ||
+      draft.projectType === "academic" ||
+      draft.featuresSeeded ||
+      includedBucket.length === 0
+    )
+      return;
+    patch({
+      featureIds: includedBucket.map((f) => f.id),
+      featuresSeeded: true,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, draft.featuresSeeded, includedBucket]);
 
   if (!loaded) return <p className="text-sm text-ink-muted">Loading your draft…</p>;
+
+  if (draft.projectType === "academic")
+    return (
+      <section className="card p-6">
+        <h2 className="text-lg font-semibold">Project mentoring scope</h2>
+        <p className="mt-3 text-sm text-ink-muted">
+          We can review code you wrote, help debug it, discuss architecture, and
+          give feedback. You write any assessed code, report, slides, and
+          answers yourself. Implementation packages and assessment deliverables
+          are unavailable.
+        </p>
+        <p className="mt-3 text-sm text-ink-muted">
+          Your objective from the previous step tells the mentor what you want
+          to learn. You can share your own draft or code as a reference.
+        </p>
+        <Button
+          className="mt-5"
+          onClick={async () => {
+            await saveNow();
+            router.push("/custom-projects/estimate");
+          }}
+        >
+          Review mentoring estimate
+        </Button>
+      </section>
+    );
+
+  if (!catalogAvailable || features.length === 0)
+    return (
+      <div className="empty-state">
+        The feature catalog isn&apos;t available right now.{" "}
+        <Link href="/custom-projects/estimate" className="text-ink underline">
+          Skip to the estimate
+        </Link>
+        .
+      </div>
+    );
 
   if (!draft.projectType || !draft.projectLevel) {
     return (

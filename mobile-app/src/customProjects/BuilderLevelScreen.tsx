@@ -119,7 +119,7 @@ export function BuilderLevelScreen() {
 
           <SectionCard title="Which should I choose?">
             <Text className="text-gray-700 mb-1.5">
-              <Text className="font-bold">Standard</Text> — a solid choice for a college submission or a first version.
+              <Text className="font-bold">Standard</Text> — a focused scope for mentoring or a first software version.
             </Text>
             <Text className="text-gray-700">
               <Text className="font-bold">Advanced</Text> — pick it when you want extra capabilities beyond the basics.

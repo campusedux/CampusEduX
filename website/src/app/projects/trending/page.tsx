@@ -8,7 +8,7 @@ import JsonLd from "@/components/JsonLd";
 import { BRAND } from "@/lib/brand";
 
 const DESCRIPTION =
-  "The best-selling final-year and mini projects on CampusEduX, ranked by sales — open any project to see its details, screenshots, price and reviews.";
+  "Popular educational project examples on CampusEduX, ranked by sales — review the source-code details, screenshots, price and license.";
 import { Breadcrumb } from "@/components/ui";
 
 export const revalidate = 300;

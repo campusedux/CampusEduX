@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONTENT_REDIRECTS, isRedirectedPath } from "@/lib/contentRedirects";
+import { CONTENT_REDIRECTS, isRedirectedPath, canonicalContentPath } from "@/lib/contentRedirects";
 import { buildLearningEntries, renderUrlset } from "@/lib/sitemap/build";
 import { selectRelatedLessons } from "@/lib/learningDiscovery";
 import type { LearningTree } from "@/lib/learning.types";
@@ -25,6 +25,12 @@ describe("content redirects (301)", () => {
       ["/coding-problems/genai-structured-outputs-4", "/coding-problems/genai-structured-output-4"],
       ["/learning/java-tutorial/garbage-collector", "/learning/java-tutorial/garbage-collection"],
     ]);
+  });
+
+  it("internal navigation resolves every approved merge directly", () => {
+    for (const r of CONTENT_REDIRECTS) expect(canonicalContentPath(r.source)).toBe(r.destination);
+    expect(canonicalContentPath("/practice/problems/two-sum")).toBe("/practice/problems/two-sum");
+    expect(canonicalContentPath("/learning/java-tutorial/variables")).toBe("/learning/java-tutorial/variables");
   });
 
   it("next.config.js serves each one as a literal 301", async () => {

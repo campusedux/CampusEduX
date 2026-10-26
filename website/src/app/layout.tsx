@@ -9,7 +9,7 @@ import JsonLd from "@/components/JsonLd";
 import GoogleAnalytics from "@/components/analytics/GoogleAnalytics";
 import CookieConsentBanner from "@/components/analytics/CookieConsent";
 import { BRAND } from "@/lib/brand";
-import { BRAND_LOGO_URL, DEFAULT_OG_IMAGE, websiteJsonLd } from "@/lib/seo";
+import { BRAND_LOGO_URL, DEFAULT_OG_IMAGE, SITE_URL, websiteJsonLd } from "@/lib/seo";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { Toaster } from "@/components/ui/Toast";
 
@@ -19,7 +19,7 @@ import { Toaster } from "@/components/ui/Toast";
 const fontSans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const fontDisplay = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display", display: "swap" });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? BRAND.website;
+const siteUrl = SITE_URL;
 
 const organizationJsonLd = {
   "@context": "https://schema.org",

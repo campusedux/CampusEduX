@@ -186,7 +186,9 @@ export function buildProblemEntries(
 ): SitemapEntry[] {
   const entries: SitemapEntry[] = [
     { path: "/practice" },
-    { path: "/practice/problems", lastModified: maxLastmod(practiceProblems.map((r) => r.updated_at)) },
+    ...(practiceProblems.length > 0
+      ? [{ path: "/practice/problems", lastModified: maxLastmod(practiceProblems.map((r) => r.updated_at)) }]
+      : []),
   ];
   for (const row of practiceProblems) {
     if (!row.slug) continue;
@@ -307,7 +309,11 @@ export function buildBlogEntries(posts: BlogSitemapRow[], siteUrl: string): Site
     const canonical = (p.canonical_url ?? "").trim();
     return canonical === "" || canonical === absoluteSitemapUrl(siteUrl, `/blog/${seg(p.slug)}`);
   });
-  const entries: SitemapEntry[] = [{ path: "/blog", lastModified: maxLastmod(own.map((p) => p.updated_at)) }];
+  // Externally canonicalized posts still populate the listing; only their
+  // detail URLs are excluded. The empty listing itself carries noindex.
+  const entries: SitemapEntry[] = posts.length > 0
+    ? [{ path: "/blog", lastModified: maxLastmod(own.map((p) => p.updated_at)) }]
+    : [];
   for (const p of own) entries.push({ path: `/blog/${seg(p.slug)}`, lastModified: toLastmod(p.updated_at) });
   return entries;
 }

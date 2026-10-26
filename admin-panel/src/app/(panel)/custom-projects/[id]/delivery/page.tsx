@@ -22,6 +22,10 @@ export default async function DeliveryPage({ params }: { params: { id: string } 
 
   const { request: r, delivery, deliveryUrls } = data;
 
+  if (r.service_scope === 'mentoring') {
+    return <div className="max-w-3xl space-y-4"><PageHeader title="Mentoring request" subtitle="Give guidance and feedback in the request message thread. Completed assessment files cannot be delivered." /><Link href={`/custom-projects/${r.id}`} className="text-brand underline">Return to the request</Link></div>;
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       <div>

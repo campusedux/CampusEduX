@@ -1,5 +1,6 @@
 "use client";
 
+import { canonicalContentPath } from "@/lib/contentRedirects";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bookmark, Check, ChevronDown, ListChecks, Lock, Search, X } from "lucide-react";
@@ -63,7 +64,7 @@ export function CourseCurriculum({
     return (
       <li key={l.id}>
         <Link prefetch={false}
-          href={`/learning/${gridSlug}/${l.slug}`}
+          href={canonicalContentPath(`/learning/${gridSlug}/${l.slug}`)}
           className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface"
         >
           <span

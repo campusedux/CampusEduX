@@ -68,15 +68,17 @@ export function BuilderEstimateScreen() {
     ...(hasCustomRequirements
       ? [{ title: "Price confirmed with you", body: "If your custom requirements change the price, we confirm with you first." }]
       : []),
-    { title: "Development and testing", body: "We build your project and test it." },
-    { title: "Delivery", body: "You receive the finished project. Track every step in My Custom Projects." },
+    ...(projectType === "academic"
+      ? [{ title: "Mentoring and feedback", body: "We review your work, answer questions and give feedback through messages." }]
+      : [{ title: "Development and testing", body: "We build your project and test it." },
+         { title: "Delivery", body: "You receive the finished software. Track every step in My Custom Projects." }]),
   ];
 
   return (
     <WizardScreen
       step={7}
       title="Review your estimate"
-      helper="Check everything below — this is what you are asking us to build and what it costs."
+      helper={projectType === "academic" ? "Review the mentoring scope and price. You author any assessed deliverables." : "Review the software scope and price."}
       onBack={() => navigation.goBack()}
       onNext={() => navigation.navigate("BuilderPayment")}
       nextLabel={`Continue to payment — ${rupees(estimate.token)}`}
@@ -126,10 +128,10 @@ export function BuilderEstimateScreen() {
           </SectionCard>
 
           {/* 2. Included features */}
-          <FeatureIncludedList features={estimate.includedFeatures} levelLabel={levelLabel} showHelper={false} />
+          {projectType !== "academic" && <FeatureIncludedList features={estimate.includedFeatures} levelLabel={levelLabel} showHelper={false} />}
 
           {/* 3. Add-on features */}
-          <SectionCard
+          {projectType !== "academic" && <SectionCard
             title={<TermLabel term={TERMS.addOn} className="font-bold text-gray-900" />}
             right={<EditLink label={estimate.addOns.length ? "Edit add-ons" : "Add features"} onPress={() => goTo("BuilderFeatures")} />}
           >
@@ -143,7 +145,7 @@ export function BuilderEstimateScreen() {
                 </View>
               ))
             )}
-          </SectionCard>
+          </SectionCard>}
 
           {/* 4. Uploads */}
           <SectionCard title="Uploads" right={<EditLink label="Edit uploads" onPress={() => goTo("BuilderUploads")} />}>

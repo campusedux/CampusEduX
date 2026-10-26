@@ -32,6 +32,11 @@ const NEXT_STEPS = [
 export function SubmitSuccessScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Rte>();
+  const nextSteps = params.projectType === "academic"
+    ? [{ title: "Mentor reviews your request", body: "We review your goals and your own work." },
+       { title: "Guidance and feedback", body: "Use the message thread for code review, debugging and architecture guidance." },
+       { title: "You continue building", body: "You author any assessed code, reports, slides and answers." }]
+    : NEXT_STEPS;
 
   const openDetail = () =>
     navigation.dispatch(
@@ -79,7 +84,7 @@ export function SubmitSuccessScreen() {
 
         <View className="rounded-2xl border border-gray-100 bg-white p-4 mt-4">
           <Text className="font-bold text-gray-900 mb-3">What happens next</Text>
-          <NextStepsTimeline steps={NEXT_STEPS} />
+          <NextStepsTimeline steps={nextSteps} />
           <Text className="text-gray-500 text-sm mt-1">
             Track progress anytime in My Custom Projects — every status change is shown there with your Request ID.
           </Text>

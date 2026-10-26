@@ -1,7 +1,20 @@
 import { BRAND } from "@/lib/brand";
 import { BRAND_ASSETS } from "@/lib/brandAssets";
 
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BRAND.website;
+/** Keep our www origin consistent even when an environment uses the apex alias. */
+export function normalizeSiteUrl(value?: string): string {
+  if (!value?.trim()) return BRAND.website;
+  const url = new URL(value.trim());
+  if (["campusedux.com", "www.campusedux.com"].includes(url.hostname)) return BRAND.website;
+  return url.origin;
+}
+
+export const SITE_URL = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
+
+/** Default listing pages contain distinct results; facets retain their existing hub canonical. */
+export function listingCanonical(path: string, page: number, filtered = false): string {
+  return absoluteUrl(`${path}${!filtered && page > 1 ? `?page=${page}` : ""}`);
+}
 
 export function absoluteUrl(path: string): string {
   return `${SITE_URL.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;

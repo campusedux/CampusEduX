@@ -18,9 +18,8 @@ export default function AboutPage() {
           background, credentials (if any), editorial process, and source links.
           Publish it only after the facts and links are supplied. */}
       <p className="mt-3 text-ink-muted">
-        CampusEduX brings together the tools a student needs across a college career: a project marketplace to buy, sell
-        or find final-year and mini projects; a jobs and internships board; structured learning resources and tutorials;
-        a guided resume builder; custom project development; and a referral program — all in one app, backed by one
+        CampusEduX brings together the tools a student needs across a college career: a marketplace for educational project examples and source code; a jobs and internships board; structured learning resources and tutorials;
+        a guided resume builder; project mentoring and non-academic software development; and a referral program — all in one app, backed by one
         account.
       </p>
       <p className="mt-4 text-ink-muted">
@@ -30,7 +29,7 @@ export default function AboutPage() {
 
       <h2 className="mt-8 text-xl font-bold text-ink">Who it&apos;s for</h2>
       <p className="mt-3 text-ink-muted">
-        CampusEduX is built for college students — from browsing and buying ready-made final-year and mini projects, to
+        CampusEduX is built for college students — from studying project examples and building their own work, to
         preparing for placements, to building a resume for internship and job applications.
       </p>
 
@@ -38,8 +37,8 @@ export default function AboutPage() {
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-muted">
         <li>
           Browse the <Link href="/projects" className="font-medium text-primary hover:underline">project marketplace</Link>{" "}
-          for final-year and mini project source code, or request a{" "}
-          <Link href="/custom-projects" className="font-medium text-primary hover:underline">custom-built project</Link>.
+          for educational source-code examples, or request{" "}
+          <Link href="/custom-projects" className="font-medium text-primary hover:underline">project mentoring or non-academic custom software</Link>.
         </li>
         <li>
           Search <Link href="/jobs" className="font-medium text-primary hover:underline">jobs and internships</Link> from

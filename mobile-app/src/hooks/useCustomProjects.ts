@@ -167,10 +167,10 @@ export function useCustomProjectSubmit() {
   const user = useAuthStore((s) => s.user);
 
   const submit = useCallback(
-    async (config: CustomProjectBuilderConfig): Promise<SubmitResult> => {
+    async (config: CustomProjectBuilderConfig, integrity: { assessmentUse: "yes" | "no"; studentAuthored: boolean; integrityAcknowledged: boolean }): Promise<SubmitResult> => {
       setIsProcessing(true);
       try {
-        const order = await customProjectsService.createOrder(config);
+        const order = await customProjectsService.createOrder(config, integrity);
 
         let checkoutResult;
         try {

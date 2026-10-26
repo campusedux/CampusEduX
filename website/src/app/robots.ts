@@ -5,7 +5,7 @@ import { absoluteUrl } from "@/lib/seo";
  * Private / utility paths only. robots.txt rules are PREFIX matches, so every
  * entry must not be a prefix of a public route: a bare "/r" used to also block
  * /resume, /resume/templates, /referral and /refund-policy — the referral
- * token redirect lives under "/r/" only.
+ * private resume share-token route lives under "/r/" only.
  */
 export const ROBOTS_DISALLOW = [
   "/account",

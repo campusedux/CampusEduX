@@ -80,14 +80,14 @@ export function trackingStepStates(
 }
 
 export const TYPE_LABELS: Record<ProjectType, string> = {
-  academic: "Academic",
+  academic: "Mentoring",
   personal: "Personal",
   business: "Business",
 };
 
 /** Short card copy for the Step 1 project-type picker. Presentation only. */
 export const TYPE_DESCRIPTIONS: Record<ProjectType, string> = {
-  academic: "For college assignments, final-year projects, mini projects and academic submissions.",
+  academic: "Mentoring, code review, debugging and feedback on work you create yourself.",
   personal: "For personal websites, portfolios, tools, apps and learning projects.",
   business: "For business websites, internal tools, customer-facing applications and commercial projects.",
 };
@@ -400,12 +400,12 @@ export function computeEstimate(
   const basePrice = Number(priceRow?.base_price) || 0;
 
   const platformRow = platforms.find((p) => p.platform === platform);
-  const platformCharge = Number(platformRow?.charge) || 0;
+  const platformCharge = projectType === "academic" ? 0 : Number(platformRow?.charge) || 0;
 
   // draft.featureIds is the source of truth for optional features. Features
   // the admin marked included for this type:level are always delivered and
   // never charged — create-custom-project-order snapshots them at price 0.
-  const eligible = featuresForTier(features, projectType, projectLevel);
+  const eligible = projectType === "academic" ? [] : featuresForTier(features, projectType, projectLevel);
   const selectedFeatures = eligible
     .filter((f) => isIncludedForTier(f, projectType, projectLevel) || draft.featureIds.includes(f.id))
     .map((f) => {

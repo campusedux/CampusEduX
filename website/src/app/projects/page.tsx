@@ -8,7 +8,12 @@ import { FilterSheet, Pagination, EmptyState, SkeletonProjectCard } from "@/comp
 import { cn } from "@/lib/cn";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
 import { getCachedProjectsPage, getCachedCategories } from "@/lib/cache";
-import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import {
+  absoluteUrl,
+  listingCanonical,
+  breadcrumbJsonLd,
+  DEFAULT_OG_IMAGE,
+} from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
 import {
   PROJECT_PAGE_SIZE,
@@ -21,7 +26,7 @@ import {
 } from "@/lib/marketplace";
 
 const DESCRIPTION =
-  "Buy or browse final-year and mini projects on CampusEduX — filter by category, price and rating to find ready-to-submit source code from student sellers.";
+  "Explore educational software project examples and source code on CampusEduX. Study, run and adapt them under the applicable license; do not submit purchased work as your own.";
 
 export const revalidate = 120;
 
@@ -48,20 +53,33 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
     max: parsePrice(searchParams.max),
     flag: searchParams.flag === "premium" || searchParams.flag === "bestseller" ? searchParams.flag : undefined,
   });
+  const page = parsePage(searchParams.page);
+  const filtered = Boolean(
+    searchParams.q ||
+      searchParams.category ||
+      searchParams.min ||
+      searchParams.max ||
+      searchParams.flag ||
+      projectSort(searchParams.sort) !== "newest",
+  );
+  const url = listingCanonical("/projects", page, filtered);
   return {
     title: "Project Marketplace",
     description: DESCRIPTION,
-    alternates: { canonical: absoluteUrl("/projects") },
+    alternates: { canonical: url },
     openGraph: {
       title: "Project Marketplace | CampusEduX",
       description: DESCRIPTION,
-      url: absoluteUrl("/projects"),
+      url,
       type: "website",
       images: [DEFAULT_OG_IMAGE],
     },
     // No results for this view (e.g. the catalog is empty, or the filters
     // matched nothing) -> don't index an empty shell page.
-    robots: count === 0 ? { index: false, follow: true } : undefined,
+    robots:
+      count === 0 || (page - 1) * PROJECT_PAGE_SIZE >= (count ?? Infinity)
+        ? { index: false, follow: true }
+        : undefined,
   };
 }
 

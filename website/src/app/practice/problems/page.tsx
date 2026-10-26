@@ -3,7 +3,7 @@ import Link from "next/link";
 import { X } from "lucide-react";
 import { FilterSheet, Pagination, PageHeader } from "@/components/ui";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
+import { listingCanonical, breadcrumbJsonLd } from "@/lib/seo";
 import { getPracticeCategories, getPracticeProblemsPage } from "@/lib/practice";
 import {
   PRACTICE_PAGE_SIZE,
@@ -17,12 +17,30 @@ import { PracticeProblemGrid } from "./PracticeProblemGrid";
 
 export const revalidate = 300;
 
-export const metadata: Metadata = {
-  title: "Coding Problems",
-  description:
-    "Practise programming problems on CampusEduX — each solvable in Java, Python, C, C++ and JavaScript. Filter by difficulty, topic, language and your progress.",
-  alternates: { canonical: absoluteUrl("/practice/problems") },
-};
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: SP;
+}): Promise<Metadata> {
+  const query = parsePracticeQuery(searchParams);
+  const { items } = await getPracticeProblemsPage(query);
+  const filtered = Boolean(
+    query.q || query.difficulty || query.category || query.lang || query.status,
+  );
+  return {
+    title: "Coding Problems",
+    description:
+      "Practise programming problems on CampusEduX — each solvable in Java, Python, C, C++ and JavaScript. Filter by difficulty, topic, language and your progress.",
+    alternates: {
+      canonical: listingCanonical(
+        "/practice/problems",
+        query.page,
+        filtered,
+      ),
+    },
+    robots: items.length === 0 ? { index: false, follow: true } : undefined,
+  };
+}
 
 type SP = Record<string, string | string[] | undefined>;
 

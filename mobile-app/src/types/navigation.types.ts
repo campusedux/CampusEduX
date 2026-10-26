@@ -154,6 +154,7 @@ export type CustomProjectsStackParamList = {
   BuilderEstimate: undefined;
   BuilderPayment: undefined;
   SubmitSuccess: {
+    projectType?: "academic" | "personal" | "business";
     requestId: string;
     requestCode: string;
     tokenAmount: number;

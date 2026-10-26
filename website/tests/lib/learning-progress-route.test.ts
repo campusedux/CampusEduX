@@ -49,10 +49,13 @@ describe("GET /api/learning/progress", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("returns an empty list, not an error body, when the RPC yields nothing", async () => {
+  it("returns a private 503 when the progress RPC fails", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "u" } } });
     rpc.mockResolvedValue({ data: null, error: { message: "boom" } });
     const { GET } = await load();
-    expect(await (await GET(get("?grid=java"))).json()).toEqual({ topics: [] });
+    const res = await GET(get("?grid=java"));
+    expect(res.status).toBe(503);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(await res.json()).toEqual({ error: "Progress is unavailable. Please retry." });
   });
 });

@@ -30,9 +30,9 @@ const FEATURES: Feature[] = [
   { label: "Learning", benefit: "Structured tutorials from basics to advanced — Java, Python, DBMS, AI/ML and more.", href: "/learning", cta: "Start learning", icon: GraduationCap, accent: "emerald" },
   { label: "Coding practice", benefit: "Solve problems in Java, Python, C, C++ or JavaScript with instant feedback.", href: "/practice", cta: "Practise now", icon: Code2, accent: "pink" },
   { label: "Jobs & internships", benefit: "Fresh roles for students and freshers — apply straight from the listing.", href: "/jobs", cta: "Find jobs", icon: Briefcase, accent: "sky" },
-  { label: "Project marketplace", benefit: "Ready final-year projects with source code, or sell your own.", href: "/projects", cta: "Browse projects", icon: LayoutGrid, accent: "indigo" },
+  { label: "Project marketplace", benefit: "Explore source-code examples with explanations, or share your own learning project.", href: "/projects", cta: "Browse projects", icon: LayoutGrid, accent: "indigo" },
   { label: "Resume builder", benefit: "ATS-friendly templates, a score check and one-click PDF export.", href: "/resume", cta: "Build my resume", icon: FileText, accent: "amber" },
-  { label: "Custom projects", benefit: "Tell us your idea — we build and deliver it with full source code.", href: "/custom-projects", cta: "Get it built", icon: Wrench, accent: "teal" },
+  { label: "Custom projects", benefit: "Get project mentoring or commission software for personal and business use.", href: "/custom-projects", cta: "Explore options", icon: Wrench, accent: "teal" },
 ];
 
 /** Home "What you get" — one card per module, each a real link. */

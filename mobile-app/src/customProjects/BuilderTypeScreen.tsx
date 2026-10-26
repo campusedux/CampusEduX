@@ -18,10 +18,10 @@ type Nav = NativeStackNavigationProp<CustomProjectsStackParamList, "BuilderType"
 const TYPES: { id: CustomProjectType; title: string; icon: keyof typeof Ionicons.glyphMap; what: string; bestFor: string }[] = [
   {
     id: "academic",
-    title: "Academic Project",
+    title: "Project Mentoring",
     icon: "school",
-    what: "A complete project for your course, built to submit.",
-    bestFor: "Best for: mini and final-year projects, assignments and viva prep.",
+    what: "Code review, debugging, architecture guidance and feedback on work you create.",
+    bestFor: "For students who will author their own assessed work.",
   },
   {
     id: "personal",
@@ -54,7 +54,7 @@ export function BuilderTypeScreen() {
     <WizardScreen
       step={1}
       title="What kind of project do you need?"
-      helper="Your project type sets the starting price and the token you pay to begin."
+      helper="Choose mentoring for student-authored work or software development for personal and business use."
       onBack={() => navigation.goBack()}
       onNext={() => navigation.navigate("BuilderLevel")}
       nextLabel="Continue to level"

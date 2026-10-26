@@ -18,6 +18,8 @@ const nextConfig = {
       {
         source: '/(.*)',
         headers: [
+          // Staff tooling has no public search landing pages, including login.
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },

@@ -11,12 +11,12 @@ const PROJECT_TYPES: ProjectType[] = [
   { title: "Websites", icon: Globe },
   { title: "Mobile apps", icon: Smartphone },
   { title: "Web applications", icon: AppWindow },
-  { title: "Final-year projects", icon: GraduationCap },
+  { title: "Project mentoring", icon: GraduationCap },
   { title: "Custom software", icon: Code2 },
   { title: "Your own idea", icon: Lightbulb },
 ];
 
-const TRUST_POINTS = ["Student friendly", "Affordable pricing", "Source code included", "Support after delivery"];
+const TRUST_POINTS = ["Student friendly", "Clear pricing", "Code review available", "Support throughout"];
 
 /**
  * "Custom Project Development" home banner — sits directly under the hero.
@@ -36,14 +36,13 @@ export function CustomProjectPromo() {
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/90 ring-1 ring-inset ring-white/15">
               <Wrench className="h-3.5 w-3.5" aria-hidden />
-              Custom Project Development
+              Project mentoring and custom software
             </span>
             <h2 id="custom-project-promo-title" className="mt-4 font-display text-[1.75rem] font-bold leading-tight tracking-tight sm:text-4xl">
-              Have a project idea? <span className="text-[#B7ADFF]">We&apos;ll build it for you.</span>
+              Working on a project? <span className="text-[#B7ADFF]">Get guidance or commission software.</span>
             </h2>
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-white/75">
-              Share your idea for a website, mobile app or software project — our team turns it into a complete,
-              working solution.
+              Get mentoring, code review and debugging help for your own work, or commission a personal or business software project.
             </p>
             <ul className="mt-5 flex flex-wrap gap-x-5 gap-y-2">
               {TRUST_POINTS.map((p) => (
@@ -58,13 +57,13 @@ export function CustomProjectPromo() {
                 href="/custom-projects/start"
                 className="inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-[0.95rem] font-semibold text-[#2A1FA8] shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
               >
-                Start your project <ArrowRight className="h-4 w-4" aria-hidden />
+                Explore project options <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link
                 href="/custom-projects"
                 className="inline-flex h-12 items-center rounded-xl border border-white/25 bg-white/5 px-6 text-[0.95rem] font-semibold text-white transition hover:bg-white/10"
               >
-                Get a free consultation
+                Ask about mentoring
               </Link>
             </div>
           </div>

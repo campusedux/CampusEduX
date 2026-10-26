@@ -6,7 +6,7 @@ import JobCard, { JobCardData } from "@/components/JobCard";
 import { FilterSheet, Pagination, EmptyState, SkeletonJobCard } from "@/components/ui";
 import { JobFilters } from "@/components/marketplace/JobFilters";
 import { getCachedJobsPage } from "@/lib/cache";
-import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, listingCanonical, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
 import { JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobExperience, jobSort, parsePage, totalPages } from "@/lib/marketplace";
 import { cn } from "@/lib/cn";
@@ -30,19 +30,31 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
     type: searchParams.type,
     experience: jobExperience(searchParams.exp),
   });
+  const page = parsePage(searchParams.page);
+  const filtered = Boolean(
+    searchParams.q ||
+      searchParams.location ||
+      searchParams.type ||
+      jobExperience(searchParams.exp) ||
+      jobSort(searchParams.sort) !== "newest",
+  );
+  const url = listingCanonical("/jobs", page, filtered);
   return {
     title: "Jobs & Internships",
     description: DESCRIPTION,
-    alternates: { canonical: absoluteUrl("/jobs") },
+    alternates: { canonical: url },
     openGraph: {
       title: "Jobs & Internships | CampusEduX",
       description: DESCRIPTION,
-      url: absoluteUrl("/jobs"),
+      url,
       type: "website",
       images: [DEFAULT_OG_IMAGE],
     },
     // No results for this view -> don't index an empty shell page.
-    robots: count === 0 ? { index: false, follow: true } : undefined,
+    robots:
+      count === 0 || (page - 1) * JOB_PAGE_SIZE >= (count ?? Infinity)
+        ? { index: false, follow: true }
+        : undefined,
   };
 }
 

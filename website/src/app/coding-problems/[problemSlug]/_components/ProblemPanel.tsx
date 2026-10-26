@@ -1,3 +1,4 @@
+import { canonicalContentPath } from "@/lib/contentRedirects";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, BookOpen, ChevronRight, Lock } from "lucide-react";
 import { Markdown } from "@/components/learning/Markdown";
@@ -209,7 +210,7 @@ export function ProblemPanel({
                   {r.supported_languages?.length ? ` · ${r.supported_languages.join(", ")}` : ""}
                 </div>
                 <Link
-                  href={`${problemBasePath}/${r.slug}`}
+                  href={canonicalContentPath(`${problemBasePath}/${r.slug}`)}
                   className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
                 >
                   Solve Problem <ArrowRight className="h-3.5 w-3.5" aria-hidden />

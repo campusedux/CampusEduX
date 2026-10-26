@@ -29,31 +29,47 @@ export default function CustomProjectCheckout({
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "processing" | "error" | "pending">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [retryVerification, setRetryVerification] = useState<(() => Promise<void>) | null>(null);
+  const [retryVerification, setRetryVerification] = useState<
+    (() => Promise<void>) | null
+  >(null);
+  const [assessmentUse, setAssessmentUse] = useState<"" | "yes" | "no">("");
+  const [studentAuthored, setStudentAuthored] = useState(false);
+  const [integrityAcknowledged, setIntegrityAcknowledged] = useState(false);
+  const academic = draft.projectType === "academic";
+  const canPay =
+    !!assessmentUse &&
+    integrityAcknowledged &&
+    (academic ? studentAuthored : assessmentUse === "no");
 
   async function handlePay() {
+    if (!canPay) return;
     setStatus("processing");
     setError(null);
     const supabase = createBrowserSupabase();
 
     try {
-      const { data: order, error: orderError } = await supabase.functions.invoke("create-custom-project-order", {
-        body: {
-          projectType: draft.projectType,
-          projectLevel: draft.projectLevel,
-          platform: draft.platform,
-          title: draft.title,
-          objective: draft.objective,
-          problemStatement: draft.problemStatement,
-          description: draft.description,
-          targetUsers: draft.targetUsers,
-          technologyPreference: draft.technologyPreference,
-          featureIds,
-          customRequirements: draft.customRequirements,
-          projectImagePath: draft.projectImagePath,
-          referenceFiles: draft.referenceFiles,
-        },
-      });
+      const { data: order, error: orderError } =
+        await supabase.functions.invoke("create-custom-project-order", {
+          body: {
+            projectType: draft.projectType,
+            serviceScope: academic ? "mentoring" : "custom_software",
+            assessmentUse,
+            studentAuthored: academic ? studentAuthored : false,
+            integrityAcknowledged,
+            projectLevel: draft.projectLevel,
+            platform: draft.platform,
+            title: draft.title,
+            objective: draft.objective,
+            problemStatement: draft.problemStatement,
+            description: draft.description,
+            targetUsers: draft.targetUsers,
+            technologyPreference: draft.technologyPreference,
+            featureIds: academic ? [] : featureIds,
+            customRequirements: draft.customRequirements,
+            projectImagePath: draft.projectImagePath,
+            referenceFiles: draft.referenceFiles,
+          },
+        });
       if (orderError) throw new Error(orderError.message);
       if (order?.error) throw new Error(order.error);
 
@@ -111,13 +127,58 @@ export default function CustomProjectCheckout({
 
   return (
     <div>
+      <fieldset className="mb-5 space-y-3 rounded-2xl border border-line p-4">
+        <legend className="font-semibold">Academic-integrity check</legend>
+        <label className="block text-sm" htmlFor="assessment-use">
+          Will this request relate to work assessed by a school, college, or
+          university?
+        </label>
+        <select
+          id="assessment-use"
+          className="w-full rounded-xl border border-line bg-card p-2"
+          value={assessmentUse}
+          onChange={(event) =>
+            setAssessmentUse(event.target.value as "" | "yes" | "no")
+          }
+        >
+          <option value="">Choose an answer</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+        {!academic && assessmentUse === "yes" && (
+          <p className="text-sm text-danger">
+            Choose project mentoring for assessed work. We cannot build assessed
+            work for you.
+          </p>
+        )}
+        {academic && (
+          <label className="flex gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={studentAuthored}
+              onChange={(event) => setStudentAuthored(event.target.checked)}
+            />
+            I will write any assessed code, report, slides, and answers myself.
+            I am requesting guidance and feedback only.
+          </label>
+        )}
+        <label className="flex gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={integrityAcknowledged}
+            onChange={(event) => setIntegrityAcknowledged(event.target.checked)}
+          />
+          I understand that CampusEduX will not complete assessed work or
+          provide submission-ready deliverables for me.
+        </label>
+      </fieldset>
       <Button
         type="button"
         size="lg"
         fullWidth
         leftIcon={Lock}
         onClick={handlePay}
-        disabled={status === "processing" || status === "pending"}
+        disabled={!canPay || status === "processing" || status === "pending"}
         loading={status === "processing"}
       >
         {status === "processing" ? "Opening checkout…" : `Pay ${formatINR(tokenAmount)} token`}

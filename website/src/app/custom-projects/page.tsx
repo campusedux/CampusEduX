@@ -7,24 +7,25 @@ import JsonLd from "@/components/JsonLd";
 
 export const revalidate = 300;
 export const metadata: Metadata = {
-  title: "Custom Final Year Projects for Students",
-  description: "Plan a custom academic, personal or business project. Explore options, starting prices and the CampusEduX request process.",
+  title: "Project Mentoring and Custom Software",
+  description:
+    "Get guidance on student-authored projects or commission personal and business software. Explore scope, pricing and the request process.",
   alternates: { canonical: absoluteUrl("/custom-projects") },
 };
 
 const STEPS = [
   "Choose a project type and level",
   "Pick a platform (web, mobile, desktop)",
-  "Select the features you need",
+  "For mentoring, describe the guidance you need",
   "Upload any requirements or reference files",
   "Get an estimate",
   "Pay securely and submit",
   "Track progress and message the team",
-  "Receive delivery and get support",
+  "Receive mentoring feedback or software delivery",
 ];
 
 const TYPE_LABEL: Record<string, string> = {
-  academic: "Academic",
+  academic: "Mentoring",
   personal: "Personal",
   business: "Business",
 };
@@ -43,7 +44,11 @@ export default async function CustomProjectsPage() {
       // Platform is an add-on charge on top of the base price — 0 for web.
       supabase.from("custom_project_platform_pricing").select("platform,label,charge").eq("is_active", true).order("sort_order"),
       // Feature catalog — 0034_custom_feature_catalog.sql (category is free text).
-      supabase.from("custom_project_features").select("id,name,category,price").eq("is_active", true).order("sort_order"),
+      supabase
+        .from("custom_project_features")
+        .select("id,name,category,price,project_types")
+        .eq("is_active", true)
+        .order("sort_order"),
     ]);
 
     const byType = new Map<string, { from: number; token: number }>();
@@ -59,7 +64,19 @@ export default async function CustomProjectsPage() {
       .map((t) => ({ type: t, ...byType.get(t)! }));
 
     platforms = p ?? [];
-    features = f ?? [];
+    const assessedDeliverableIds = new Set([
+      "doc-srs",
+      "doc-project-report",
+      "doc-ppt",
+      "doc-viva",
+      "doc-academic-package",
+    ]);
+    features = (f ?? []).filter(
+      (item) =>
+        !assessedDeliverableIds.has(item.id) &&
+        (item.project_types?.includes("personal") ||
+          item.project_types?.includes("business")),
+    );
   }
 
   return (
@@ -71,11 +88,13 @@ export default async function CustomProjectsPage() {
         <div className="relative max-w-2xl">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#C9C2FF]">Custom projects</p>
           <h1 className="mt-3 font-display text-[2rem] font-bold leading-tight tracking-tight sm:text-[2.6rem]">
-            Need something the marketplace doesn&apos;t have? <span className="text-[#B7ADFF]">We&apos;ll build it.</span>
+            Need project help? <span className="text-[#B7ADFF]">Get mentoring or commission software.</span>
           </h1>
           <p className="mt-4 text-[15px] leading-relaxed text-white/75">
-            Describe what you need, pay a small token to start, and the CampusEduX team builds and delivers it — tracked the
-            same way as everything else in your account.
+            Students can request code review, debugging, architecture guidance
+            and feedback on their own work. Personal and business customers can
+            commission complete software. Assessed work remains
+            student-authored.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link
@@ -130,6 +149,10 @@ export default async function CustomProjectsPage() {
       {platforms.length > 0 && (
         <>
           <h2 className="h-section mt-14">Platform options</h2>
+          <p className="mt-2 text-sm text-ink-muted">
+            Platform charges apply to personal and business software. Mentoring
+            has no platform charge.
+          </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {platforms.map((p: { platform: string; label: string; charge: number }) => (
               <div

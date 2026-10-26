@@ -94,15 +94,16 @@ describe("sitemap XML", () => {
 // Section builders
 // ---------------------------------------------------------------------------
 describe("static section", () => {
-  it("never lists the excluded utility / boilerplate pages", () => {
+  it("lists public legal pages and excludes the conditional referral page", () => {
     const paths = buildStaticEntries({ hasActiveFaqs: true, hasPremiumPlans: true }).map((e) => e.path);
-    for (const p of ["/delete-account", "/cookie-policy", "/refund-policy", "/data-and-permissions", "/referral"]) {
+    for (const p of ["/referral"]) {
       expect(SITEMAP_EXCLUDED_PATHS).toContain(p);
       expect(paths).not.toContain(p);
     }
     expect(paths).toContain("/");
     expect(paths).toContain("/compiler");
     expect(paths).toContain("/privacy-policy");
+    for (const path of ["/delete-account", "/cookie-policy", "/refund-policy", "/data-and-permissions"]) expect(paths).toContain(path);
   });
 
   it("has no lastmod at all (no real content date for these pages)", () => {
@@ -280,6 +281,7 @@ describe("blog section", () => {
 function populatedSupabase(extra: { errors?: string[] } = {}) {
   return fakeSitemapSupabase({
     errors: extra.errors,
+    rpcResults: { interview_topic_detail: { questions: [{ id: "q1" }] } },
     rpcs: {
       learning_sitemap: [
         { grid_slug: "java-tutorial", topic_slug: null, updated_at: "2026-01-01T00:00:00Z" },
@@ -301,10 +303,16 @@ function populatedSupabase(extra: { errors?: string[] } = {}) {
     tables: {
       faqs: [{ id: "f1" }],
       premium_plans: [{ id: "pl1" }],
-      learning_grids: [{ id: "g-genai" }],
+      learning_grids: [{ id: "g-genai", slug: "generative-ai" }, { id: "g-java", slug: "java-tutorial" }],
+      learning_topics: [
+        { id: "t-intro", slug: "intro", grid_id: "g-java", is_premium: false },
+        { id: "t-genai", slug: "activation-functions", grid_id: "g-genai", is_premium: false },
+        { id: "t-summary", slug: "course-summary", grid_id: "g-genai", is_premium: false },
+      ],
       learning_contents: [
-        { id: "c1", body: GENAI_TEMPLATE, learning_topics: { slug: "activation-functions" } },
-        { id: "c2", body: "Original synthesis.", learning_topics: { slug: "course-summary" } },
+        { id: "c-java", topic_id: "t-intro", body: "Real lesson content." },
+        { id: "c1", topic_id: "t-genai", body: GENAI_TEMPLATE, learning_topics: { slug: "activation-functions" } },
+        { id: "c2", topic_id: "t-summary", body: "Original synthesis.", learning_topics: { slug: "course-summary" } },
       ],
       dsa_problems: [
         { slug: "two-sum", examples: [{ input: "1" }], constraints: [], starter_code: {}, is_premium: false },
@@ -355,14 +363,12 @@ describe("/sitemap.xml index + /sitemaps/<section>.xml routes", () => {
         rpcs: { learning_sitemap: [{ grid_slug: "java-tutorial", topic_slug: "intro", updated_at: "2026-02-01T00:00:00Z" }] },
       }),
     );
-    // problems / interview-questions / blog always carry their hub pages;
-    // jobs and projects have nothing, so they're left out of the index.
+    // Practice and interview hubs remain; the empty blog child is omitted.
     expect(locs(await r.indexXml())).toEqual([
       `${SITE}/sitemaps/static.xml`,
       `${SITE}/sitemaps/learning.xml`,
       `${SITE}/sitemaps/problems.xml`,
       `${SITE}/sitemaps/interview-questions.xml`,
-      `${SITE}/sitemaps/blog.xml`,
     ]);
     // The omitted child routes still answer with a valid (empty) urlset.
     expect(await r.sectionXml("jobs")).toContain("<urlset");
@@ -397,10 +403,6 @@ describe("/sitemap.xml index + /sitemaps/<section>.xml routes", () => {
       `${SITE}/coding-problems/thin-problem`,
       `${SITE}/jobs/companies/microsoft`,
       `${SITE}/projects/category/devops`,
-      `${SITE}/delete-account`,
-      `${SITE}/cookie-policy`,
-      `${SITE}/refund-policy`,
-      `${SITE}/data-and-permissions`,
       `${SITE}/practice/compiler`,
     ]) {
       expect(all).not.toContain(u);
@@ -423,7 +425,14 @@ describe("/sitemap.xml index + /sitemaps/<section>.xml routes", () => {
       topic_slug: `t${String(i).padStart(4, "0")}`,
       updated_at: "2026-01-01T00:00:00Z",
     }));
-    const supabase = fakeSitemapSupabase({ rpcs: { learning_sitemap: many } });
+    const supabase = fakeSitemapSupabase({
+      rpcs: { learning_sitemap: many },
+      tables: {
+        learning_grids: [{ id: "g-java", slug: "java-tutorial" }],
+        learning_topics: many.map((r, i) => ({ id: `t${i}`, slug: r.topic_slug, grid_id: "g-java", is_premium: false })),
+        learning_contents: many.map((_, i) => ({ id: `c${i}`, topic_id: `t${i}` })),
+      },
+    });
     const r = await loadSitemapRoutes(supabase);
     const topicLocs = locs(await r.sectionXml("learning")).filter((u) => u.includes("/learning/java-tutorial/"));
     expect(topicLocs).toHaveLength(2500);

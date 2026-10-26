@@ -13,7 +13,8 @@ import { BlogCard } from "@/components/blog/BlogCard";
 import { EmptyState, Pagination, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, listingCanonical, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { parsePage } from "@/lib/marketplace";
 import { BRAND } from "@/lib/brand";
 
 // Blog mutations invalidate the `blog` tag on demand (admin-panel blog actions),
@@ -24,19 +25,36 @@ const HERO_TITLE = "Insights, Ideas & Technology";
 const DESCRIPTION =
   "Practical, plain-English articles on artificial intelligence, technology, programming and careers — written by the CampusEduX team for students and developers.";
 
-export const metadata: Metadata = {
-  title: "Blog: AI, Programming & Career Articles",
-  description: DESCRIPTION,
-  alternates: { canonical: absoluteUrl("/blog") },
-  openGraph: {
-    title: `Blog: AI, Programming & Career Articles | ${BRAND.name}`,
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: SP;
+}): Promise<Metadata> {
+  const page = parsePage(searchParams.page);
+  const q = searchParams.q?.trim() || undefined;
+  const category = searchParams.category?.trim() || undefined;
+  const tag = searchParams.tag?.trim() || undefined;
+  const { posts } = await getBlogPage({ page, q, category, tag });
+  const url = listingCanonical("/blog", page, Boolean(q || category || tag));
+  return {
+    title: "Blog: AI, Programming & Career Articles",
     description: DESCRIPTION,
-    url: absoluteUrl("/blog"),
-    type: "website",
-    images: [DEFAULT_OG_IMAGE],
-  },
-  twitter: { card: "summary_large_image", title: `Blog: AI, Programming & Career Articles | ${BRAND.name}`, description: DESCRIPTION },
-};
+    alternates: { canonical: url },
+    openGraph: {
+      title: `Blog: AI, Programming & Career Articles | ${BRAND.name}`,
+      description: DESCRIPTION,
+      url,
+      type: "website",
+      images: [DEFAULT_OG_IMAGE],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `Blog: AI, Programming & Career Articles | ${BRAND.name}`,
+      description: DESCRIPTION,
+    },
+    robots: posts.length === 0 ? { index: false, follow: true } : undefined,
+  };
+}
 
 type SP = { page?: string; q?: string; category?: string; tag?: string };
 
@@ -49,7 +67,7 @@ const chipCls = (active: boolean) =>
   );
 
 export default async function BlogIndexPage({ searchParams }: { searchParams: SP }) {
-  const page = Math.max(1, Number(searchParams.page ?? "1") || 1);
+  const page = parsePage(searchParams.page);
   const q = searchParams.q?.trim() || undefined;
   const category = searchParams.category?.trim() || undefined;
   const tag = searchParams.tag?.trim() || undefined;

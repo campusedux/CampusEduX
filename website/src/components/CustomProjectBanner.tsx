@@ -1,71 +1,37 @@
 import Link from "next/link";
-import Image from "next/image";
-import { IMAGE_BLUR_DATA_URL } from "@/lib/image";
 import { whatsAppSupportUrl } from "@/lib/whatsapp";
 
-const BANNER_SRC = "/images/custom-project-banner.webp";
-
-/**
- * "Custom Project Development" promo — shared by the Home page (above Quick
- * access) and the Projects page (top of the marketplace). One component, one
- * design, reused in both places rather than duplicated.
- *
- * The visual is a single source-of-truth artwork (`public/images/
- * custom-project-banner.webp`, shared with the mobile app's copy of the same
- * export) rendered at its exact aspect ratio — no HTML/CSS re-creation, no
- * cropping, no per-breakpoint redesign. The only interactive layer is two
- * transparent overlays positioned over the "Start Your Project" and "Get a
- * Free Consultation" buttons baked into the artwork, wired to the existing
- * custom-projects routes.
- *
- * Overlay positions are percentages measured directly from the source image
- * (2056×765) — because the wrapper is locked to that same aspect ratio, the
- * percentages stay pixel-accurate at every rendered width.
- */
-const CTA = {
-  start: { left: 4.33, top: 63.27, width: 17.25, height: 11.24 },
-  learnMore: { left: 23.35, top: 63.27, width: 15.76, height: 11.24 },
-} as const;
-
+/** Text-based replacement for the former artwork, which advertised completed academic projects. */
 export function CustomProjectBanner() {
   return (
-    <div className="relative w-full" style={{ aspectRatio: "2056 / 765" }}>
-      <Image
-        src={BANNER_SRC}
-        alt="Custom Project Development — Have a project idea? We'll build it for you. Website, mobile app, web app, final year project, or custom software — share your idea and our team turns it into a complete, working project."
-        fill
-        priority
-        quality={100}
-        placeholder="blur"
-        blurDataURL={IMAGE_BLUR_DATA_URL}
-        className="object-contain"
-        sizes="(max-width: 639px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), calc(100vw - 64px)"
-      />
-      <Link
-        href="/custom-projects/start"
-        aria-label="Start your project"
-        className="absolute rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-        style={{
-          left: `${CTA.start.left}%`,
-          top: `${CTA.start.top}%`,
-          width: `${CTA.start.width}%`,
-          height: `${CTA.start.height}%`,
-        }}
-      />
-      <a
-        href={whatsAppSupportUrl()}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Get a free consultation on WhatsApp"
-        className="absolute rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-        style={{
-          left: `${CTA.learnMore.left}%`,
-          top: `${CTA.learnMore.top}%`,
-          width: `${CTA.learnMore.width}%`,
-          height: `${CTA.learnMore.height}%`,
-        }}
-      />
-    </div>
+    <section className="rounded-2xl border border-line bg-card px-6 py-8 shadow-card sm:px-10 sm:py-12">
+      <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+        Project help
+      </p>
+      <h2 className="mt-3 font-display text-3xl font-semibold text-ink">
+        Learn with a mentor or commission software
+      </h2>
+      <p className="mt-3 max-w-2xl text-ink-muted">
+        Students can get code review, debugging help, architecture guidance and
+        feedback on work they author. Personal and business customers can
+        request complete software development.
+      </p>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Link href="/custom-projects/start" className="btn-primary">
+          Explore project options
+        </Link>
+        <a
+          href={whatsAppSupportUrl(
+            "Hello CampusEduX, I would like project mentoring, code review or debugging help on work I author. I understand you do not complete assessed work for students.",
+          )}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-secondary"
+        >
+          Ask about mentoring
+        </a>
+      </div>
+    </section>
   );
 }
 

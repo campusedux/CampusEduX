@@ -123,7 +123,7 @@ export async function TopicDiscovery({ gridSlug, gridName }: { gridSlug: string;
           id="discovery-projects"
           title="Related Projects"
           icon={Boxes}
-          subtitle={`${techLabel} and popular final-year / student projects with full source code.`}
+          subtitle={`${techLabel} and educational project examples with source code to study and adapt.`}
           viewAllHref="/projects"
           viewAllLabel="View all projects"
         >

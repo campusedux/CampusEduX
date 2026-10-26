@@ -36,7 +36,7 @@ describe("CustomProjectBanner", () => {
     mockWidth = w;
     const json = JSON.stringify(render().toJSON());
     expect(button(render(), "Get a Free Consultation")).toBeTruthy();
-    for (const t of ["Have a Project Idea?", "Website Development", "Ongoing Support", "Let's Build", "You Launch It"]) {
+    for (const t of ["Have a Project Idea?", "Website Development", "Ongoing Support", "Get Guidance or Custom Software", "You Learn or Launch"]) {
       expect(json).toContain(t);
     }
   });

@@ -98,6 +98,20 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
     expect(job).not.toHaveProperty("applicantLocationRequirements");
   });
 
+  it("converts source LPA salary values to annual INR in JobPosting", async () => {
+    vi.mocked(getCachedJobDetail).mockResolvedValueOnce({
+      id: "job-salary", title: "Engineer", description: "Build APIs.",
+      posted_at: "2026-01-01T00:00:00.000Z", job_type: "Full Time",
+      location: "Bengaluru", salary_min_lpa: 6, salary_max_lpa: 12,
+      company_name: "Acme", company: null,
+    });
+    const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
+    const blocks = jsonLdBlocks(await JobDetailPage({ params: { id: "job-salary" } }) as unknown as Node);
+    expect(blocks.find((d) => d["@type"] === "JobPosting")?.baseSalary).toMatchObject({
+      currency: "INR", value: { minValue: 600000, maxValue: 1200000, unitText: "YEAR" },
+    });
+  });
+
   it.each([
     ["Full Time", "FULL_TIME"],
     ["Part Time", "PART_TIME"],

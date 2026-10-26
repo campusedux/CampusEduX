@@ -17,7 +17,8 @@ export function fakeSitemapSupabase({
   tables = {},
   rpcs = {},
   errors = [],
-}: { tables?: Rows; rpcs?: Rows; errors?: string[] } = {}) {
+  rpcResults = {},
+}: { tables?: Rows; rpcs?: Rows; errors?: string[]; rpcResults?: Record<string, unknown> } = {}) {
   const calls: FakeCall[] = [];
 
   function chain(name: string, rows: unknown[], rec: FakeCall) {
@@ -49,6 +50,9 @@ export function fakeSitemapSupabase({
     rpc(fn: string, args: unknown) {
       const rec: FakeCall = { kind: "rpc", name: fn, ops: [["args", args]] };
       calls.push(rec);
+      if (Object.prototype.hasOwnProperty.call(rpcResults, fn)) {
+        return Promise.resolve(errors.includes(fn) ? { data: null, error: { message: "boom" } } : { data: rpcResults[fn], error: null });
+      }
       return chain(fn, rpcs[fn] ?? [], rec);
     },
   };

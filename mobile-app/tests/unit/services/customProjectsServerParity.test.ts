@@ -48,7 +48,7 @@ const PLATFORMS: CustomPlatformPricing[] = [{ platform: "web_android", label: "W
 const SELECTIONS = [[], ["auth-google"], ["search-filters", "auth-google"], ["auth-email-password", "rt-live-chat", "ai-chatbot", "search-filters"]];
 
 describe("server ⇄ client pricing parity", () => {
-  it.each(ALL_TIERS)("%s: estimated_total and included set match for every selection", (tier) => {
+  it.each(ALL_TIERS.filter((tier) => !tier.startsWith("academic:")))("%s: estimated_total and included set match for every selection", (tier) => {
     const [projectType, projectLevel] = tier.split(":") as [CustomProjectPricing["projectType"], CustomProjectPricing["projectLevel"]];
     for (const featureIds of SELECTIONS) {
       const client = calculateEstimate(
@@ -65,6 +65,14 @@ describe("server ⇄ client pricing parity", () => {
       expect(server.features.filter((f) => !f.isIncluded).map((f) => f.id).sort())
         .toEqual(client.addOns.map((f) => f.id).sort());
     }
+  });
+
+  it("new academic mentoring ignores implementation selections and platform charges", () => {
+    const result = calculateEstimate({ projectType: "academic", projectLevel: "standard", platform: "web_android", featureIds: ["doc-academic-package", "auth-google"] }, PRICING, PLATFORMS, ROWS.map(toClient));
+    expect(result.addOns).toEqual([]);
+    expect(result.includedFeatures).toEqual([]);
+    expect(result.platformCharges).toBe(0);
+    expect(result.total).toBe(BASE["academic:standard"]);
   });
 
   it("the server never charges an included feature, even when a client sends its id", () => {

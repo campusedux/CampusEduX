@@ -43,8 +43,7 @@ describe("Phase 4B: /about and /faq have distinct, page-specific meta descriptio
     const { metadata } = await import("@/app/about/page");
     expect(metadata.description).toBeTruthy();
     expect(metadata.description).not.toBe(ROOT_LAYOUT_DEFAULT_DESCRIPTION);
-    // Title unchanged by this fix.
-    expect(metadata.title).toBe("About CampusEduX");
+    expect(metadata.title).toEqual({ absolute: "About CampusEduX: Tools for Indian Students" });
   });
 
   it("/faq description is set, non-empty, and not the sitewide default", async () => {

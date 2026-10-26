@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { getPublicSupabase } from "@/lib/supabase/server";
+import { RpcFailed } from "@/lib/publicCache";
 import { BRAND } from "@/lib/brand";
 import type { BlogCategory, BlogPostCard, BlogPostDetail, BlogListResult } from "@/lib/blog.types";
 
@@ -133,17 +134,18 @@ export interface BlogPageArgs {
 export const getBlogPage = unstable_cache(
   async (a: BlogPageArgs): Promise<BlogListResult> => {
     const supabase = getPublicSupabase();
-    if (!supabase) return { posts: [], total: 0, missing: true };
+    if (!supabase) throw new RpcFailed("Blog listing is unavailable");
 
     const from = (Math.max(1, a.page) - 1) * BLOG_PAGE_SIZE;
 
     let categoryId: string | null = null;
     if (a.category) {
-      const { data: cat } = await supabase
+      const { data: cat, error } = await supabase
         .from("blog_categories")
         .select("id")
         .eq("slug", a.category)
         .maybeSingle();
+      if (error) throw new RpcFailed("Blog category lookup is unavailable");
       categoryId = cat?.id ?? "__none__"; // unknown slug → force an empty result
     }
 
@@ -163,11 +165,10 @@ export const getBlogPage = unstable_cache(
     }
 
     const { data, count, error } = await query;
-    if (error) {
-      // 42P01 / PGRST205 → table not created yet.
-      const missing = error.code === "42P01" || error.code === "PGRST205";
-      return { posts: [], total: 0, missing };
-    }
+    // Throw inside unstable_cache: failed refreshes must not replace good data
+    // with an empty/noindex listing. A cold failure reaches the error boundary.
+    if (error || !Array.isArray(data))
+      throw new RpcFailed("Blog listing is unavailable");
     return {
       posts: ((data ?? []) as unknown as RawRow[]).map(toCard),
       total: count ?? 0,

@@ -243,7 +243,8 @@ export function CustomProjectDetailScreen() {
           ) : null}
         </Section>
 
-        <Section title="Extra features">
+        {data.serviceScope === "mentoring" && <Section title="Mentoring scope"><Text>Use messages for code review, debugging, architecture guidance and feedback on your own work. Assessed deliverables remain yours to create.</Text></Section>}
+        {data.serviceScope !== "mentoring" && <Section title="Extra features">
           <AddonsSection
             addons={data.addons}
             canAdd={data.status !== "cancelled"}
@@ -252,7 +253,7 @@ export function CustomProjectDetailScreen() {
             remove={edits.deleteAddon}
             accept={edits.acceptAddon}
           />
-        </Section>
+        </Section>}
 
         {data.features.some((f) => f.isIncluded) ? (
           <Section title="Included features">

@@ -60,6 +60,12 @@ export default async function LearningDashboard({ searchParams }: { searchParams
         <StatCard label="Content blocks" value={formatNumber(d.contents)} icon={FileText} tone="success" hint={`${d.publishedContents} published · ${d.draftContents} draft`} />
       </div>
 
+      {admin.role === 'super_admin' ? (
+        <Link href="/learning/provenance" className="block rounded-xl border border-border bg-white p-4 font-semibold text-ink hover:border-brand/40">
+          Review educational content provenance →
+        </Link>
+      ) : null}
+
       <Link
         href="/learning/practice"
         className="flex items-center justify-between gap-4 rounded-xl border border-border bg-white p-4 transition-colors hover:border-brand/40 hover:bg-surface-subtle"
