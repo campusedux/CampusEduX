@@ -29,8 +29,8 @@ export function SectionHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-3", className)}>
-      <div className="min-w-0 max-w-2xl">
+    <div className={cn("mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 max-md:mb-4 max-md:items-start max-md:gap-x-2 max-md:gap-y-1", className)}>
+      <div className="min-w-0 max-w-2xl max-md:flex-1">
         {eyebrow && <p className="eyebrow mb-1.5">{eyebrow}</p>}
         <Heading id={id} className="h-section">
           {title}
@@ -41,7 +41,7 @@ export function SectionHeader({
       {!action && viewAllHref && (
         <Link
           href={viewAllHref}
-          className="group inline-flex min-h-11 items-center gap-1 whitespace-nowrap rounded-lg text-sm font-semibold text-ink-muted transition hover:text-primary-700"
+          className="group inline-flex min-h-11 items-center gap-1 whitespace-nowrap rounded-lg text-sm font-semibold text-ink-muted transition hover:text-primary-700 max-md:text-xs"
         >
           {viewAllLabel}
           <ArrowRight

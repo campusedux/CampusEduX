@@ -19,7 +19,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { className, invalid, ...rest },
   ref,
 ) {
-  return <input ref={ref} aria-invalid={invalid || undefined} className={cn(control, "h-10", invalid && invalidRing, className)} {...rest} />;
+  return <input ref={ref} aria-invalid={invalid || undefined} className={cn(control, "h-10 max-md:h-11", invalid && invalidRing, className)} {...rest} />;
 });
 
 export type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean };
@@ -48,7 +48,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       <select
         ref={ref}
         aria-invalid={invalid || undefined}
-        className={cn(control, "h-10 appearance-none pr-9", invalid && invalidRing, className)}
+        className={cn(control, "h-10 appearance-none pr-9 max-md:h-11", invalid && invalidRing, className)}
         {...rest}
       >
         {children}

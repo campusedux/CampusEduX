@@ -39,7 +39,7 @@ export function PremiumCard({
         className,
       )}
     >
-      <div className="card-pad relative flex flex-1 flex-col rounded-xl bg-card">
+      <div className="card-pad relative flex flex-1 flex-col rounded-xl bg-card max-md:p-4">
         {popular && (
           <span className="absolute -top-3.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-primary px-3.5 py-1 text-[0.7rem] font-bold uppercase tracking-wide text-white">
             <Sparkles className="h-3 w-3" aria-hidden />
