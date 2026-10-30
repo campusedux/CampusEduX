@@ -116,20 +116,20 @@ async function HomeContent() {
 
       {/* Admin `banners` row (placement 'home') — shown as a promo card under the hero. */}
       {banner && (
-        <section className="container-page pt-8 sm:pt-10" aria-label="Announcement">
+        <section className="container-page pt-10 md:pt-14" aria-label="Announcement">
           <Link
             href={safeHref(banner.target_url) ?? "/projects"}
-            className="card card-hover group grid items-center gap-6 overflow-hidden p-6 sm:grid-cols-2 sm:p-8"
+            className="card card-hover group grid items-center gap-4 overflow-hidden p-4 md:gap-5 md:p-5 lg:grid-cols-2"
           >
             <div>
               <h2 className="h-section">{banner.title}</h2>
               {banner.subtitle && <p className="lede mt-2">{banner.subtitle}</p>}
-              <span className="btn-primary mt-5">
+              <span className="btn-primary mt-3">
                 Explore <ArrowRight className="h-4 w-4" aria-hidden />
               </span>
             </div>
             {safeHref(banner.image_url) && (
-              <div className="relative aspect-[16/9] overflow-hidden rounded-2xl bg-primary-50">
+              <div className="relative h-32 overflow-hidden rounded-xl bg-primary-50 md:h-40">
                 <Image
                   src={safeHref(banner.image_url) ?? ""}
                   alt=""
@@ -137,7 +137,7 @@ async function HomeContent() {
                   placeholder="blur"
                   blurDataURL={IMAGE_BLUR_DATA_URL}
                   className="object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transform-none"
-                  sizes="(max-width:640px) 100vw, 50vw"
+                  sizes="(max-width:1024px) 100vw, 50vw"
                 />
               </div>
             )}
@@ -163,7 +163,7 @@ async function HomeContent() {
       {/* 6 · Latest jobs */}
       {jobs.length > 0 && (
         <Reveal>
-          <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-jobs-title">
+          <section className="container-page pt-10 md:pt-14" aria-labelledby="home-jobs-title">
             <SectionHeader
               id="home-jobs-title"
               eyebrow="Careers"
@@ -171,7 +171,7 @@ async function HomeContent() {
               description="Fresh openings for students and freshers."
               viewAllHref="/jobs"
             />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
               {jobs.map((j) => (
                 <JobCard key={j.id} job={j} />
               ))}
@@ -183,7 +183,7 @@ async function HomeContent() {
       {/* 7 · Projects marketplace preview */}
       {trending.length > 0 && (
         <Reveal>
-          <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-projects-title">
+          <section className="container-page pt-10 md:pt-14" aria-labelledby="home-projects-title">
             <SectionHeader
               id="home-projects-title"
               eyebrow="Marketplace"
@@ -191,7 +191,7 @@ async function HomeContent() {
               description="Final-year projects with source code, ready to learn from and present."
               viewAllHref="/projects/trending"
             />
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-4 2xl:grid-cols-5">
               {trending.map((p, i) => (
                 <ProjectCard key={p.id} project={p} rank={i < 3 ? i + 1 : undefined} />
               ))}
@@ -212,9 +212,9 @@ async function HomeContent() {
 
       {posts.length > 0 && (
         <Reveal>
-          <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-blog-title">
+          <section className="container-page pt-10 md:pt-14" aria-labelledby="home-blog-title">
             <SectionHeader id="home-blog-title" eyebrow="Blog" title="Latest from the blog" viewAllHref="/blog" viewAllLabel="All articles" />
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
               {posts.map((p) => (
                 <BlogCard key={p.id} post={p} />
               ))}
@@ -230,8 +230,8 @@ async function HomeContent() {
 
       {faqs.length > 0 && (
         <Reveal>
-          <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-faq-title">
-            <div className="grid gap-8 lg:grid-cols-[1fr_1.6fr] lg:items-start lg:gap-14">
+          <section className="container-page pt-10 md:pt-14" aria-labelledby="home-faq-title">
+            <div className="grid gap-4 md:gap-5 lg:grid-cols-[1fr_1.6fr] lg:items-start">
               <SectionHeader
                 id="home-faq-title"
                 eyebrow="FAQ"

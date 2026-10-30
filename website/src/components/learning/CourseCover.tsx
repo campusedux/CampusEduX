@@ -66,7 +66,7 @@ export function CourseCover({
     <div aria-hidden className={cn("absolute inset-0 overflow-hidden", className)} style={{ background: coverBackground(accent) }}>
       <span className="absolute inset-0" style={DOTS} />
       <svg
-        className={cn("absolute text-white/15", banner ? "-right-24 -top-40 h-[34rem] w-[34rem]" : "-right-12 -top-20 h-64 w-64")}
+        className={cn("absolute text-white/15", banner ? "-right-24 -top-40 h-[34rem] w-[34rem]" : "-right-8 -top-14 h-44 w-44")}
         viewBox="0 0 200 200"
         fill="none"
         stroke="currentColor"
@@ -77,7 +77,7 @@ export function CourseCover({
         <circle cx="100" cy="100" r="86" />
       </svg>
       <svg
-        className={cn("absolute bottom-0 left-0 text-white/10", banner ? "h-40 w-72" : "h-20 w-40")}
+        className={cn("absolute bottom-0 left-0 text-white/10", banner ? "h-40 w-72" : "h-14 w-28")}
         viewBox="0 0 160 80"
         fill="none"
         stroke="currentColor"
@@ -94,7 +94,7 @@ export function CourseCover({
           "absolute flex items-center justify-center",
           banner
             ? "-bottom-10 right-[-2.5rem] h-56 w-56 opacity-40 sm:right-8 sm:opacity-60 lg:right-16 lg:h-64 lg:w-64 lg:opacity-90"
-            : "-bottom-3 right-5 h-32 w-32",
+            : "-bottom-2 right-4 h-20 w-20",
         )}
       >
         <span className="absolute inset-4 rounded-full bg-white/20 blur-2xl" />
@@ -105,12 +105,12 @@ export function CourseCover({
           )}
         >
           {emoji ? (
-            <span className={cn("leading-none drop-shadow-[0_8px_18px_rgb(0_0_0/0.35)]", banner ? "text-[9rem] lg:text-[10.5rem]" : "text-[5.25rem]")}>
+            <span className={cn("leading-none drop-shadow-[0_8px_18px_rgb(0_0_0/0.35)]", banner ? "text-[9rem] lg:text-[10.5rem]" : "text-5xl")}>
               {emoji}
             </span>
           ) : (
             <Glyph
-              className={cn("text-white/90 drop-shadow-[0_8px_18px_rgb(0_0_0/0.3)]", banner ? "h-40 w-40 lg:h-48 lg:w-48" : "h-24 w-24")}
+              className={cn("text-white/90 drop-shadow-[0_8px_18px_rgb(0_0_0/0.3)]", banner ? "h-40 w-40 lg:h-48 lg:w-48" : "h-16 w-16")}
               strokeWidth={1.25}
             />
           )}

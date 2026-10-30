@@ -64,7 +64,7 @@ export function PlacementPrep({ problemCount, interviewTopicCount }: { problemCo
   ];
 
   return (
-    <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-prep-title">
+    <section className="container-page pt-10 md:pt-14" aria-labelledby="home-prep-title">
       <SectionHeader
         id="home-prep-title"
         eyebrow="Placement prep"
@@ -73,22 +73,22 @@ export function PlacementPrep({ problemCount, interviewTopicCount }: { problemCo
         viewAllHref="/practice"
         viewAllLabel="All practice"
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-4">
         {cards.map((c) => {
           const Icon = c.icon;
           return (
-            <Link key={c.href} href={c.href} prefetch={c.href === "/compiler" ? false : undefined} className="card card-hover group flex flex-col p-5">
-              <div className="flex items-start justify-between gap-3">
-                <span className={cn("flex h-11 w-11 items-center justify-center rounded-xl", c.tile)}>
+            <Link key={c.href} href={c.href} prefetch={c.href === "/compiler" ? false : undefined} className="card card-hover group flex min-h-[150px] min-w-0 flex-col p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", c.tile)}>
                   <Icon className={cn("h-5 w-5", c.fg)} aria-hidden />
                 </span>
+                <h3 className="min-w-0 flex-1 line-clamp-2 font-display text-base font-semibold text-ink group-hover:text-primary">{c.title}</h3>
                 {c.count && (
-                  <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted">{c.count}</span>
+                  <span className="shrink-0 rounded-full bg-surface px-2 py-1 text-xs font-semibold text-ink-muted">{c.count}</span>
                 )}
               </div>
-              <h3 className="mt-4 font-display text-lg font-bold tracking-tight text-ink group-hover:text-primary">{c.title}</h3>
-              <p className="mt-1.5 flex-1 text-sm text-ink-muted">{c.body}</p>
-              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+              <p className="mt-2 line-clamp-2 flex-1 text-sm leading-5 text-ink-muted">{c.body}</p>
+              <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary">
                 {c.cta}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden />
               </span>

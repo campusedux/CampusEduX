@@ -71,12 +71,12 @@ export function CourseHero({
   const shownLearn = learn.slice(0, WHAT_YOU_LEARN_MAX);
 
   return (
-    <header className="min-w-0 overflow-hidden rounded-2xl border border-line bg-card shadow-card [overflow-wrap:anywhere]">
+    <header className="min-w-0 overflow-hidden rounded-xl border border-line bg-card shadow-card [overflow-wrap:anywhere]">
       <div className="relative isolate bg-slate-950">
         <CourseCover course={{ ...brief, cover_image_url: coverImageUrl }} variant="banner" className="-z-10 opacity-20" />
         <div aria-hidden className="absolute inset-0 -z-10 bg-slate-950/50" />
 
-        <div className="min-w-0 max-w-3xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="min-w-0 px-4 py-4 sm:px-6 md:py-5 lg:px-8">
           {/* Solid card-coloured underlay keeps the tinted badges legible on the banner. */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex rounded-full bg-card">
@@ -90,10 +90,10 @@ export function CourseHero({
               </span>
             )}
           </div>
-          <h1 className="mt-3 font-display text-2xl font-bold leading-tight tracking-tight text-white [text-wrap:balance] sm:text-[2rem] lg:text-[2.25rem]">{brief.name}</h1>
-          {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base">{description}</p>}
+          <h1 className="mt-2 font-display text-2xl font-semibold leading-tight tracking-tight text-white [text-wrap:balance] md:text-[28px]">{brief.name}</h1>
+          {description && <p className="mt-1 text-sm leading-5 text-slate-200 md:text-base">{description}</p>}
 
-          <dl className="mt-4 flex flex-wrap gap-2">
+          <dl className="mt-3 flex flex-wrap gap-2">
             {outline.gridSlug !== DBMS_SQL_SLUG && <StatPill icon={Layers} tone="sky" value={outline.sections.length} label="Sections" unit="section" />}
             <StatPill icon={BookOpen} tone="emerald" value={outline.total} label={outline.gridSlug === DBMS_SQL_SLUG ? "Topics" : "Lessons"} unit={outline.gridSlug === DBMS_SQL_SLUG ? "topic" : "lesson"} />
             {testCount > 0 && <StatPill icon={ListChecks} tone="amber" value={testCount} label="Practice tests" unit="practice test" />}
@@ -102,7 +102,7 @@ export function CourseHero({
       </div>
 
       {shownLearn.length >= 2 && (
-        <details className="group/outcomes border-t border-line px-4 py-2 sm:px-6 sm:py-3 lg:px-8">
+        <details className="group/outcomes border-t border-line px-4 py-1 sm:px-6 lg:px-8">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg [&::-webkit-details-marker]:hidden">
             <span className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">What you&apos;ll learn</span>
             <ChevronDown className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-open/outcomes:rotate-180 motion-reduce:transition-none" aria-hidden />

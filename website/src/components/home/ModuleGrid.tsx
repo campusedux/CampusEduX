@@ -7,13 +7,13 @@ import { SectionHeader } from "@/components/ui";
 type Accent = "indigo" | "emerald" | "sky" | "amber" | "pink" | "teal";
 
 /** Literal class strings so Tailwind's JIT keeps them. */
-const ACCENT: Record<Accent, { tile: string; fg: string; glow: string }> = {
-  indigo: { tile: "bg-primary-50", fg: "text-primary", glow: "bg-primary/10" },
-  emerald: { tile: "bg-accent-emerald/10", fg: "text-accent-emerald", glow: "bg-accent-emerald/10" },
-  sky: { tile: "bg-accent-sky/10", fg: "text-accent-sky", glow: "bg-accent-sky/10" },
-  amber: { tile: "bg-accent-amber/10", fg: "text-accent-amber", glow: "bg-accent-amber/10" },
-  pink: { tile: "bg-accent-pink/10", fg: "text-accent-pink", glow: "bg-accent-pink/10" },
-  teal: { tile: "bg-accent-teal/10", fg: "text-accent-teal", glow: "bg-accent-teal/10" },
+const ACCENT: Record<Accent, { tile: string; fg: string }> = {
+  indigo: { tile: "bg-primary-50", fg: "text-primary" },
+  emerald: { tile: "bg-accent-emerald/10", fg: "text-accent-emerald" },
+  sky: { tile: "bg-accent-sky/10", fg: "text-accent-sky" },
+  amber: { tile: "bg-accent-amber/10", fg: "text-accent-amber" },
+  pink: { tile: "bg-accent-pink/10", fg: "text-accent-pink" },
+  teal: { tile: "bg-accent-teal/10", fg: "text-accent-teal" },
 };
 
 interface Feature {
@@ -38,34 +38,35 @@ const FEATURES: Feature[] = [
 /** Home "What you get" — one card per module, each a real link. */
 export function ModuleGrid() {
   return (
-    <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-features-title">
+    <section className="container-page pt-10 md:pt-14" aria-labelledby="home-features-title">
       <SectionHeader
         id="home-features-title"
         eyebrow="What you get"
         title="Everything you need, from first lesson to first offer"
         description="One account for learning, practice, projects and your job search — on the web and the CampusEduX app."
       />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
         {FEATURES.map((f) => {
           const Icon = f.icon;
           const a = ACCENT[f.accent];
           return (
-            <Link key={f.href} href={f.href} className="card card-hover group relative flex flex-col overflow-hidden p-6">
-              <span aria-hidden className={cn("pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-2xl transition-opacity group-hover:opacity-100 opacity-60", a.glow)} />
+            <Link key={f.href} href={f.href} className="card card-hover group flex min-h-[120px] min-w-0 items-start gap-3 overflow-hidden p-4">
               <span
                 className={cn(
-                  "relative flex h-12 w-12 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-105 motion-reduce:transform-none",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                   a.tile,
                 )}
               >
-                <Icon className={cn("h-6 w-6", a.fg)} aria-hidden />
+                <Icon className={cn("h-5 w-5", a.fg)} aria-hidden />
               </span>
-              <h3 className="relative mt-4 font-display text-lg font-bold tracking-tight text-ink">{f.label}</h3>
-              <p className="relative mt-1.5 flex-1 text-sm leading-relaxed text-ink-muted">{f.benefit}</p>
-              <span className="relative mt-5 inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                {f.cta}
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden />
-              </span>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <h3 className="line-clamp-1 font-display text-base font-semibold text-ink">{f.label}</h3>
+                <p className="mt-1 line-clamp-2 text-sm leading-5 text-ink-muted">{f.benefit}</p>
+                <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                  {f.cta}
+                  <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden />
+                </span>
+              </div>
             </Link>
           );
         })}

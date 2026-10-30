@@ -115,31 +115,31 @@ export default function Footer() {
 
   return (
     <footer className="mobile-scroll-content mt-8 border-t border-line bg-card">
-      <div className="container-page pt-10 sm:pt-14">
+      <div className="container-page pt-10 md:pt-14">
         {/* Call-to-action band — same for every visitor, so the footer stays static. */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-accent-violet px-6 py-8 text-white sm:px-10 sm:py-10">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary to-accent-violet px-6 py-6 text-white md:px-8">
           <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
           <span aria-hidden className="pointer-events-none absolute -bottom-24 right-24 h-56 w-56 rounded-full bg-accent-pink/20 blur-2xl" />
-          <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="max-w-xl">
-              <p className="font-display text-2xl font-bold leading-tight tracking-tight sm:text-[1.75rem]">
+              <p className="font-display text-2xl font-semibold leading-tight tracking-tight">
                 Learn it. Build it. Get placed.
               </p>
-              <p className="mt-2 text-sm text-white/80 sm:text-[15px]">
+              <p className="mt-1 text-sm text-white/80">
                 Free tutorials, practice problems, real projects and fresh jobs — all in one student account.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2.5">
+            <div className="flex flex-wrap gap-2">
               <Link prefetch={false}
                 href="/learning"
-                className="inline-flex h-11 items-center gap-2 rounded-xl bg-card px-5 text-sm font-semibold text-primary-700 shadow-card transition hover:-translate-y-px motion-reduce:transform-none theme-light"
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-card px-4 text-sm font-semibold text-primary-700 transition hover:-translate-y-px motion-reduce:transform-none theme-light"
               >
                 <GraduationCap className="h-4 w-4" aria-hidden />
                 Start learning
               </Link>
               <Link prefetch={false}
                 href="/jobs"
-                className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20"
               >
                 Browse jobs
                 <ArrowRight className="h-4 w-4" aria-hidden />

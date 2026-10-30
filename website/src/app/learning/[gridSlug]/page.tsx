@@ -68,7 +68,7 @@ export default async function GridOverviewPage({ params }: { params: { gridSlug:
         ])}
       />
       <JsonLd data={courseJsonLd({ name: grid.name, description: grid.description, path: `/learning/${grid.slug}` })} />
-      <div className="container-page min-w-0 pb-24 pt-4 [overflow-wrap:anywhere] sm:pt-6 md:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-16">
+      <div className="container-page min-w-0 pb-24 pt-4 [overflow-wrap:anywhere] md:pt-6 md:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-16">
         <Breadcrumb className="mb-3 sm:mb-4" items={[{ label: "Learning", href: "/learning" }, { label: grid.name }]} />
 
         <CourseHero
@@ -79,7 +79,7 @@ export default async function GridOverviewPage({ params }: { params: { gridSlug:
           testCount={testCount}
         />
 
-        <div className="mt-6 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className="mt-5 grid min-w-0 gap-4 md:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
           <div className="min-w-0">
             <ProgressSummary gridSlug={grid.slug} />
             <div className="mt-4">

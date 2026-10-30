@@ -10,17 +10,16 @@ export function PopularCourses({ courses }: { courses: CourseCardData[] }) {
   if (courses.length === 0) return null;
   const ordered = [...courses].sort((a, b) => Number(b.is_featured) - Number(a.is_featured)).slice(0, 6);
   return (
-    <section className="container-page pt-5 sm:pt-20" aria-labelledby="home-courses-title">
+    <section className="container-page pt-10 md:pt-14" aria-labelledby="home-courses-title">
       <SectionHeader
         id="home-courses-title"
         title="Featured courses"
         viewAllHref="/learning"
         viewAllLabel="All courses"
       />
-      {/* Phone: horizontal snap row (a peek of the next card invites the swipe); sm+: grid. */}
-      <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-3 [scrollbar-width:none] sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3 [&::-webkit-scrollbar]:hidden">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {ordered.map((c) => (
-          <CourseCard key={c.id} course={c} className="w-[82%] flex-shrink-0 snap-start sm:w-auto" />
+          <CourseCard key={c.id} course={c} />
         ))}
       </div>
     </section>

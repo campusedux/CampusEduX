@@ -33,10 +33,10 @@ export function CourseCard({
       href={`/learning/${course.slug}`}
       className={`course-card ${compactOnMobile ? "course-card-compact" : ""} card card-hover group flex min-w-0 flex-col overflow-hidden [overflow-wrap:anywhere] ${className ?? ""}`}
     >
-      <div className={`course-card-cover relative overflow-hidden ${compactOnMobile ? "hidden aspect-[16/7] sm:block" : "aspect-[16/7]"}`}>
+      <div className={`course-card-cover relative h-28 overflow-hidden md:h-32 ${compactOnMobile ? "hidden sm:block" : ""}`}>
         <CourseCover course={course} className="course-cover-art" />
         {/* Solid card-coloured underlay so the tinted badges stay legible on any cover image. */}
-        <span className="absolute inset-x-3 top-3 flex flex-wrap gap-2">
+        <span className="absolute inset-x-3 top-3 flex flex-wrap gap-1.5">
           {course.is_featured && (
             <span className="inline-flex rounded-full bg-card shadow-card">
               <Badge tone="neutral" className="border-0">
@@ -51,7 +51,7 @@ export function CourseCard({
         </span>
       </div>
 
-      <div className="course-card-body flex min-w-0 flex-1 flex-col p-4 sm:px-5">
+      <div className="course-card-body flex min-w-0 flex-1 flex-col p-4">
         {compactOnMobile && (
           <div className="course-card-badges mb-2.5 flex items-center gap-2 sm:hidden">
             <span
@@ -65,21 +65,21 @@ export function CourseCard({
             </div>
           </div>
         )}
-        <h3 className="line-clamp-2 min-h-12 font-display text-base font-semibold leading-6 tracking-tight text-ink group-hover:text-primary sm:text-lg">
+        <h3 className="line-clamp-2 min-h-10 font-display text-base font-semibold leading-5 tracking-tight text-ink group-hover:text-primary">
           {course.name}
         </h3>
         {/* Always two lines tall, so every card in a row lines up exactly. */}
         <p className="mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-ink-muted">{course.description}</p>
-        <div className="mt-auto min-w-0 pt-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-xs font-medium text-ink-faint">
+        <div className="mt-auto min-w-0 pt-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-ink-faint">
             {course.section_count > 0 && (
-              <span className="inline-flex items-center gap-2">
-                <Layers className="h-4 w-4" aria-hidden />
+              <span className="inline-flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5" aria-hidden />
                 {course.section_count} section{course.section_count === 1 ? "" : "s"}
               </span>
             )}
-            <span className="inline-flex items-center gap-2">
-              <BookOpen className="h-4 w-4" aria-hidden />
+            <span className="inline-flex items-center gap-1">
+              <BookOpen className="h-3.5 w-3.5" aria-hidden />
               {course.topic_count} lesson{course.topic_count === 1 ? "" : "s"}
             </span>
             <ArrowRight

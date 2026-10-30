@@ -112,9 +112,9 @@ function SearchSkeleton() {
 
 function CourseGrid({ courses }: { courses: LearningGridCard[] }) {
   return (
-    <div className="list-enter grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-5">
+    <div className="list-enter grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {courses.map((g) => (
-        <CourseCard key={g.id} course={g} compactOnMobile />
+        <CourseCard key={g.id} course={g} />
       ))}
     </div>
   );
@@ -169,7 +169,7 @@ async function LearningContent({ searchParams }: { searchParams: SP }) {
           defaultValue={q}
           placeholder="Search a topic, e.g. joins, loops, OOP…"
           hiddenParams={{ access: access ?? undefined }}
-          className="mt-3 max-w-2xl"
+          className="mt-3"
         />
         {q ? (
           <Link href={clearSearchHref} className="hit-44 mt-3 inline-block text-sm font-semibold text-primary hover:text-primary-700">
@@ -206,13 +206,13 @@ async function LearningContent({ searchParams }: { searchParams: SP }) {
       ) : (
         <>
           {!q && featured.length >= 2 && (
-            <section className="mt-5 sm:mt-10" aria-labelledby="featured-title">
+            <section className="mt-6 md:mt-8" aria-labelledby="featured-title">
               <SectionHeader id="featured-title" eyebrow="Hand-picked" title="Featured courses" />
               <CourseGrid courses={featured} />
             </section>
           )}
 
-          <section className="mt-5 sm:mt-10" aria-labelledby="all-courses-title">
+          <section className="mt-6 md:mt-8" aria-labelledby="all-courses-title">
             <SectionHeader
               id="all-courses-title"
               title={access === "premium" ? "Premium courses" : access === "free" ? "Free courses" : "All courses"}

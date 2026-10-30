@@ -13,15 +13,15 @@ export interface TestimonialRow {
 export function Testimonials({ items }: { items: TestimonialRow[] }) {
   if (items.length === 0) return null;
   return (
-    <section className="container-page pt-14 sm:pt-20" aria-labelledby="home-testimonials-title">
+    <section className="container-page pt-10 md:pt-14" aria-labelledby="home-testimonials-title">
       <SectionHeader id="home-testimonials-title" eyebrow="Success stories" title="What students say" />
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 md:gap-5 lg:grid-cols-3 2xl:grid-cols-4">
         {items.map((t) => (
-          <figure key={t.id} className="card relative flex flex-col p-6">
+          <figure key={t.id} className="card relative flex min-w-0 flex-col p-4">
             <Quote aria-hidden className="absolute right-5 top-5 h-8 w-8 text-primary/15" />
             {t.rating > 0 && <Rating value={t.rating} showCount={false} />}
             <blockquote className="mt-3 flex-1 text-[15px] leading-relaxed text-ink">“{t.quote}”</blockquote>
-            <figcaption className="mt-5 flex items-center gap-3 border-t border-line pt-4">
+            <figcaption className="mt-3 flex items-center gap-3 border-t border-line pt-3">
               <span
                 aria-hidden
                 className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent-violet text-sm font-bold text-white"

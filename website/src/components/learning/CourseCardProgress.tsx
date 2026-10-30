@@ -11,7 +11,7 @@ export function CourseCardProgress({ gridSlug, totalLessons }: { gridSlug: strin
   const percent = ready ? p.percent : 0;
   const action = ready && p.completed > 0 ? "Continue" : "Start";
   return (
-    <div className="course-card-progress mt-3 flex min-w-0 items-center gap-3">
+    <div className="course-card-progress mt-2 flex min-w-0 items-center gap-2">
       <div className={`course-card-meter min-w-0 flex-1 ${percent > 0 ? "" : "course-card-meter-empty"}`}>
         <div className="mb-1 flex items-center justify-between gap-2 text-xs tabular-nums text-ink-muted">
           <span>{done ? "Completed" : "Progress"}</span>
@@ -26,7 +26,7 @@ export function CourseCardProgress({ gridSlug, totalLessons }: { gridSlug: strin
           className="[&_[role=progressbar]>div]:bg-primary [&_[role=progressbar]>div]:bg-none"
         />
       </div>
-      <span className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-primary px-3 text-sm font-semibold text-white">
+      <span className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-white">
         {action}
       </span>
     </div>
